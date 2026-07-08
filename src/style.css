@@ -1,0 +1,21 @@
+body {
+  margin: 0;
+  background: #11111b;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+#app {
+  width: 800px;
+  max-width: 100%;
+}
+
+canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
