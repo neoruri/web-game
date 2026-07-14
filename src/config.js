@@ -32,6 +32,16 @@ export const DEFAULTS = {
     rampCap: 8,
     maxEnemies: 400,
   },
+  boss: {
+    everySec: 60,
+    hp: 400,
+    hpRampPerMin: 1.6,
+    speed: 42,
+    contactDamage: 25,
+    radius: 26,
+    knockbackResist: 0.15, // 1 = 일반 적과 동일, 0 = 넉백 완전 무시
+    gems: 12, // 죽을 때 떨구는 젬 수
+  },
   xp: {
     gemValue: 1,
     levelBase: 5,
@@ -105,6 +115,32 @@ export const SCHEMA = [
       { key: 'rampPerMin', label: '분당 스폰 배율', min: 1, max: 3, step: 0.05 },
       { key: 'rampCap', label: '스폰 배율 상한', min: 1, max: 60, step: 1 },
       { key: 'maxEnemies', label: '동시 적 수 상한', min: 20, max: 1500, step: 20 },
+    ],
+  },
+  {
+    key: 'boss',
+    label: '중간 보스',
+    fields: [
+      { key: 'everySec', label: '등장 간격(초)', min: 10, max: 300, step: 5 },
+      { key: 'hp', label: '체력', min: 50, max: 5000, step: 50 },
+      {
+        key: 'hpRampPerMin',
+        label: '분당 체력 배율',
+        min: 1,
+        max: 3,
+        step: 0.05,
+      },
+      { key: 'speed', label: '이동 속도', min: 10, max: 200, step: 2 },
+      { key: 'contactDamage', label: '접촉 데미지', min: 1, max: 100, step: 1 },
+      { key: 'radius', label: '크기(반지름)', min: 12, max: 60, step: 2 },
+      {
+        key: 'knockbackResist',
+        label: '넉백 저항 (0=무시)',
+        min: 0,
+        max: 1,
+        step: 0.05,
+      },
+      { key: 'gems', label: '드랍 젬 수', min: 1, max: 50, step: 1 },
     ],
   },
   {
