@@ -5,32 +5,32 @@ const KEY = 'survivor.config.v1'
 
 export const DEFAULTS = {
   player: {
-    speed: 220,
+    speed: 110,
     maxHp: 100,
     invuln: 0.6,
-    pickupRadius: 70,
-    radius: 14,
+    pickupRadius: 50,
+    radius: 9,
   },
   weapon: {
-    damage: 10,
-    cooldown: 0.5,
-    speed: 480,
+    damage: 5,
+    cooldown: 1,
+    speed: 1200,
     pierce: 1,
-    knockback: 130,
-    range: 340,
+    knockback: 50,
+    range: 150,
   },
   enemy: {
-    hp: 20,
-    speed: 58,
+    hp: 10,
+    speed: 50,
     contactDamage: 8,
-    radius: 11,
-    hpRampPerMin: 1.15,
+    radius: 8,
+    hpRampPerMin: 1.1,
   },
   spawn: {
-    baseInterval: 1.3,
-    rampPerMin: 1.5,
+    baseInterval: 1.2,
+    rampPerMin: 1.3,
     rampCap: 8,
-    maxEnemies: 400,
+    maxEnemies: 500,
   },
   boss: {
     everySec: 60,
@@ -51,11 +51,11 @@ export const DEFAULTS = {
   // 레벨업 카드가 한 번에 올려주는 양
   upgrade: {
     damageAdd: 5,
-    cooldownMul: 0.85,
+    cooldownMul: 0.9,
     pierceAdd: 1,
-    speedAdd: 20,
+    speedAdd: 10,
     maxHpAdd: 20,
-    pickupAdd: 30,
+    pickupAdd: 20,
   },
 }
 
