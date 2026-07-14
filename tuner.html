@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>밸런스 튜너 — Survivor</title>
+  </head>
+  <body>
+    <div id="tuner">
+      <section id="stage">
+        <iframe id="game" src="/index.html" title="game"></iframe>
+        <p class="hint">
+          슬라이더를 움직이면 <b>게임이 즉시 재시작</b>됩니다. WASD / 방향키로
+          이동, 레벨업 카드는 클릭 또는 1·2·3 키.
+        </p>
+      </section>
+
+      <aside id="panel">
+        <header>
+          <h1>밸런스 튜너</h1>
+          <div class="row">
+            <button id="reset" class="danger">기본값 복원</button>
+            <button id="restart">게임 재시작</button>
+          </div>
+          <div class="row">
+            <button id="copy">현재 값 복사(JSON)</button>
+          </div>
+          <p id="status"></p>
+        </header>
+        <div id="groups"></div>
+      </aside>
+    </div>
+    <script type="module" src="/src/tuner.js"></script>
+  </body>
+</html>

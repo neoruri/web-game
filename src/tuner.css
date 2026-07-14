@@ -1,0 +1,213 @@
+:root {
+  --bg: #11111b;
+  --surface: #1e1e2e;
+  --surface2: #313244;
+  --line: #45475a;
+  --text: #cdd6f4;
+  --muted: #6c7086;
+  --accent: #89b4fa;
+  --warn: #f38ba8;
+  --ok: #a6e3a1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+}
+
+#tuner {
+  display: flex;
+  height: 100vh;
+  gap: 1px;
+  background: var(--line);
+}
+
+/* --- 게임 --- */
+
+#stage {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+#game {
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 4 / 3;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.hint b {
+  color: var(--text);
+}
+
+/* --- 패널 --- */
+
+#panel {
+  width: 380px;
+  flex: none;
+  background: var(--surface);
+  overflow-y: auto;
+  padding: 18px;
+}
+
+#panel header {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
+  background: var(--surface);
+  padding: 18px 0 12px;
+  margin: -18px 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+button {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.danger:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+#status {
+  margin: 6px 0 0;
+  height: 16px;
+  font-size: 12px;
+  color: var(--ok);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+#status.on {
+  opacity: 1;
+}
+
+/* --- 필드 --- */
+
+.group {
+  margin-bottom: 22px;
+}
+
+.group h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.field {
+  padding: 7px 9px;
+  margin: 0 -9px;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
+}
+
+.field.changed {
+  border-left-color: var(--accent);
+  background: rgba(137, 180, 250, 0.06);
+}
+
+.field label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.field em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field.changed em::after {
+  content: ' · 변경됨';
+  color: var(--accent);
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+input[type='number'] {
+  width: 72px;
+  flex: none;
+  padding: 4px 6px;
+  font-size: 13px;
+  text-align: right;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  #tuner {
+    flex-direction: column;
+    height: auto;
+  }
+  #panel {
+    width: 100%;
+  }
+}
