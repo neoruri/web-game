@@ -48,7 +48,8 @@ class GameScene extends Phaser.Scene {
     this.bossAcc = 0
     this.bossCount = 0
     this.fireAcc = 0
-    this.paused = false
+    this.paused = false // 레벨업 카드 선택 중
+    this.userPaused = false // 멈춤 버튼으로 정지
     this.gameOver = false
     this.pendingLevels = 0
     this.taken = {}
@@ -172,15 +173,18 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setDepth(d)
 
+    // 멈춤 버튼 자리를 비우려고 우측 정보는 한 칸씩 내렸다
     this.killText = this.add
-      .text(W - 20, 26, 'Kills: 0', { ...font, fontSize: '20px' })
+      .text(W - 20, 68, 'Kills: 0', { ...font, fontSize: '20px' })
       .setOrigin(1, 0)
       .setDepth(d)
 
     this.waveText = this.add
-      .text(W - 20, 52, '', { ...font, fontSize: '15px', color: '#a6adc8' })
+      .text(W - 20, 94, '', { ...font, fontSize: '15px', color: '#a6adc8' })
       .setOrigin(1, 0)
       .setDepth(d)
+
+    this.buildPauseButton()
 
     this.perfText = this.add
       .text(W - 20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
@@ -193,6 +197,63 @@ class GameScene extends Phaser.Scene {
       .text(20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
       .setOrigin(0, 1)
       .setDepth(d)
+  }
+
+  // 우측 상단 멈춤 버튼 + 일시정지 오버레이
+  buildPauseButton() {
+    const bx = W - 36
+    const by = 38
+    const r = 24
+
+    this.pauseBtn = this.add
+      .rectangle(bx, by, r * 2, r * 2, 0x313244, 0.9)
+      .setStrokeStyle(2, 0x585b70)
+      .setDepth(15)
+      .setInteractive({ useHandCursor: true })
+
+    // ❚❚ (멈춤) 아이콘 — 세로 막대 2개
+    this.iconPause = this.add.container(bx, by, [
+      this.add.rectangle(-6, 0, 5, 20, 0xcdd6f4),
+      this.add.rectangle(6, 0, 5, 20, 0xcdd6f4),
+    ]).setDepth(16)
+
+    // ▶ (재개) 아이콘 — 삼각형. 멈춘 동안에만 보인다
+    this.iconPlay = this.add
+      .triangle(bx + 2, by, 0, -11, 0, 11, 15, 0, 0xa6e3a1)
+      .setDepth(16)
+      .setVisible(false)
+
+    this.pauseBtn.on('pointerdown', () => this.togglePause())
+
+    // 일시정지 오버레이 (버튼보다 아래 depth 라 버튼은 계속 보인다)
+    this.pauseOverlay = this.add
+      .rectangle(W / 2, H / 2, W, H, 0x11111b, 0.72)
+      .setDepth(14)
+      .setVisible(false)
+
+    this.pauseLabel = this.add
+      .text(W / 2, H / 2, '일시정지\n\n▶ 버튼으로 재개', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '30px',
+        color: '#cdd6f4',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(14)
+      .setVisible(false)
+  }
+
+  togglePause() {
+    // 게임오버·레벨업 선택 중에는 멈춤 토글을 무시한다
+    if (this.gameOver || this.paused) return
+
+    this.userPaused = !this.userPaused
+    this.releaseStick()
+
+    this.pauseOverlay.setVisible(this.userPaused)
+    this.pauseLabel.setVisible(this.userPaused)
+    this.iconPause.setVisible(!this.userPaused)
+    this.iconPlay.setVisible(this.userPaused)
   }
 
   // --- 입력 ---------------------------------------------------------------
@@ -212,7 +273,9 @@ class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (p) => {
       if (this.gameOver) return this.scene.restart()
-      if (this.paused) return
+      // 멈춤 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
+      if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
+      if (this.paused || this.userPaused) return
 
       this.stick.active = true
       this.stick.ox = p.x
@@ -242,6 +305,10 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', () => {
       if (this.gameOver) this.scene.restart()
     })
+
+    // PC: ESC 또는 P 로 멈춤 토글
+    this.input.keyboard.on('keydown-ESC', () => this.togglePause())
+    this.input.keyboard.on('keydown-P', () => this.togglePause())
 
     for (const n of [1, 2, 3]) {
       this.input.keyboard.on(`keydown-${['ONE', 'TWO', 'THREE'][n - 1]}`, () => {
@@ -658,7 +725,7 @@ class GameScene extends Phaser.Scene {
   // --- 루프 ---------------------------------------------------------------
 
   update(time, delta) {
-    if (this.gameOver || this.paused) return
+    if (this.gameOver || this.paused || this.userPaused) return
 
     const dt = Math.min(delta / 1000, MAX_DT)
 
