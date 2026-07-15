@@ -186,6 +186,13 @@ class GameScene extends Phaser.Scene {
       .text(W - 20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
       .setOrigin(1, 1)
       .setDepth(d)
+
+    // 두 기기가 같은 값을 쓰는지 눈으로 비교하기 위한 표시.
+    // (PC/모바일에서 이 숫자가 같으면 스탯은 동일한 것)
+    this.statText = this.add
+      .text(20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
+      .setOrigin(0, 1)
+      .setDepth(d)
   }
 
   // --- 입력 ---------------------------------------------------------------
@@ -714,6 +721,9 @@ class GameScene extends Phaser.Scene {
 
     this.perfText.setText(
       `${Math.round(this.game.loop.actualFps)} fps  ·  적 ${this.enemies.length}  ·  젬 ${this.gems.length}`
+    )
+    this.statText.setText(
+      `내속도 ${Math.round(this.stats.player.speed)}  ·  적속도 ${this.cfg.enemy.speed}  ·  DMG ${this.stats.weapon.damage}`
     )
   }
 
