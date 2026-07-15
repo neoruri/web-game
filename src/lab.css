@@ -157,3 +157,76 @@ td.val {
 .roles td.part {
   color: var(--gold);
 }
+
+/* --- 시뮬레이터 --- */
+
+.sim-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.sim-controls label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sim-controls select {
+  margin-left: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.sim-controls button {
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sim-controls button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.sim-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sim-table-wrap {
+  overflow-x: auto;
+}
+
+table.sim {
+  min-width: 560px;
+}
+
+table.sim td {
+  font-variant-numeric: tabular-nums;
+}
+
+table.sim td.setting {
+  color: var(--text);
+  font-weight: 600;
+}
+
+table.sim td.ok {
+  color: var(--ok);
+}
+
+table.sim td.warn {
+  color: var(--gold);
+}
+
+table.sim td.bad {
+  color: var(--warn);
+}

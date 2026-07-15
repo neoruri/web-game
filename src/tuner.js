@@ -1,19 +1,29 @@
 // 밸런스 튜너 — 게임을 iframe 으로 띄워놓고 옆에서 수치를 만진다.
 //
-// 동작 원리: 값을 바꾸면 localStorage 에 저장한다.
-// storage 이벤트는 "값을 바꾼 문서 자신"에는 발생하지 않고 같은 오리진의
-// 다른 문서(= iframe 안의 게임)에만 발생한다. 게임은 그 이벤트를 받고 재시작한다.
+// 값을 바꾸면 localStorage 에 저장한다. storage 이벤트는 값을 바꾼 문서 자신에는
+// 발생하지 않고 같은 오리진의 다른 문서(iframe 안 게임)에만 발생한다 → 게임 재시작.
 
 import './tuner.css'
-import { SCHEMA, DEFAULTS, loadConfig, saveConfig, resetConfig } from './config.js'
+import {
+  SCHEMA,
+  DEFAULTS,
+  loadConfig,
+  saveConfig,
+  resetConfig,
+  PRESET_SLOTS,
+  savePreset,
+  loadPreset,
+  hasPreset,
+} from './config.js'
 
 let cfg = loadConfig()
 
 const groupsEl = document.getElementById('groups')
 const statusEl = document.getElementById('status')
+const presetsEl = document.getElementById('presets')
 const frame = document.getElementById('game')
 
-const inputs = new Map() // "group.field" → { range, number }
+const inputs = new Map() // "group.field" → { range, number, wrap, def }
 
 function decimals(step) {
   const s = String(step)
@@ -21,7 +31,6 @@ function decimals(step) {
 }
 
 function buildField(group, field) {
-  const path = `${group.key}.${field.key}`
   const value = cfg[group.key][field.key]
   const def = DEFAULTS[group.key][field.key]
   const dp = decimals(field.step)
@@ -64,15 +73,22 @@ function buildField(group, field) {
     flash(`${field.label} = ${v}`)
   }
 
-  // 슬라이더는 드래그 중 계속 발생 → 저장이 잦지만 localStorage 쓰기는 싸다.
   range.addEventListener('input', () => commit(range.value))
   number.addEventListener('change', () => commit(number.value))
 
   wrap.classList.toggle('changed', value !== def)
-
   row.append(range, number)
   wrap.append(label, row)
-  inputs.set(path, { range, number, wrap, def })
+
+  // 올릴 때/내릴 때 뭐가 바뀌는지 설명
+  if (field.effect) {
+    const fx = document.createElement('p')
+    fx.className = 'effect'
+    fx.textContent = field.effect
+    wrap.append(fx)
+  }
+
+  inputs.set(`${group.key}.${field.key}`, { range, number, wrap, def })
   return wrap
 }
 
@@ -105,23 +121,65 @@ function syncInputs() {
   }
 }
 
+// --- 프리셋 A/B/C ----------------------------------------------------------
+
+function buildPresets() {
+  presetsEl.innerHTML = ''
+  for (const slot of PRESET_SLOTS) {
+    const box = document.createElement('div')
+    box.className = 'preset-slot'
+
+    const name = document.createElement('span')
+    name.className = 'slot-name'
+    name.textContent = slot
+
+    const save = document.createElement('button')
+    save.textContent = '저장'
+    save.title = `현재 값을 ${slot}에 저장`
+    save.addEventListener('click', () => {
+      savePreset(slot, cfg)
+      buildPresets()
+      flash(`프리셋 ${slot}에 저장했습니다`)
+    })
+
+    const load = document.createElement('button')
+    load.textContent = '불러오기'
+    load.disabled = !hasPreset(slot)
+    load.addEventListener('click', () => {
+      const p = loadPreset(slot)
+      if (!p) return
+      cfg = p
+      saveConfig(cfg)
+      syncInputs()
+      flash(`프리셋 ${slot}을 불러왔습니다`)
+    })
+
+    box.append(name, save, load)
+    if (hasPreset(slot)) box.classList.add('has')
+    presetsEl.append(box)
+  }
+}
+
+// --- 상태 표시 -------------------------------------------------------------
+
 let flashTimer
 function flash(msg) {
   statusEl.textContent = msg
   statusEl.classList.add('on')
   clearTimeout(flashTimer)
-  flashTimer = setTimeout(() => statusEl.classList.remove('on'), 1200)
+  flashTimer = setTimeout(() => statusEl.classList.remove('on'), 1400)
 }
 
 function restartGame() {
-  // iframe 을 다시 로드하면 게임이 새 설정으로 시작한다.
   frame.contentWindow.location.reload()
 }
+
+// --- 버튼 ------------------------------------------------------------------
 
 document.getElementById('reset').addEventListener('click', () => {
   if (!confirm('모든 수치를 기본값으로 되돌립니다.')) return
   cfg = resetConfig()
-  saveConfig(cfg) // 게임 쪽에 storage 이벤트를 보내기 위해 다시 쓴다
+  saveConfig(cfg)
   syncInputs()
   flash('기본값으로 복원했습니다')
 })
@@ -137,3 +195,4 @@ document.getElementById('copy').addEventListener('click', async () => {
 })
 
 build()
+buildPresets()

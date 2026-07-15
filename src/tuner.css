@@ -128,6 +128,70 @@ button.danger:hover {
   opacity: 1;
 }
 
+/* --- 프리셋 --- */
+
+.presets {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.presets-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preset-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  padding: 8px 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.preset-slot.has {
+  border-color: var(--accent);
+}
+
+.slot-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.preset-slot button {
+  width: 100%;
+  padding: 4px 0;
+  font-size: 12px;
+  flex: none;
+}
+
+.preset-slot button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  border-color: var(--line);
+}
+
+.presets-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* --- 필드 --- */
 
 .group {
@@ -178,6 +242,13 @@ button.danger:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.effect {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 input[type='range'] {

@@ -2,7 +2,13 @@
 // 순수 수식이라 플레이 없이 즉시 정확하다 (성장/봇 요소는 다음 단계 시뮬레이터에서).
 
 import './lab.css'
-import { loadConfig } from './config.js'
+import {
+  loadConfig,
+  loadPreset,
+  hasPreset,
+  PRESET_SLOTS,
+} from './config.js'
+import { simulate, summarize } from './sim.js'
 
 const DUR = 8 * 60 // 8분까지 본다
 const SAMPLES = DUR // 1초 간격
@@ -201,3 +207,81 @@ function render() {
 
 document.getElementById('reload').addEventListener('click', render)
 render()
+
+// --- 자동 시뮬레이터 -------------------------------------------------------
+
+const simStatus = document.getElementById('simStatus')
+const simResults = document.getElementById('simResults')
+const btnCurrent = document.getElementById('simCurrent')
+const btnCompare = document.getElementById('simCompare')
+let simBusy = false
+
+function pct(x) {
+  return `${Math.round(x * 100)}%`
+}
+
+function simRow(label, s) {
+  const crisis = s.avgFirstCrisis != null ? fmtTime(s.avgFirstCrisis) : '없음'
+  const clearColor =
+    s.clearRate >= 0.6 ? 'ok' : s.clearRate >= 0.2 ? 'warn' : 'bad'
+  return `<tr>
+    <td class="setting">${label}</td>
+    <td>${fmtTime(s.avgSurvived)}</td>
+    <td>${fmtTime(s.medSurvived)}</td>
+    <td class="${clearColor}">${pct(s.clearRate)}</td>
+    <td>${s.avgLevel.toFixed(1)}</td>
+    <td>${Math.round(s.avgKills)}</td>
+    <td>${crisis}</td>
+  </tr>`
+}
+
+// 한 세팅을 runs 판 돌린다. 판 사이에 UI 에 양보해 진행률을 보여준다.
+async function runSet(label, cfg, runs, maxTime) {
+  const results = []
+  for (let i = 0; i < runs; i++) {
+    results.push(simulate(cfg, { maxTime }))
+    simStatus.textContent = `${label} 시뮬레이션… ${i + 1}/${runs}`
+    if (i % 2 === 0) await new Promise((r) => setTimeout(r))
+  }
+  return summarize(results, maxTime)
+}
+
+async function runSim(compare) {
+  if (simBusy) return
+  simBusy = true
+  btnCurrent.disabled = true
+  btnCompare.disabled = true
+  simResults.innerHTML = ''
+
+  const runs = parseInt(document.getElementById('simRuns').value, 10)
+  const maxTime = parseInt(document.getElementById('simTime').value, 10)
+
+  try {
+    const jobs = [{ label: '현재값', cfg: loadConfig() }]
+    if (compare) {
+      for (const slot of PRESET_SLOTS) {
+        if (hasPreset(slot)) jobs.push({ label: `프리셋 ${slot}`, cfg: loadPreset(slot) })
+      }
+      if (jobs.length === 1) {
+        simStatus.textContent =
+          '저장된 프리셋이 없습니다. 튜너에서 A/B/C에 먼저 저장하세요.'
+        return
+      }
+    }
+
+    const t0 = performance.now()
+    for (const job of jobs) {
+      const s = await runSet(job.label, job.cfg, runs, maxTime)
+      simResults.insertAdjacentHTML('beforeend', simRow(job.label, s))
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(1)
+    simStatus.textContent = `완료 — ${jobs.length}개 세팅 × ${runs}판 (${secs}초)`
+  } finally {
+    simBusy = false
+    btnCurrent.disabled = false
+    btnCompare.disabled = false
+  }
+}
+
+btnCurrent.addEventListener('click', () => runSim(false))
+btnCompare.addEventListener('click', () => runSim(true))

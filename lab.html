@@ -44,7 +44,58 @@
       </section>
 
       <section class="card">
-        <h2>③ 무기 역할 매트릭스 — 스킬 방향</h2>
+        <h2>③ 자동 시뮬레이터 — 봇 실측</h2>
+        <p class="hint">
+          곡선이 "예측"이라면 이건 "실측"입니다. 봇이 실제로 여러 판을 자동
+          플레이해서 생존 시간·클리어율·도달 레벨을 냅니다. 레벨업 성장까지
+          반영되므로 곡선보다 진짜에 가깝습니다.
+        </p>
+
+        <div class="sim-controls">
+          <label>판수
+            <select id="simRuns">
+              <option>5</option>
+              <option selected>10</option>
+              <option>20</option>
+              <option>50</option>
+            </select>
+          </label>
+          <label>제한시간
+            <select id="simTime">
+              <option value="300">5분</option>
+              <option value="480" selected>8분</option>
+              <option value="600">10분</option>
+            </select>
+          </label>
+          <button id="simCurrent">현재값 시뮬</button>
+          <button id="simCompare">현재 + A/B/C 대결</button>
+        </div>
+
+        <p class="note" id="simStatus"></p>
+        <div class="sim-table-wrap">
+          <table class="sim">
+            <thead>
+              <tr>
+                <th>세팅</th>
+                <th>생존(평균)</th>
+                <th>생존(중앙)</th>
+                <th>클리어율</th>
+                <th>평균 Lv</th>
+                <th>평균 킬</th>
+                <th>첫 위기</th>
+              </tr>
+            </thead>
+            <tbody id="simResults"></tbody>
+          </table>
+        </div>
+        <p class="hint">
+          봇은 완벽한 사람이 아니라 "적당히 회피하는 평균 플레이어"의 근사입니다.
+          절대 수치보다 <b>세팅끼리의 상대 비교</b>로 보세요.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>④ 무기 역할 매트릭스 — 스킬 방향</h2>
         <p class="hint">
           숫자가 아니라 <b>역할</b>로 봅니다. 빈칸이 다음에 만들 스킬 후보입니다.
         </p>
