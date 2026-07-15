@@ -4,8 +4,9 @@ import { loadConfig, onConfigChange } from './config.js'
 import { UPGRADES, drawCards } from './upgrades.js'
 import { Grid } from './grid.js'
 
-const W = 800
-const H = 600
+// 세로 모드 (모바일 우선). 9:16 비율.
+const W = 540
+const H = 960
 
 const COLOR_BG = 0x1e1e2e
 const COLOR_PLAYER = 0x89b4fa
@@ -484,23 +485,26 @@ class GameScene extends Phaser.Scene {
 
     this.cardUi.push(
       this.add
-        .text(W / 2, 120, `LEVEL ${this.level}`, {
+        .text(W / 2, H * 0.24, `LEVEL ${this.level}`, {
           fontFamily: 'Arial, sans-serif',
-          fontSize: '44px',
+          fontSize: '40px',
           color: '#f9e2af',
         })
         .setOrigin(0.5)
         .setDepth(21)
     )
 
-    const cw = 200
-    const ch = 240
-    const gap = 24
-    const startX = W / 2 - ((cw + gap) * this.cards.length - gap) / 2 + cw / 2
+    // 세로 모드: 가로로 넓은 카드를 세로로 쌓는다 (모바일 뱀서 방식)
+    const cw = W - 56
+    const ch = 128
+    const gap = 16
+    const totalH = ch * this.cards.length + gap * (this.cards.length - 1)
+    const startY = H / 2 + 30 - totalH / 2 + ch / 2
+    const left = W / 2 - cw / 2 + 24
 
     this.cards.forEach((u, i) => {
-      const cx = startX + i * (cw + gap)
-      const cy = H / 2 + 30
+      const cx = W / 2
+      const cy = startY + i * (ch + gap)
 
       const card = this.add
         .rectangle(cx, cy, cw, ch, 0x313244)
@@ -517,36 +521,35 @@ class GameScene extends Phaser.Scene {
       this.cardUi.push(
         card,
         this.add
-          .text(cx, cy - 60, u.name, {
+          .text(left, cy - 30, u.name, {
             fontFamily: 'Arial, sans-serif',
-            fontSize: '24px',
+            fontSize: '25px',
             color: '#ffffff',
           })
-          .setOrigin(0.5)
+          .setOrigin(0, 0.5)
           .setDepth(22),
         this.add
-          .text(cx, cy - 26, lv > 0 ? `Lv ${lv} → ${lv + 1}` : 'NEW', {
+          .text(left, cy + 22, u.desc(this.cfg), {
             fontFamily: 'Arial, sans-serif',
-            fontSize: '15px',
-            color: lv > 0 ? '#a6adc8' : '#a6e3a1',
-          })
-          .setOrigin(0.5)
-          .setDepth(22),
-        this.add
-          .text(cx, cy + 30, u.desc(this.cfg), {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '16px',
+            fontSize: '17px',
             color: '#cdd6f4',
-            align: 'center',
-            wordWrap: { width: cw - 30 },
+            wordWrap: { width: cw - 110 },
           })
-          .setOrigin(0.5)
+          .setOrigin(0, 0.5)
           .setDepth(22),
         this.add
-          .text(cx, cy + ch / 2 - 24, `[${i + 1}]`, {
+          .text(cx + cw / 2 - 20, cy - 34, lv > 0 ? `Lv ${lv}→${lv + 1}` : 'NEW', {
             fontFamily: 'Arial, sans-serif',
             fontSize: '14px',
-            color: '#6c7086',
+            color: lv > 0 ? '#a6adc8' : '#a6e3a1',
+          })
+          .setOrigin(1, 0.5)
+          .setDepth(22),
+        this.add
+          .text(cx + cw / 2 - 30, cy + 14, `${i + 1}`, {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '30px',
+            color: '#585b70',
           })
           .setOrigin(0.5)
           .setDepth(22)
