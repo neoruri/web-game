@@ -52,6 +52,12 @@ export function simulate(cfg, opts = {}) {
   const skillAcc = {}
   for (const id of SKILL_IDS) skillAcc[id] = 0
 
+  // 연사 상태 (main.js 와 동일)
+  const burst = {
+    barrage: { left: 0, acc: 0 },
+    multishot: { left: 0, acc: 0, base: 0 },
+  }
+
   const grid = new Grid(W, H, 56)
   const buf = []
   const explodeBuf = [] // 폭발 조회용 (buf 와 겹치면 안 됨)
@@ -177,20 +183,21 @@ export function simulate(cfg, opts = {}) {
       let fired = false
 
       if (id === 'barrage') {
-        const n = shotCount(cfg.skill.barrageShots, level)
-        const d = skillDamage()
-        for (let i = 0; i < n; i++) fireAngle(Math.random() * Math.PI * 2, d)
-        fired = true
+        // 가까운 적 조준 연사 — 발동만 하고 실제 발사는 updateBursts 가
+        if (nearestEnemy()) {
+          burst.barrage.left = shotCount(cfg.skill.barrageShots, level)
+          burst.barrage.acc = cfg.skill.shotInterval
+          fired = true
+        }
       } else if (id === 'multishot') {
         const target = nearestEnemy()
         if (target) {
-          const base = Math.atan2(target.y - state.py, target.x - state.px)
-          const spread = (cfg.skill.multishotSpread * Math.PI) / 180
-          const n = shotCount(cfg.skill.multishotShots, level)
-          const d = skillDamage()
-          for (let i = 0; i < n; i++) {
-            fireAngle(base + (Math.random() - 0.5) * spread, d)
-          }
+          burst.multishot.base = Math.atan2(
+            target.y - state.py,
+            target.x - state.px
+          )
+          burst.multishot.left = shotCount(cfg.skill.multishotShots, level)
+          burst.multishot.acc = cfg.skill.shotInterval
           fired = true
         }
       } else if (id === 'grenade') {
@@ -205,6 +212,38 @@ export function simulate(cfg, opts = {}) {
       }
 
       skillAcc[id] = fired ? 0 : cfg.skill.cooldown
+    }
+  }
+
+  // 연사 진행 (main.js updateBursts 와 동일 규칙)
+  function updateBursts() {
+    const iv = cfg.skill.shotInterval
+    const d = skillDamage()
+
+    const b = burst.barrage
+    if (b.left > 0) {
+      b.acc += dt
+      while (b.acc >= iv && b.left > 0) {
+        b.acc -= iv
+        const t = nearestEnemy() // 발마다 재조준
+        if (!t) {
+          b.left = 0
+          break
+        }
+        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), d)
+        b.left--
+      }
+    }
+
+    const m = burst.multishot
+    if (m.left > 0) {
+      m.acc += dt
+      const spread = (cfg.skill.multishotSpread * Math.PI) / 180
+      while (m.acc >= iv && m.left > 0) {
+        m.acc -= iv
+        fireAngle(m.base + (Math.random() - 0.5) * spread, d)
+        m.left--
+      }
     }
   }
 
@@ -371,6 +410,7 @@ export function simulate(cfg, opts = {}) {
     for (let i = 0; i < state.enemies.length; i++) grid.insert(state.enemies[i])
 
     updateSkills()
+    updateBursts()
     updateArrows()
     updateEnemies()
     updateGems()

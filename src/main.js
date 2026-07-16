@@ -58,6 +58,12 @@ class GameScene extends Phaser.Scene {
     this.skillAcc = {} // 스킬별 쿨다운 누적
     for (const id of SKILL_IDS) this.skillAcc[id] = 0
 
+    // 연사 상태 — 발동하면 left 발이 shotInterval 간격으로 하나씩 나간다
+    this.burst = {
+      barrage: { left: 0, acc: 0 },
+      multishot: { left: 0, acc: 0, base: 0 },
+    }
+
     this.enemies = []
     this.arrows = []
     this.gems = []
@@ -533,32 +539,64 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // 난사 — 360° 무작위. 타겟이 없어도 쏜다.
+  // 난사 — 가장 가까운 적을 조준해 연사. 발마다 재조준한다.
+  // (디아3 악마사냥꾼 난사처럼 다-다-다-다)
   fireBarrage(level) {
-    const n = this.shotCount(this.cfg.skill.barrageShots, level)
-    const dmg = this.skillDamage
-    for (let i = 0; i < n; i++) {
-      this.fireAngle(Math.random() * Math.PI * 2, dmg)
-    }
+    if (!this.nearestEnemy()) return false // 쏠 적이 없으면 발동 자체를 미룬다
+
+    const b = this.burst.barrage
+    b.left = this.shotCount(this.cfg.skill.barrageShots, level)
+    b.acc = this.cfg.skill.shotInterval // 첫 발은 즉시
     this.flashSkill(0xf9e2af)
     return true
   }
 
-  // 다발사격 — 타겟 방향 ±(퍼짐/2) 안으로 무작위. 타겟 없으면 발사 안 함.
+  // 다발사격 — 발동 순간의 타겟 방향을 고정하고 그 방향 ±(퍼짐/2)로 연사.
   fireMultishot(level) {
     const target = this.nearestEnemy()
     if (!target) return false
 
-    const base = Math.atan2(target.y - this.player.y, target.x - this.player.x)
-    const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
-    const n = this.shotCount(this.cfg.skill.multishotShots, level)
-    const dmg = this.skillDamage
-
-    for (let i = 0; i < n; i++) {
-      this.fireAngle(base + (Math.random() - 0.5) * spread, dmg)
-    }
+    const m = this.burst.multishot
+    m.base = Math.atan2(target.y - this.player.y, target.x - this.player.x)
+    m.left = this.shotCount(this.cfg.skill.multishotShots, level)
+    m.acc = this.cfg.skill.shotInterval // 첫 발은 즉시
     this.flashSkill(0x89dceb)
     return true
+  }
+
+  // 연사 진행 — 매 프레임 간격만큼 차면 한 발씩 내보낸다
+  updateBursts(dt) {
+    const iv = this.cfg.skill.shotInterval
+    const dmg = this.skillDamage
+
+    const b = this.burst.barrage
+    if (b.left > 0) {
+      b.acc += dt
+      while (b.acc >= iv && b.left > 0) {
+        b.acc -= iv
+        const t = this.nearestEnemy() // 발마다 재조준
+        if (!t) {
+          b.left = 0 // 적이 다 사라지면 연사 중단
+          break
+        }
+        this.fireAngle(
+          Math.atan2(t.y - this.player.y, t.x - this.player.x),
+          dmg
+        )
+        b.left--
+      }
+    }
+
+    const m = this.burst.multishot
+    if (m.left > 0) {
+      m.acc += dt
+      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
+      while (m.acc >= iv && m.left > 0) {
+        m.acc -= iv
+        this.fireAngle(m.base + (Math.random() - 0.5) * spread, dmg)
+        m.left--
+      }
+    }
   }
 
   // 폭발수류탄 — 무작위 적 위치에 원형 범위 데미지. (사거리 제한 없음)
@@ -895,6 +933,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this.updateSkills(dt)
+    this.updateBursts(dt)
     this.updateExplosions(dt)
 
     this.grid.clear()

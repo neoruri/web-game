@@ -60,7 +60,8 @@ export const DEFAULTS = {
   skill: {
     cooldown: 10,
     damageMul: 0.5, // 무기 데미지의 몇 배로 나가는지
-    barrageShots: 5, // 난사: 360° 무작위
+    shotInterval: 0.08, // 연사 간격(초) — 다-다-다-다 느낌
+    barrageShots: 5, // 난사: 가까운 적 조준 연사
     multishotShots: 5, // 다발사격: 타겟 방향
     multishotSpread: 30, // 다발사격 확산 각도(도)
     grenadeRadius: 10, // 폭발수류탄 폭발 반경(px)
@@ -440,12 +441,21 @@ export const SCHEMA = [
           '무기 데미지 대비 배율. 0.5 = 절반  ·  ↑ 스킬이 세짐  ·  ↓ 약해짐',
       },
       {
+        key: 'shotInterval',
+        label: '연사 간격(초)',
+        min: 0.02,
+        max: 0.5,
+        step: 0.01,
+        effect:
+          '↑ 다… 다… 다 느리게 나감  ·  ↓ 다다다다 빠르게 쏟아짐 (난사·다발사격)',
+      },
+      {
         key: 'barrageShots',
         label: '난사: 발수',
         min: 1,
         max: 30,
         step: 1,
-        effect: '↑ 360° 사방으로 더 많이 쏨(포위 대응↑)  ·  ↓ 적게',
+        effect: '↑ 가까운 적을 더 오래 연사  ·  ↓ 짧게 끊김',
       },
       {
         key: 'multishotShots',

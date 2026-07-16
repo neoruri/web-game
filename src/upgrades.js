@@ -74,7 +74,7 @@ export const UPGRADES = [
     name: '난사',
     max: 5,
     desc: (cfg) =>
-      `${cfg.skill.cooldown}초마다 360° 무작위 ${cfg.skill.barrageShots}발\n(데미지 ${pctOf(cfg.skill.damageMul)}% · Lv당 +${cfg.skill.shotsPerLevel}발)`,
+      `${cfg.skill.cooldown}초마다 가까운 적을 ${cfg.skill.barrageShots}발 연사\n(데미지 ${pctOf(cfg.skill.damageMul)}% · Lv당 +${cfg.skill.shotsPerLevel}발)`,
     apply: (s) => {
       s.skills.barrage++
     },
@@ -84,7 +84,7 @@ export const UPGRADES = [
     name: '다발사격',
     max: 5,
     desc: (cfg) =>
-      `${cfg.skill.cooldown}초마다 타겟 방향 ${cfg.skill.multishotSpread}° 안으로 ${cfg.skill.multishotShots}발\n(데미지 ${pctOf(cfg.skill.damageMul)}% · Lv당 +${cfg.skill.shotsPerLevel}발)`,
+      `${cfg.skill.cooldown}초마다 타겟 방향 ${cfg.skill.multishotSpread}° 로 ${cfg.skill.multishotShots}발 연사\n(데미지 ${pctOf(cfg.skill.damageMul)}% · Lv당 +${cfg.skill.shotsPerLevel}발)`,
     apply: (s) => {
       s.skills.multishot++
     },
