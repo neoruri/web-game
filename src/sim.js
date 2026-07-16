@@ -10,7 +10,7 @@
 // 세팅 A vs B 의 상대 비교에 쓴다.
 
 import { Grid } from './grid.js'
-import { UPGRADES, drawCards } from './upgrades.js'
+import { UPGRADES, drawCards, SKILL_IDS, emptySkills } from './upgrades.js'
 
 const W = 540
 const H = 960
@@ -26,6 +26,7 @@ export function simulate(cfg, opts = {}) {
   const dt = opts.dt ?? 1 / 30
 
   const stats = clone(cfg) // 업그레이드로 변하는 실시간 스탯
+  stats.skills = emptySkills()
 
   const state = {
     t: 0,
@@ -48,8 +49,12 @@ export function simulate(cfg, opts = {}) {
     gems: [],
   }
 
+  const skillAcc = {}
+  for (const id of SKILL_IDS) skillAcc[id] = 0
+
   const grid = new Grid(W, H, 56)
   const buf = []
+  const explodeBuf = [] // 폭발 조회용 (buf 와 겹치면 안 됨)
   const enemyPool = []
   const arrowPool = []
   const gemPool = []
@@ -137,17 +142,85 @@ export function simulate(cfg, opts = {}) {
     return best
   }
 
-  function fireAt(target) {
+  function fireAngle(ang, dmg) {
     const w = stats.weapon
-    const ang = Math.atan2(target.y - state.py, target.x - state.px)
     const a = arrowPool.pop() || { hit: new Set() }
     a.x = state.px
     a.y = state.py
     a.vx = Math.cos(ang) * w.speed
     a.vy = Math.sin(ang) * w.speed
     a.pierceLeft = w.pierce
+    a.dmg = dmg
     a.hit.clear()
     state.arrows.push(a)
+  }
+
+  function fireAt(target) {
+    const ang = Math.atan2(target.y - state.py, target.x - state.px)
+    fireAngle(ang, stats.weapon.damage)
+  }
+
+  // --- 액티브 스킬 (main.js 와 동일 규칙) ---
+
+  const skillDamage = () => stats.weapon.damage * cfg.skill.damageMul
+  const shotCount = (base, level) =>
+    base + (level - 1) * cfg.skill.shotsPerLevel
+
+  function updateSkills() {
+    for (const id of SKILL_IDS) {
+      const level = stats.skills[id]
+      if (level <= 0) continue
+      skillAcc[id] += dt
+      if (skillAcc[id] < cfg.skill.cooldown) continue
+
+      // 발동 실패 시 쿨다운을 소모하지 않는다 (main.js 와 동일 규칙)
+      let fired = false
+
+      if (id === 'barrage') {
+        const n = shotCount(cfg.skill.barrageShots, level)
+        const d = skillDamage()
+        for (let i = 0; i < n; i++) fireAngle(Math.random() * Math.PI * 2, d)
+        fired = true
+      } else if (id === 'multishot') {
+        const target = nearestEnemy()
+        if (target) {
+          const base = Math.atan2(target.y - state.py, target.x - state.px)
+          const spread = (cfg.skill.multishotSpread * Math.PI) / 180
+          const n = shotCount(cfg.skill.multishotShots, level)
+          const d = skillDamage()
+          for (let i = 0; i < n; i++) {
+            fireAngle(base + (Math.random() - 0.5) * spread, d)
+          }
+          fired = true
+        }
+      } else if (id === 'grenade') {
+        if (state.enemies.length) {
+          const t = state.enemies[(Math.random() * state.enemies.length) | 0]
+          const r =
+            cfg.skill.grenadeRadius +
+            (level - 1) * cfg.skill.grenadeRadiusPerLevel
+          explodeAt(t.x, t.y, r, skillDamage())
+          fired = true
+        }
+      }
+
+      skillAcc[id] = fired ? 0 : cfg.skill.cooldown
+    }
+  }
+
+  function explodeAt(x, y, r, dmg) {
+    const maxEnemyR = Math.max(cfg.enemy.radius, cfg.boss.radius)
+    const near = grid.query(x, y, r + maxEnemyR, explodeBuf)
+    for (let i = near.length - 1; i >= 0; i--) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const reach = r + e.r
+      const d2 = dx * dx + dy * dy
+      if (d2 > reach * reach) continue
+      const d = Math.sqrt(d2) || 1
+      damageEnemy(e, dmg, dx / d, dy / d)
+    }
   }
 
   function damageEnemy(e, amount, dirX, dirY) {
@@ -293,10 +366,11 @@ export function simulate(cfg, opts = {}) {
       }
     }
 
-    // 그리드 채우기 (봇 회피 + 화살 충돌 공용)
+    // 그리드 채우기 (봇 회피 + 화살 충돌 + 폭발 공용)
     grid.clear()
     for (let i = 0; i < state.enemies.length; i++) grid.insert(state.enemies[i])
 
+    updateSkills()
     updateArrows()
     updateEnemies()
     updateGems()
@@ -323,7 +397,7 @@ export function simulate(cfg, opts = {}) {
         if (dx * dx + dy * dy >= hitR * hitR) continue
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        damageEnemy(e, stats.weapon.damage, a.vx / len, a.vy / len)
+        damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
         if (--a.pierceLeft <= 0) {
           spent = true
           break

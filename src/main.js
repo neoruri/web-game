@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import './style.css'
 import { loadConfig, onConfigChange } from './config.js'
-import { UPGRADES, drawCards } from './upgrades.js'
+import { UPGRADES, drawCards, SKILL_IDS, emptySkills } from './upgrades.js'
 import { Grid } from './grid.js'
 
 // 세로 모드 (모바일 우선). 9:16 비율.
@@ -36,6 +36,7 @@ class GameScene extends Phaser.Scene {
   create() {
     this.cfg = loadConfig()
     this.stats = JSON.parse(JSON.stringify(this.cfg)) // 업그레이드로 변하는 실시간 스탯
+    this.stats.skills = emptySkills() // 액티브 스킬 보유 레벨 (0 = 없음)
 
     this.elapsed = 0
     this.kills = 0
@@ -54,12 +55,17 @@ class GameScene extends Phaser.Scene {
     this.pendingLevels = 0
     this.taken = {}
 
+    this.skillAcc = {} // 스킬별 쿨다운 누적
+    for (const id of SKILL_IDS) this.skillAcc[id] = 0
+
     this.enemies = []
     this.arrows = []
     this.gems = []
+    this.explosions = [] // 수류탄 폭발 이펙트
     this.enemyPool = []
     this.arrowPool = []
     this.gemPool = []
+    this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
     this.grid = new Grid(W, H, 56)
@@ -70,6 +76,7 @@ class GameScene extends Phaser.Scene {
     this.gfxGems = this.add.graphics().setDepth(1)
     this.gfxEnemies = this.add.graphics().setDepth(2)
     this.gfxArrows = this.add.graphics().setDepth(3)
+    this.gfxFx = this.add.graphics().setDepth(3)
 
     this.player = this.add
       .circle(W / 2, H / 2, this.stats.player.radius, COLOR_PLAYER)
@@ -476,10 +483,9 @@ class GameScene extends Phaser.Scene {
     return best
   }
 
-  fireAt(target) {
+  // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지가 달라서 화살마다 들고 있는다.
+  fireAngle(angle, dmg) {
     const w = this.stats.weapon
-    const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x)
-
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
     a.y = this.player.y
@@ -487,8 +493,120 @@ class GameScene extends Phaser.Scene {
     a.vy = Math.sin(angle) * w.speed
     a.angle = angle
     a.pierceLeft = w.pierce
+    a.dmg = dmg
     a.hit.clear()
     this.arrows.push(a)
+  }
+
+  fireAt(target) {
+    const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x)
+    this.fireAngle(angle, this.stats.weapon.damage)
+  }
+
+  // --- 액티브 스킬 ---------------------------------------------------------
+
+  get skillDamage() {
+    return this.stats.weapon.damage * this.cfg.skill.damageMul
+  }
+
+  shotCount(base, level) {
+    return base + (level - 1) * this.cfg.skill.shotsPerLevel
+  }
+
+  updateSkills(dt) {
+    const cd = this.cfg.skill.cooldown
+    for (const id of SKILL_IDS) {
+      const level = this.stats.skills[id]
+      if (level <= 0) continue
+
+      this.skillAcc[id] += dt
+      if (this.skillAcc[id] < cd) continue
+
+      // 발동에 실패하면(쏠 적이 없음) 쿨다운을 소모하지 않고 준비 상태로 둔다.
+      // 그래야 적이 나타나는 순간 바로 터진다.
+      let fired = false
+      if (id === 'barrage') fired = this.fireBarrage(level)
+      else if (id === 'multishot') fired = this.fireMultishot(level)
+      else if (id === 'grenade') fired = this.fireGrenade(level)
+
+      this.skillAcc[id] = fired ? 0 : cd
+    }
+  }
+
+  // 난사 — 360° 무작위. 타겟이 없어도 쏜다.
+  fireBarrage(level) {
+    const n = this.shotCount(this.cfg.skill.barrageShots, level)
+    const dmg = this.skillDamage
+    for (let i = 0; i < n; i++) {
+      this.fireAngle(Math.random() * Math.PI * 2, dmg)
+    }
+    this.flashSkill(0xf9e2af)
+    return true
+  }
+
+  // 다발사격 — 타겟 방향 ±(퍼짐/2) 안으로 무작위. 타겟 없으면 발사 안 함.
+  fireMultishot(level) {
+    const target = this.nearestEnemy()
+    if (!target) return false
+
+    const base = Math.atan2(target.y - this.player.y, target.x - this.player.x)
+    const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
+    const n = this.shotCount(this.cfg.skill.multishotShots, level)
+    const dmg = this.skillDamage
+
+    for (let i = 0; i < n; i++) {
+      this.fireAngle(base + (Math.random() - 0.5) * spread, dmg)
+    }
+    this.flashSkill(0x89dceb)
+    return true
+  }
+
+  // 폭발수류탄 — 무작위 적 위치에 원형 범위 데미지. (사거리 제한 없음)
+  fireGrenade(level) {
+    if (this.enemies.length === 0) return false
+    const t = this.enemies[(Math.random() * this.enemies.length) | 0]
+    const r =
+      this.cfg.skill.grenadeRadius +
+      (level - 1) * this.cfg.skill.grenadeRadiusPerLevel
+    this.explodeAt(t.x, t.y, r, this.skillDamage)
+    return true
+  }
+
+  explodeAt(x, y, r, dmg) {
+    const maxEnemyR = Math.max(this.cfg.enemy.radius, this.cfg.boss.radius)
+    // updateArrows 가 queryBuf 를 쓰므로 폭발은 별도 버퍼로 조회한다
+    const near = this.grid.query(x, y, r + maxEnemyR, this.explodeBuf)
+
+    // damageEnemy 가 enemies 를 수정하지만 near 는 별도 배열이라 안전하다
+    for (let i = near.length - 1; i >= 0; i--) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const reach = r + e.r
+      const d2 = dx * dx + dy * dy
+      if (d2 > reach * reach) continue
+      const d = Math.sqrt(d2) || 1
+      this.damageEnemy(e, dmg, dx / d, dy / d)
+    }
+
+    this.explosions.push({ x, y, r, life: 0.3, max: 0.3 })
+    this.cameras.main.shake(80, 0.003)
+  }
+
+  // 스킬 발동 순간 플레이어를 잠깐 빛나게 (뭔가 터졌다는 신호)
+  flashSkill(color) {
+    const ring = this.add
+      .circle(this.player.x, this.player.y, this.stats.player.radius + 6)
+      .setStrokeStyle(3, color)
+      .setDepth(5)
+
+    this.tweens.add({
+      targets: ring,
+      scale: 2.2,
+      alpha: 0,
+      duration: 280,
+      onComplete: () => ring.destroy(),
+    })
   }
 
   damageEnemy(e, amount, dirX, dirY) {
@@ -776,6 +894,9 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    this.updateSkills(dt)
+    this.updateExplosions(dt)
+
     this.grid.clear()
     for (let i = 0; i < this.enemies.length; i++) {
       this.grid.insert(this.enemies[i])
@@ -822,7 +943,7 @@ class GameScene extends Phaser.Scene {
 
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        this.damageEnemy(e, this.stats.weapon.damage, a.vx / len, a.vy / len)
+        this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
 
         if (--a.pierceLeft <= 0) {
           spent = true
@@ -862,6 +983,14 @@ class GameScene extends Phaser.Scene {
     }
 
     if (incoming > 0 && this.invulnLeft === 0) this.hitPlayer(incoming)
+  }
+
+  updateExplosions(dt) {
+    for (let i = this.explosions.length - 1; i >= 0; i--) {
+      const ex = this.explosions[i]
+      ex.life -= dt
+      if (ex.life <= 0) this.explosions.splice(i, 1)
+    }
   }
 
   updateGems(dt) {
@@ -961,6 +1090,18 @@ class GameScene extends Phaser.Scene {
       ga.lineTo(a.x + cx, a.y + cy)
     }
     ga.strokePath()
+
+    // 수류탄 폭발 — 커지면서 사라지는 링
+    const gf = this.gfxFx
+    gf.clear()
+    for (let i = 0; i < this.explosions.length; i++) {
+      const ex = this.explosions[i]
+      const k = ex.life / ex.max // 1 → 0
+      gf.lineStyle(3, COLOR_ARROW, k)
+      gf.strokeCircle(ex.x, ex.y, ex.r * (1.3 - 0.3 * k))
+      gf.fillStyle(COLOR_ARROW, k * 0.18)
+      gf.fillCircle(ex.x, ex.y, ex.r)
+    }
   }
 }
 

@@ -56,6 +56,17 @@ export const DEFAULTS = {
     maxHpAdd: 20,
     pickupAdd: 10,
   },
+  // 액티브 스킬 — 획득하면 쿨다운마다 자동 발동
+  skill: {
+    cooldown: 10,
+    damageMul: 0.5, // 무기 데미지의 몇 배로 나가는지
+    barrageShots: 5, // 난사: 360° 무작위
+    multishotShots: 5, // 다발사격: 타겟 방향
+    multishotSpread: 30, // 다발사격 확산 각도(도)
+    grenadeRadius: 10, // 폭발수류탄 폭발 반경(px)
+    shotsPerLevel: 1, // 레벨당 발수 증가 (난사·다발사격)
+    grenadeRadiusPerLevel: 4, // 레벨당 폭발 반경 증가
+  },
 }
 
 // 튜너 슬라이더 메타데이터.
@@ -404,6 +415,77 @@ export const SCHEMA = [
         max: 150,
         step: 5,
         effect: "↑ '자석' 카드의 획득범위 상승폭↑  ·  ↓ 조금만",
+      },
+    ],
+  },
+  {
+    key: 'skill',
+    label: '액티브 스킬 (난사·다발사격·수류탄)',
+    fields: [
+      {
+        key: 'cooldown',
+        label: '스킬 쿨타임(초)',
+        min: 1,
+        max: 30,
+        step: 0.5,
+        effect: '↑ 스킬이 뜸하게 터짐  ·  ↓ 자주 터져 강력해짐 (3종 공통)',
+      },
+      {
+        key: 'damageMul',
+        label: '스킬 데미지 배율',
+        min: 0.1,
+        max: 3,
+        step: 0.05,
+        effect:
+          '무기 데미지 대비 배율. 0.5 = 절반  ·  ↑ 스킬이 세짐  ·  ↓ 약해짐',
+      },
+      {
+        key: 'barrageShots',
+        label: '난사: 발수',
+        min: 1,
+        max: 30,
+        step: 1,
+        effect: '↑ 360° 사방으로 더 많이 쏨(포위 대응↑)  ·  ↓ 적게',
+      },
+      {
+        key: 'multishotShots',
+        label: '다발사격: 발수',
+        min: 1,
+        max: 30,
+        step: 1,
+        effect: '↑ 타겟 방향으로 더 많이 쏨(집중 화력↑)  ·  ↓ 적게',
+      },
+      {
+        key: 'multishotSpread',
+        label: '다발사격: 퍼짐 각도(도)',
+        min: 0,
+        max: 180,
+        step: 5,
+        effect: '↑ 넓게 퍼져 여러 적에 분산  ·  ↓ 좁게 모여 한 곳에 집중',
+      },
+      {
+        key: 'grenadeRadius',
+        label: '수류탄: 폭발 반경(px)',
+        min: 5,
+        max: 200,
+        step: 5,
+        effect: '↑ 폭발이 넓어 여러 적을 한 번에  ·  ↓ 좁아서 거의 단일 타겟',
+      },
+      {
+        key: 'shotsPerLevel',
+        label: '레벨당 발수 증가',
+        min: 0,
+        max: 5,
+        step: 1,
+        effect: '난사·다발사격 카드를 또 뽑을 때마다 늘어나는 발수',
+      },
+      {
+        key: 'grenadeRadiusPerLevel',
+        label: '레벨당 폭발 반경 증가',
+        min: 0,
+        max: 40,
+        step: 1,
+        effect: '수류탄 카드를 또 뽑을 때마다 넓어지는 폭발 반경',
       },
     ],
   },
