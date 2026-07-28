@@ -10,8 +10,16 @@
 // 세팅 A vs B 의 상대 비교에 쓴다.
 
 import { Grid } from './grid.js'
-import { SKILL_IDS, emptySkills } from './upgrades.js'
 import { deriveStats, emptyAttributes } from './progression.js'
+import {
+  ACTIVE_IDS,
+  PASSIVE_IDS,
+  emptySkillTree,
+  investBlockReason,
+  emptySpecs,
+  SPECIALIZATIONS,
+  SPEC_LEVEL,
+} from './skilltree.js'
 
 const W = 540
 const H = 960
@@ -26,11 +34,13 @@ export function simulate(cfg, opts = {}) {
   const maxTime = opts.maxTime ?? 480 // 이 시간까지 살면 클리어로 본다
   const dt = opts.dt ?? 1 / 30
 
-  // 능력치·스킬 → 최종 stats (게임과 동일한 재계산 함수)
+  // 능력치·스킬·특화 → 최종 stats (게임과 동일한 재계산 함수)
   const attr = emptyAttributes()
-  const skills = emptySkills()
-  let stats = deriveStats(cfg, attr, skills)
+  const skills = emptySkillTree()
+  const specs = emptySpecs()
+  let stats = deriveStats(cfg, attr, skills, specs)
   let attrCursor = 0 // 봇 능력치 배분 순환 위치
+  let skillPoints = 0 // 봇 미사용 스킬 포인트
 
   const state = {
     t: 0,
@@ -53,12 +63,13 @@ export function simulate(cfg, opts = {}) {
   }
 
   const skillAcc = {}
-  for (const id of SKILL_IDS) skillAcc[id] = 0
+  for (const id of ACTIVE_IDS) skillAcc[id] = 0
 
-  // 연사 상태 (main.js 와 동일)
+  // 연사/지속 상태 (main.js 와 동일)
   const burst = {
-    barrage: { left: 0, acc: 0 },
     multishot: { left: 0, acc: 0, base: 0 },
+    rapidfire: { left: 0, acc: 0 },
+    barrage: { timeLeft: 0, acc: 0 },
   }
 
   const grid = new Grid(W, H, 56)
@@ -151,14 +162,14 @@ export function simulate(cfg, opts = {}) {
     return best
   }
 
-  function fireAngle(ang, dmg) {
+  function fireAngle(ang, dmg, pierce) {
     const w = stats.weapon
     const a = arrowPool.pop() || { hit: new Set() }
     a.x = state.px
     a.y = state.py
     a.vx = Math.cos(ang) * w.speed
     a.vy = Math.sin(ang) * w.speed
-    a.pierceLeft = w.pierce
+    a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
     a.hit.clear()
     state.arrows.push(a)
@@ -166,86 +177,90 @@ export function simulate(cfg, opts = {}) {
 
   function fireAt(target) {
     const ang = Math.atan2(target.y - state.py, target.x - state.px)
-    fireAngle(ang, stats.weapon.damage)
+    fireAngle(ang, stats.weapon.damage, stats.weapon.pierce)
   }
 
-  // --- 액티브 스킬 (main.js 와 동일 규칙) ---
-
-  const skillDamage = () => stats.weapon.damage * cfg.skill.damageMul
-  const shotCount = (base, level) =>
-    base + (level - 1) * cfg.skill.shotsPerLevel
+  // --- 액티브 스킬 (main.js 와 동일 규칙, skillStats 기반) ---
 
   function updateSkills() {
-    for (const id of SKILL_IDS) {
-      const level = stats.skills[id]
-      if (level <= 0) continue
+    for (const id of ACTIVE_IDS) {
+      const st = stats.skillStats[id]
+      if (!st.active) continue
       skillAcc[id] += dt
-      if (skillAcc[id] < stats.skill.cooldown) continue
+      if (skillAcc[id] < st.cooldown) continue
 
-      // 발동 실패 시 쿨다운을 소모하지 않는다 (main.js 와 동일 규칙)
       let fired = false
-
-      if (id === 'barrage') {
-        // 가까운 적 조준 연사 — 발동만 하고 실제 발사는 updateBursts 가
-        if (nearestEnemy()) {
-          burst.barrage.left = shotCount(cfg.skill.barrageShots, level)
-          burst.barrage.acc = cfg.skill.shotInterval
-          fired = true
-        }
-      } else if (id === 'multishot') {
-        const target = nearestEnemy()
-        if (target) {
-          burst.multishot.base = Math.atan2(
-            target.y - state.py,
-            target.x - state.px
-          )
-          burst.multishot.left = shotCount(cfg.skill.multishotShots, level)
+      if (id === 'multishot') {
+        const t = nearestEnemy()
+        if (t) {
+          burst.multishot.base = Math.atan2(t.y - state.py, t.x - state.px)
+          burst.multishot.left = st.shots
           burst.multishot.acc = cfg.skill.shotInterval
           fired = true
         }
+      } else if (id === 'rapidfire') {
+        if (nearestEnemy()) {
+          burst.rapidfire.left = st.shots
+          burst.rapidfire.acc = st.interval
+          fired = true
+        }
+      } else if (id === 'barrage') {
+        burst.barrage.timeLeft = st.duration
+        burst.barrage.acc = cfg.skill.shotInterval
+        fired = true
       } else if (id === 'grenade') {
         if (state.enemies.length) {
-          const t = state.enemies[(Math.random() * state.enemies.length) | 0]
-          const r =
-            cfg.skill.grenadeRadius +
-            (level - 1) * cfg.skill.grenadeRadiusPerLevel
-          explodeAt(t.x, t.y, r, skillDamage())
+          for (let i = 0; i < st.count; i++) {
+            const t = state.enemies[(Math.random() * state.enemies.length) | 0]
+            explodeAt(t.x, t.y, st.radius, st.dmg)
+          }
           fired = true
         }
       }
 
-      skillAcc[id] = fired ? 0 : stats.skill.cooldown
+      skillAcc[id] = fired ? 0 : st.cooldown
     }
   }
 
-  // 연사 진행 (main.js updateBursts 와 동일 규칙)
   function updateBursts() {
     const iv = cfg.skill.shotInterval
-    const d = skillDamage()
-
-    const b = burst.barrage
-    if (b.left > 0) {
-      b.acc += dt
-      while (b.acc >= iv && b.left > 0) {
-        b.acc -= iv
-        const t = nearestEnemy() // 발마다 재조준
-        if (!t) {
-          b.left = 0
-          break
-        }
-        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), d)
-        b.left--
-      }
-    }
 
     const m = burst.multishot
     if (m.left > 0) {
+      const st = stats.skillStats.multishot
+      const spread = ((cfg.skill.multishotSpread * Math.PI) / 180) * st.spreadMul
       m.acc += dt
-      const spread = (cfg.skill.multishotSpread * Math.PI) / 180
       while (m.acc >= iv && m.left > 0) {
         m.acc -= iv
-        fireAngle(m.base + (Math.random() - 0.5) * spread, d)
+        fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce)
         m.left--
+      }
+    }
+
+    const r = burst.rapidfire
+    if (r.left > 0) {
+      const st = stats.skillStats.rapidfire
+      r.acc += dt
+      while (r.acc >= st.interval && r.left > 0) {
+        r.acc -= st.interval
+        const t = nearestEnemy()
+        if (!t) {
+          r.left = 0
+          break
+        }
+        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), st.dmg, st.pierce)
+        r.left--
+      }
+    }
+
+    const b = burst.barrage
+    if (b.timeLeft > 0) {
+      const st = stats.skillStats.barrage
+      b.timeLeft -= dt
+      b.acc += dt
+      while (b.acc >= iv) {
+        b.acc -= iv
+        fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
       }
     }
   }
@@ -296,17 +311,39 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
-  // 봇의 능력치 자동 배분 — 딜/생존 위주로 순환 (스킬이 없는 1단계 기준).
-  // 지능(스킬 쿨감)은 스킬을 배우는 2단계에서 배분 대상에 넣는다.
-  const BOT_ATTR_ORDER = ['str', 'dex', 'vit']
+  // 봇의 자동 성장 — 능력치는 딜/생존/스킬쿨 순환, 스킬 포인트는 액티브 우선 투자.
+  // "평균적 플레이어" 근사다. 절대 수치보다 세팅 간 상대 비교에 쓴다.
+  const BOT_ATTR_ORDER = ['str', 'dex', 'int', 'vit']
   function autoLevelUp() {
     const prevMax = stats.player.maxHp
     for (let i = 0; i < cfg.attr.pointsPerLevel; i++) {
       attr[BOT_ATTR_ORDER[attrCursor % BOT_ATTR_ORDER.length]]++
       attrCursor++
     }
-    stats = deriveStats(cfg, attr, skills)
+    skillPoints += cfg.attr.skillPointsPerLevel
+    botSpendSkillPoints()
+    stats = deriveStats(cfg, attr, skills, specs)
     state.hp += stats.player.maxHp - prevMax // 활력 증가분만큼 현재 HP도
+  }
+
+  // 봇 스킬 투자: 배울 수 있는 스킬 중 액티브 먼저, 그중 레벨 낮은 것.
+  function botSpendSkillPoints() {
+    while (skillPoints > 0) {
+      const options = [...ACTIVE_IDS, ...PASSIVE_IDS].filter(
+        (id) => !investBlockReason(id, skills, state.level)
+      )
+      if (!options.length) break
+      options.sort((a, b) => {
+        const act = (ACTIVE_IDS.includes(b) ? 1 : 0) - (ACTIVE_IDS.includes(a) ? 1 : 0)
+        return act || (skills[a] || 0) - (skills[b] || 0)
+      })
+      skills[options[0]] = (skills[options[0]] || 0) + 1
+      skillPoints--
+    }
+    // 특화 도달 시 A 자동 선택 (봇은 첫 특화 고정)
+    for (const id of Object.keys(SPECIALIZATIONS)) {
+      if (!specs[id] && (skills[id] || 0) >= SPEC_LEVEL) specs[id] = 'A'
+    }
   }
 
   function hitPlayer(amount) {

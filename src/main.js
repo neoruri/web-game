@@ -2,7 +2,14 @@ import Phaser from 'phaser'
 import './style.css'
 import { loadConfig, onConfigChange } from './config.js'
 import { deriveStats, emptyAttributes } from './progression.js'
-import { ACTIVE_IDS, emptySkillTree, investBlockReason } from './skilltree.js'
+import {
+  ACTIVE_IDS,
+  ACTIVE_SKILLS,
+  emptySkillTree,
+  investBlockReason,
+  emptySpecs,
+  SPEC_LEVEL,
+} from './skilltree.js'
 import { createGrowthScreen } from './growth-ui.js'
 import { Grid } from './grid.js'
 
@@ -42,11 +49,13 @@ class GameScene extends Phaser.Scene {
     const dbg = this.cfg.debug
     this.attributes = emptyAttributes() // 확정 능력치
     this.skillLevels = emptySkillTree() // 스킬 트리 보유 레벨
+    this.specs = emptySpecs() // 5레벨 특화 선택 (id → 'A'|'B'|null)
+    this.unlockedSkills = {} // 해금 알림을 이미 띄운 스킬
     this.attrPoints = dbg.startAttrPoints // 미사용 능력치 포인트
     this.skillPoints = dbg.startSkillPoints // 미사용 스킬 포인트
 
     // 능력치·스킬 → 최종 전투 stats (단일 재계산 지점)
-    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels)
+    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels, this.specs)
 
     this.elapsed = 0
     this.kills = 0
@@ -113,6 +122,7 @@ class GameScene extends Phaser.Scene {
         attributes: this.attributes,
         skillPoints: this.skillPoints,
         skillLevels: this.skillLevels,
+        specs: this.specs,
         cfg: this.cfg,
       }),
       onApply: (finalAttr, spent) => {
@@ -122,6 +132,7 @@ class GameScene extends Phaser.Scene {
         this.refreshGrowthHud()
       },
       onSkillInvest: (id) => this.investSkill(id),
+      onSpecChoose: (id, choice) => this.chooseSpec(id, choice),
       onClose: () => {
         this.growthOpen = false
       },
@@ -147,11 +158,20 @@ class GameScene extends Phaser.Scene {
     return true
   }
 
+  // 5레벨 특화 선택 (한 번만). 성공하면 true.
+  chooseSpec(id, choice) {
+    if (this.specs[id]) return false // 이미 선택함
+    if ((this.skillLevels[id] || 0) < SPEC_LEVEL) return false
+    this.specs[id] = choice
+    this.recompute()
+    return true
+  }
+
   // 능력치가 바뀔 때마다 최종 전투 stats 를 통째로 다시 계산한다.
   // 최대 HP 증가분만큼 현재 HP 도 함께 올린다 (활력 스펙).
   recompute() {
     const prevMax = this.stats.player.maxHp
-    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels)
+    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels, this.specs)
     const gained = this.stats.player.maxHp - prevMax
     if (gained > 0) this.hp += gained
     this.hp = Math.min(this.hp, this.stats.player.maxHp)
@@ -678,7 +698,7 @@ class GameScene extends Phaser.Scene {
     const m = this.burst.multishot
     if (m.left > 0) {
       const st = this.stats.skillStats.multishot
-      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
+      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread) * st.spreadMul
       m.acc += dt
       while (m.acc >= iv && m.left > 0) {
         m.acc -= iv
@@ -822,6 +842,53 @@ class GameScene extends Phaser.Scene {
     this.lvText.setText('Lv ' + this.level)
     this.refreshGrowthHud()
     this.showLevelToast(levels, ap, sp)
+    this.checkUnlocks()
+  }
+
+  // 레벨이 스킬 해금 레벨을 통과하면 알림 (레벨을 건너뛰어도 처리)
+  checkUnlocks() {
+    for (const id of ACTIVE_IDS) {
+      const def = ACTIVE_SKILLS[id]
+      if (this.level >= def.unlockLevel && !this.unlockedSkills[id]) {
+        this.unlockedSkills[id] = true
+        if (def.unlockLevel > 1) {
+          // 레벨업 토스트와 겹치지 않게 살짝 아래에 표시
+          this.showUnlockToast(def.name)
+        }
+      }
+    }
+  }
+
+  showUnlockToast(name) {
+    const msg = `NEW SKILL\n${name}\n성장 화면에서 습득`
+    const t = this.add
+      .text(W / 2, H * 0.42, msg, {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '24px',
+        color: '#cba6f7',
+        align: 'center',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(23)
+
+    this.tweens.add({
+      targets: t,
+      alpha: { from: 1, to: 0 },
+      duration: 2000,
+      ease: 'Quad.easeIn',
+      onComplete: () => t.destroy(),
+    })
+
+    // 성장 버튼을 잠깐 강조
+    this.tweens.add({
+      targets: this.growthBtn,
+      scaleX: 1.08,
+      scaleY: 1.15,
+      duration: 220,
+      yoyo: true,
+      repeat: 3,
+    })
   }
 
   showLevelToast(levels, ap, sp) {

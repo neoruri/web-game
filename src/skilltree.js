@@ -122,6 +122,35 @@ export const PASSIVE_SKILLS = {
   },
 }
 
+// 5레벨 특화 — 스킬이 5레벨에 도달하면 A/B 중 하나 선택(이후 변경 불가).
+// mods: deriveStats 가 해당 스킬 최종 수치에 곱/가하는 보정.
+export const SPECIALIZATIONS = {
+  multishot: {
+    A: { name: '집중 사격', desc: '각도 좁고 피해 +50%', mods: { dmgMul: 1.5, spreadMul: 0.4 } },
+    B: { name: '확산 사격', desc: '각도 넓고 화살 +3, 피해 -10%', mods: { dmgMul: 0.9, spreadMul: 1.6, shotsAdd: 3 } },
+  },
+  rapidfire: {
+    A: { name: '추적 연사', desc: '피해 +20%', mods: { dmgMul: 1.2 } },
+    B: { name: '집중 연사', desc: '연사 속도 +30%', mods: { intervalMul: 0.7 } },
+  },
+  barrage: {
+    A: { name: '그림자 난사', desc: '지속시간 +40%', mods: { durationMul: 1.4 } },
+    B: { name: '방어 난사', desc: '피해 +25%', mods: { dmgMul: 1.25 } },
+  },
+  grenade: {
+    A: { name: '집속 폭탄', desc: '범위 좁고 피해 +60%', mods: { dmgMul: 1.6, radiusMul: 0.6 } },
+    B: { name: '확산 폭탄', desc: '범위 +40%, 개수 +1', mods: { radiusMul: 1.4, countAdd: 1 } },
+  },
+}
+
+export const SPEC_LEVEL = 5 // 이 레벨에 도달하면 특화 선택 가능
+
+export function emptySpecs() {
+  const o = {}
+  for (const id of Object.keys(SPECIALIZATIONS)) o[id] = null
+  return o
+}
+
 // 계열 정의 (UI 열 구성)
 export const TREES = [
   { id: 'archery', name: '사격', color: '#89dceb' },

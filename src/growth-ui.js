@@ -15,9 +15,17 @@ import {
   PASSIVE_SKILLS,
   TREES,
   investBlockReason,
+  SPECIALIZATIONS,
+  SPEC_LEVEL,
 } from './skilltree.js'
 
-export function createGrowthScreen({ getState, onApply, onSkillInvest, onClose }) {
+export function createGrowthScreen({
+  getState,
+  onApply,
+  onSkillInvest,
+  onSpecChoose,
+  onClose,
+}) {
   let open = false
   let cfg = null
   let level = 1
@@ -135,11 +143,22 @@ export function createGrowthScreen({ getState, onApply, onSkillInvest, onClose }
     else if (!reason) statusCls = 'nopoint'
 
     const badge = cur === 0 && !reason ? '<span class="node-new">NEW</span>' : ''
-    const sub = maxed
-      ? 'MAX'
-      : reason
-        ? reason
-        : `${cur}/${sk.maxLevel}`
+    const sub = maxed ? 'MAX' : reason ? reason : `${cur}/${sk.maxLevel}`
+
+    // 5레벨 특화 — 액티브 스킬이 SPEC_LEVEL 이상이면 A/B 선택 UI
+    let specHtml = ''
+    const specDef = SPECIALIZATIONS[sk.id]
+    if (specDef && cur >= SPEC_LEVEL) {
+      const chosen = st.specs?.[sk.id]
+      if (chosen) {
+        specHtml = `<div class="node-spec chosen">특화: ${specDef[chosen].name}</div>`
+      } else {
+        specHtml = `<div class="node-spec">
+          <button class="spec-btn" data-spec="${sk.id}" data-choice="A">${specDef.A.name}<em>${specDef.A.desc}</em></button>
+          <button class="spec-btn" data-spec="${sk.id}" data-choice="B">${specDef.B.name}<em>${specDef.B.desc}</em></button>
+        </div>`
+      }
+    }
 
     return `
       <div class="skill-node ${statusCls}">
@@ -149,6 +168,7 @@ export function createGrowthScreen({ getState, onApply, onSkillInvest, onClose }
         </div>
         <div class="node-sub">${sub}</div>
         <div class="node-desc">${sk.desc}</div>
+        ${specHtml}
       </div>`
   }
 
@@ -172,6 +192,11 @@ export function createGrowthScreen({ getState, onApply, onSkillInvest, onClose }
     }
     if (t.dataset.invest) {
       if (onSkillInvest(t.dataset.invest)) render() // 성공하면 갱신
+      return
+    }
+    const specBtn = t.closest('[data-spec]')
+    if (specBtn) {
+      if (onSpecChoose(specBtn.dataset.spec, specBtn.dataset.choice)) render()
       return
     }
     if (t.dataset.act === 'reset') {

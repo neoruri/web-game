@@ -4,7 +4,7 @@
 // 쓰는 stats 객체를 만든다. 게임/시뮬 어느 쪽도 전투 수치를 직접 수정하지 않고,
 // 무엇이든 바뀌면 이 함수로 통째로 다시 계산한다.
 
-import { ACTIVE_SKILLS, PASSIVE_SKILLS } from './skilltree.js'
+import { ACTIVE_SKILLS, PASSIVE_SKILLS, SPECIALIZATIONS } from './skilltree.js'
 
 export const ATTR_KEYS = ['str', 'dex', 'int', 'vit']
 
@@ -38,8 +38,8 @@ function passiveTotals(skills) {
   return t
 }
 
-// 능력치·스킬 → 최종 전투 stats.
-export function deriveStats(cfg, attr, skills) {
+// 능력치·스킬·특화 → 최종 전투 stats.
+export function deriveStats(cfg, attr, skills, specs = {}) {
   const A = cfg.attr
 
   // 능력치
@@ -93,6 +93,7 @@ export function deriveStats(cfg, attr, skills) {
       pierce: s.weapon.pierce + (e.pierceBonus || 0),
       cooldown: skillCd(def.baseCooldown),
     }
+    st.spreadMul = 1 // 다발사격 각도 배율 (특화가 조정)
     if (id === 'multishot') st.shots = e.shots
     if (id === 'rapidfire') {
       st.shots = e.shots
@@ -104,6 +105,20 @@ export function deriveStats(cfg, attr, skills) {
       st.radius = cfg.skill.grenadeRadius * (e.radiusMul || 1) * (1 + p.grenadeRadiusPct)
       st.dmg *= 1 + p.grenadeDmgPct
     }
+
+    // 5레벨 특화 보정
+    const choice = specs[id]
+    if (choice && SPECIALIZATIONS[id] && SPECIALIZATIONS[id][choice]) {
+      const m = SPECIALIZATIONS[id][choice].mods
+      if (m.dmgMul) st.dmg *= m.dmgMul
+      if (m.shotsAdd && st.shots != null) st.shots += m.shotsAdd
+      if (m.spreadMul) st.spreadMul *= m.spreadMul
+      if (m.intervalMul && st.interval != null) st.interval *= m.intervalMul
+      if (m.durationMul && st.duration != null) st.duration *= m.durationMul
+      if (m.radiusMul && st.radius != null) st.radius *= m.radiusMul
+      if (m.countAdd && st.count != null) st.count += m.countAdd
+    }
+
     s.skillStats[id] = st
   }
 
