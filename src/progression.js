@@ -1,18 +1,14 @@
 // 성장 시스템의 계산 모듈. UI 와 완전히 분리된 순수 함수만 둔다.
 //
-// 스펙 요구: "모든 최종 수치는 한 곳에서 재계산하는 함수로 관리".
-// deriveStats() 가 그 단일 지점이다 — 능력치·스킬 레벨을 받아 실제 전투에 쓰는
-// stats 객체를 만든다. 게임/시뮬 어느 쪽도 전투 수치를 직접 수정하지 않고,
-// 능력치가 바뀔 때마다 이 함수로 통째로 다시 계산한다.
+// deriveStats() 가 유일한 재계산 지점이다 — 능력치·스킬 레벨을 받아 실제 전투에
+// 쓰는 stats 객체를 만든다. 게임/시뮬 어느 쪽도 전투 수치를 직접 수정하지 않고,
+// 무엇이든 바뀌면 이 함수로 통째로 다시 계산한다.
+
+import { ACTIVE_SKILLS, PASSIVE_SKILLS } from './skilltree.js'
 
 export const ATTR_KEYS = ['str', 'dex', 'int', 'vit']
 
-export const ATTR_LABELS = {
-  str: '힘',
-  dex: '민첩',
-  int: '지능',
-  vit: '활력',
-}
+export const ATTR_LABELS = { str: '힘', dex: '민첩', int: '지능', vit: '활력' }
 
 export function emptyAttributes() {
   return { str: 0, dex: 0, int: 0, vit: 0 }
@@ -22,18 +18,40 @@ function clone(o) {
   return JSON.parse(JSON.stringify(o))
 }
 
+// 패시브 스킬 레벨 → 합산 보너스
+function passiveTotals(skills) {
+  const t = {
+    basicDmgPct: 0,
+    projSpeedPct: 0,
+    pierce: 0,
+    movePct: 0,
+    grenadeDmgPct: 0,
+    grenadeRadiusPct: 0,
+    critPct: 0,
+  }
+  for (const id of Object.keys(PASSIVE_SKILLS)) {
+    const lv = skills[id] || 0
+    if (!lv) continue
+    const per = PASSIVE_SKILLS[id].per
+    for (const k in per) if (k in t) t[k] += per[k] * lv
+  }
+  return t
+}
+
 // 능력치·스킬 → 최종 전투 stats.
-// 원본 cfg 는 건드리지 않는다(기본값 유지). 항상 기본값에서 새로 계산한다.
 export function deriveStats(cfg, attr, skills) {
   const A = cfg.attr
 
+  // 능력치
   const dmgMul = 1 + attr.str * A.strDamagePerPoint
   const atkSpd = Math.min(attr.dex * A.dexAtkSpeedPerPoint, A.atkSpeedCap)
-  const moveBonus = Math.min(attr.dex * A.dexMovePerPoint, A.moveCap)
+  const moveAttr = Math.min(attr.dex * A.dexMovePerPoint, A.moveCap)
   const cdr = Math.min(attr.int * A.intCdrPerPoint, A.cdrCap)
   const hpAdd = attr.vit * A.vitHpPerPoint
 
-  // 전투에서 참조하는 그룹만 복제해 최종값을 덮어쓴다
+  // 패시브
+  const p = passiveTotals(skills)
+
   const s = clone({
     player: cfg.player,
     weapon: cfg.weapon,
@@ -45,29 +63,62 @@ export function deriveStats(cfg, attr, skills) {
   })
   s.skills = skills
 
-  // 힘 → 기본활·스킬 피해 (스킬 데미지는 weapon.damage 기반이라 자동 반영)
-  s.weapon.damage = cfg.weapon.damage * dmgMul
-  // 민첩 → 기본활 공격속도(쿨다운 단축). 스킬 쿨에는 적용하지 않는다(스펙).
+  // 기본 활 — 힘(전체 피해) + 궁술숙련(기본활 전용)
+  s.weapon.damage = cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct)
   s.weapon.cooldown = cfg.weapon.cooldown / (1 + atkSpd)
-  // 민첩 → 이동속도
-  s.player.speed = cfg.player.speed * (1 + moveBonus)
-  // 활력 → 최대 HP
-  s.player.maxHp = cfg.player.maxHp + hpAdd
-  // 지능 → 스킬 쿨다운 감소 (하한 적용)
-  s.skill.cooldown = Math.max(A.minSkillCooldown, cfg.skill.cooldown * (1 - cdr))
+  s.weapon.speed = cfg.weapon.speed * (1 + p.projSpeedPct)
+  s.weapon.pierce = cfg.weapon.pierce + p.pierce
 
-  // 성장 화면 표시용 파생값 (백분율로 미리 계산)
+  // 이동 — 민첩 + 이동강화 패시브
+  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct)
+  s.player.maxHp = cfg.player.maxHp + hpAdd
+
+  // 액티브 스킬별 최종 수치 (레벨 반영). 힘은 스킬 피해에도 적용, 궁술숙련은 미적용.
+  const skillBaseDmg = cfg.weapon.damage * dmgMul * cfg.skill.damageMul
+  const skillCd = (base) => Math.max(A.minSkillCooldown, base * (1 - cdr))
+
+  s.skillStats = {}
+  for (const id of Object.keys(ACTIVE_SKILLS)) {
+    const def = ACTIVE_SKILLS[id]
+    const lv = skills[id] || 0
+    if (lv <= 0) {
+      s.skillStats[id] = { level: 0, active: false }
+      continue
+    }
+    const e = def.eff(lv)
+    const st = {
+      level: lv,
+      active: true,
+      dmg: skillBaseDmg * (e.dmgMul || 1),
+      pierce: s.weapon.pierce + (e.pierceBonus || 0),
+      cooldown: skillCd(def.baseCooldown),
+    }
+    if (id === 'multishot') st.shots = e.shots
+    if (id === 'rapidfire') {
+      st.shots = e.shots
+      st.interval = cfg.skill.shotInterval * (e.intervalMul || 1)
+    }
+    if (id === 'barrage') st.duration = e.duration
+    if (id === 'grenade') {
+      st.count = e.count
+      st.radius = cfg.skill.grenadeRadius * (e.radiusMul || 1) * (1 + p.grenadeRadiusPct)
+      st.dmg *= 1 + p.grenadeDmgPct
+    }
+    s.skillStats[id] = st
+  }
+
   s.derived = {
-    dmgPct: round1((dmgMul - 1) * 100),
+    dmgPct: round1((dmgMul * (1 + p.basicDmgPct) - 1) * 100),
     atkSpdPct: round1(atkSpd * 100),
-    movePct: round1(moveBonus * 100),
+    movePct: round1((moveAttr + p.movePct) * 100),
     cdrPct: round1(cdr * 100),
     hpAdd,
   }
   return s
 }
 
-// 능력치 하나의 "현재 효과" 문구 (성장 화면용)
+// --- 능력치 표시 문구 (성장 화면) ---
+
 export function attrEffectText(cfg, key, value) {
   const A = cfg.attr
   if (key === 'str') return `모든 피해 +${round1(value * A.strDamagePerPoint * 100)}%`
@@ -84,7 +135,6 @@ export function attrEffectText(cfg, key, value) {
   return ''
 }
 
-// 다음 구간 보너스 안내 (10/20/30/40). 효과는 3단계에서 구현, 지금은 예고만.
 const TIER_HINTS = {
   str: { 10: '치명타 피해 +10%', 20: '모든 피해 +10%', 30: '관통 +1', 40: '처치 시 폭발' },
   dex: { 10: '치명타 확률 +3%', 20: '이동 +5%', 30: '추가 화살 +1', 40: '회피 +8%' },
@@ -93,10 +143,7 @@ const TIER_HINTS = {
 }
 
 export function nextTierText(key, value) {
-  const tiers = [10, 20, 30, 40]
-  for (const t of tiers) {
-    if (value < t) return `${t}: ${TIER_HINTS[key][t]}`
-  }
+  for (const t of [10, 20, 30, 40]) if (value < t) return `${t}: ${TIER_HINTS[key][t]}`
   return '최대 구간 도달'
 }
 

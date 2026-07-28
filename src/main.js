@@ -1,8 +1,8 @@
 import Phaser from 'phaser'
 import './style.css'
 import { loadConfig, onConfigChange } from './config.js'
-import { SKILL_IDS, emptySkills } from './upgrades.js'
 import { deriveStats, emptyAttributes } from './progression.js'
+import { ACTIVE_IDS, emptySkillTree, investBlockReason } from './skilltree.js'
 import { createGrowthScreen } from './growth-ui.js'
 import { Grid } from './grid.js'
 
@@ -41,7 +41,7 @@ class GameScene extends Phaser.Scene {
     // --- 성장 상태 (디아블로식 포인트 투자) ---
     const dbg = this.cfg.debug
     this.attributes = emptyAttributes() // 확정 능력치
-    this.skillLevels = emptySkills() // 스킬 보유 레벨 (스킬트리는 2단계)
+    this.skillLevels = emptySkillTree() // 스킬 트리 보유 레벨
     this.attrPoints = dbg.startAttrPoints // 미사용 능력치 포인트
     this.skillPoints = dbg.startSkillPoints // 미사용 스킬 포인트
 
@@ -64,12 +64,13 @@ class GameScene extends Phaser.Scene {
     this.gameOver = false
 
     this.skillAcc = {} // 스킬별 쿨다운 누적
-    for (const id of SKILL_IDS) this.skillAcc[id] = 0
+    for (const id of ACTIVE_IDS) this.skillAcc[id] = 0
 
-    // 연사 상태 — 발동하면 left 발이 shotInterval 간격으로 하나씩 나간다
+    // 연사/지속 상태
     this.burst = {
-      barrage: { left: 0, acc: 0 },
-      multishot: { left: 0, acc: 0, base: 0 },
+      multishot: { left: 0, acc: 0, base: 0 }, // 부채꼴 연사
+      rapidfire: { left: 0, acc: 0 }, // 단일 대상 연사
+      barrage: { timeLeft: 0, acc: 0 }, // 360° 지속
     }
 
     this.enemies = []
@@ -110,6 +111,8 @@ class GameScene extends Phaser.Scene {
         level: this.level,
         attrPoints: this.attrPoints,
         attributes: this.attributes,
+        skillPoints: this.skillPoints,
+        skillLevels: this.skillLevels,
         cfg: this.cfg,
       }),
       onApply: (finalAttr, spent) => {
@@ -118,6 +121,7 @@ class GameScene extends Phaser.Scene {
         this.recompute()
         this.refreshGrowthHud()
       },
+      onSkillInvest: (id) => this.investSkill(id),
       onClose: () => {
         this.growthOpen = false
       },
@@ -130,6 +134,17 @@ class GameScene extends Phaser.Scene {
     this.growthOpen = true
     this.releaseStick()
     this.growth.open()
+  }
+
+  // 스킬 포인트로 스킬 1레벨 투자 (즉시 확정). 성공하면 true.
+  investSkill(id) {
+    if (this.skillPoints <= 0) return false
+    if (investBlockReason(id, this.skillLevels, this.level)) return false
+    this.skillLevels[id] = (this.skillLevels[id] || 0) + 1
+    this.skillPoints--
+    this.recompute()
+    this.refreshGrowthHud()
+    return true
   }
 
   // 능력치가 바뀔 때마다 최종 전투 stats 를 통째로 다시 계산한다.
@@ -572,8 +587,8 @@ class GameScene extends Phaser.Scene {
     return best
   }
 
-  // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지가 달라서 화살마다 들고 있는다.
-  fireAngle(angle, dmg) {
+  // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지·관통이 달라서 화살마다 들고 있는다.
+  fireAngle(angle, dmg, pierce) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
@@ -581,7 +596,7 @@ class GameScene extends Phaser.Scene {
     a.vx = Math.cos(angle) * w.speed
     a.vy = Math.sin(angle) * w.speed
     a.angle = angle
-    a.pierceLeft = w.pierce
+    a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
     a.hit.clear()
     this.arrows.push(a)
@@ -592,105 +607,118 @@ class GameScene extends Phaser.Scene {
     this.fireAngle(angle, this.stats.weapon.damage)
   }
 
-  // --- 액티브 스킬 ---------------------------------------------------------
-
-  get skillDamage() {
-    return this.stats.weapon.damage * this.cfg.skill.damageMul
-  }
-
-  shotCount(base, level) {
-    return base + (level - 1) * this.cfg.skill.shotsPerLevel
-  }
+  // --- 액티브 스킬 (스킬 트리 레벨 기반) -----------------------------------
+  // 각 스킬의 최종 수치는 deriveStats 가 stats.skillStats[id] 에 넣어둔다.
+  //  - 다발사격: 타겟 방향 부채꼴 연사
+  //  - 연발사격: 가장 가까운 적 단일 연사 (발마다 재조준)
+  //  - 난사: 지속시간 동안 360° 난사
+  //  - 수류탄: 무작위 적 위치에 count 개 폭발
 
   updateSkills(dt) {
-    const cd = this.stats.skill.cooldown // 지능 쿨감이 반영된 최종 쿨타임
-    for (const id of SKILL_IDS) {
-      const level = this.stats.skills[id]
-      if (level <= 0) continue
+    for (const id of ACTIVE_IDS) {
+      const st = this.stats.skillStats[id]
+      if (!st.active) continue
 
       this.skillAcc[id] += dt
-      if (this.skillAcc[id] < cd) continue
+      if (this.skillAcc[id] < st.cooldown) continue
 
-      // 발동에 실패하면(쏠 적이 없음) 쿨다운을 소모하지 않고 준비 상태로 둔다.
-      // 그래야 적이 나타나는 순간 바로 터진다.
       let fired = false
-      if (id === 'barrage') fired = this.fireBarrage(level)
-      else if (id === 'multishot') fired = this.fireMultishot(level)
-      else if (id === 'grenade') fired = this.fireGrenade(level)
+      if (id === 'multishot') fired = this.triggerMultishot(st)
+      else if (id === 'rapidfire') fired = this.triggerRapidfire(st)
+      else if (id === 'barrage') fired = this.triggerBarrage(st)
+      else if (id === 'grenade') fired = this.triggerGrenade(st)
 
-      this.skillAcc[id] = fired ? 0 : cd
+      // 발동 실패(쏠 적 없음) 시 쿨다운을 소모하지 않는다
+      this.skillAcc[id] = fired ? 0 : st.cooldown
     }
   }
 
-  // 난사 — 가장 가까운 적을 조준해 연사. 발마다 재조준한다.
-  // (디아3 악마사냥꾼 난사처럼 다-다-다-다)
-  fireBarrage(level) {
-    if (!this.nearestEnemy()) return false // 쏠 적이 없으면 발동 자체를 미룬다
-
-    const b = this.burst.barrage
-    b.left = this.shotCount(this.cfg.skill.barrageShots, level)
-    b.acc = this.cfg.skill.shotInterval // 첫 발은 즉시
-    this.flashSkill(0xf9e2af)
-    return true
-  }
-
-  // 다발사격 — 발동 순간의 타겟 방향을 고정하고 그 방향 ±(퍼짐/2)로 연사.
-  fireMultishot(level) {
+  triggerMultishot(st) {
     const target = this.nearestEnemy()
     if (!target) return false
-
     const m = this.burst.multishot
     m.base = Math.atan2(target.y - this.player.y, target.x - this.player.x)
-    m.left = this.shotCount(this.cfg.skill.multishotShots, level)
-    m.acc = this.cfg.skill.shotInterval // 첫 발은 즉시
+    m.left = st.shots
+    m.acc = this.cfg.skill.shotInterval
     this.flashSkill(0x89dceb)
     return true
   }
 
-  // 연사 진행 — 매 프레임 간격만큼 차면 한 발씩 내보낸다
+  triggerRapidfire(st) {
+    if (!this.nearestEnemy()) return false
+    const r = this.burst.rapidfire
+    r.left = st.shots
+    r.acc = st.interval
+    this.flashSkill(0xf38ba8)
+    return true
+  }
+
+  triggerBarrage(st) {
+    const b = this.burst.barrage
+    b.timeLeft = st.duration
+    b.acc = this.cfg.skill.shotInterval
+    this.flashSkill(0xf9e2af)
+    return true // 360° 는 타겟 없어도 발동
+  }
+
+  triggerGrenade(st) {
+    if (this.enemies.length === 0) return false
+    for (let i = 0; i < st.count; i++) {
+      const t = this.enemies[(Math.random() * this.enemies.length) | 0]
+      this.explodeAt(t.x, t.y, st.radius, st.dmg)
+    }
+    return true
+  }
+
+  // 연사/지속 진행 — 매 프레임 간격만큼 차면 발사한다
   updateBursts(dt) {
     const iv = this.cfg.skill.shotInterval
-    const dmg = this.skillDamage
 
-    const b = this.burst.barrage
-    if (b.left > 0) {
-      b.acc += dt
-      while (b.acc >= iv && b.left > 0) {
-        b.acc -= iv
-        const t = this.nearestEnemy() // 발마다 재조준
+    // 다발사격 — 부채꼴
+    const m = this.burst.multishot
+    if (m.left > 0) {
+      const st = this.stats.skillStats.multishot
+      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
+      m.acc += dt
+      while (m.acc >= iv && m.left > 0) {
+        m.acc -= iv
+        this.fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce)
+        m.left--
+      }
+    }
+
+    // 연발사격 — 가장 가까운 적 단일 연사
+    const r = this.burst.rapidfire
+    if (r.left > 0) {
+      const st = this.stats.skillStats.rapidfire
+      r.acc += dt
+      while (r.acc >= st.interval && r.left > 0) {
+        r.acc -= st.interval
+        const t = this.nearestEnemy()
         if (!t) {
-          b.left = 0 // 적이 다 사라지면 연사 중단
+          r.left = 0
           break
         }
         this.fireAngle(
           Math.atan2(t.y - this.player.y, t.x - this.player.x),
-          dmg
+          st.dmg,
+          st.pierce
         )
-        b.left--
+        r.left--
       }
     }
 
-    const m = this.burst.multishot
-    if (m.left > 0) {
-      m.acc += dt
-      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread)
-      while (m.acc >= iv && m.left > 0) {
-        m.acc -= iv
-        this.fireAngle(m.base + (Math.random() - 0.5) * spread, dmg)
-        m.left--
+    // 난사 — 지속시간 동안 360° 무작위
+    const b = this.burst.barrage
+    if (b.timeLeft > 0) {
+      const st = this.stats.skillStats.barrage
+      b.timeLeft -= dt
+      b.acc += dt
+      while (b.acc >= iv) {
+        b.acc -= iv
+        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
       }
     }
-  }
-
-  // 폭발수류탄 — 무작위 적 위치에 원형 범위 데미지. (사거리 제한 없음)
-  fireGrenade(level) {
-    if (this.enemies.length === 0) return false
-    const t = this.enemies[(Math.random() * this.enemies.length) | 0]
-    const r =
-      this.cfg.skill.grenadeRadius +
-      (level - 1) * this.cfg.skill.grenadeRadiusPerLevel
-    this.explodeAt(t.x, t.y, r, this.skillDamage)
-    return true
   }
 
   explodeAt(x, y, r, dmg) {

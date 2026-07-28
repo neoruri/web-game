@@ -10,8 +10,14 @@
 
 import './growth.css'
 import { ATTR_KEYS, ATTR_LABELS, attrEffectText, nextTierText } from './progression.js'
+import {
+  ACTIVE_SKILLS,
+  PASSIVE_SKILLS,
+  TREES,
+  investBlockReason,
+} from './skilltree.js'
 
-export function createGrowthScreen({ getState, onApply, onClose }) {
+export function createGrowthScreen({ getState, onApply, onSkillInvest, onClose }) {
   let open = false
   let cfg = null
   let level = 1
@@ -56,13 +62,14 @@ export function createGrowthScreen({ getState, onApply, onClose }) {
 
   // --- 렌더 ---
   function render() {
-    levelEl.textContent = `레벨 ${level}`
+    const st = getState()
+    levelEl.textContent = `레벨 ${st.level}`
     const rem = remaining()
-    pointsEl.textContent = `미사용 능력치 ${rem}`
-    pointsEl.classList.toggle('has', rem > 0)
+    pointsEl.textContent = `능력치 ${rem}  ·  스킬 ${st.skillPoints}`
+    pointsEl.classList.toggle('has', rem > 0 || st.skillPoints > 0)
 
     if (activeTab === 'attr') renderAttr(rem)
-    else renderSkill()
+    else renderSkill(st)
   }
 
   function renderAttr(rem) {
@@ -96,13 +103,53 @@ export function createGrowthScreen({ getState, onApply, onClose }) {
       </div>`
   }
 
-  function renderSkill() {
-    bodyEl.innerHTML = `
-      <div class="skill-placeholder">
-        스킬 트리는 2단계에서 열립니다.<br />
-        (사격 · 기동 · 폭발물 계열)
+  function renderSkill(st) {
+    const all = { ...ACTIVE_SKILLS, ...PASSIVE_SKILLS }
+    const byTree = (treeId) =>
+      Object.values(all).filter((s) => s.tree === treeId)
+
+    bodyEl.innerHTML =
+      `<div class="skill-cols">` +
+      TREES.map((tree) => {
+        const nodes = byTree(tree.id)
+          .map((sk) => skillNode(sk, st))
+          .join('')
+        return `<div class="skill-col">
+          <h3 style="color:${tree.color}">${tree.name}</h3>${nodes}
+        </div>`
+      }).join('') +
+      `</div>`
+    footEl.innerHTML = `<div class="foot-summary">스킬 포인트로 배우고 강화합니다</div>`
+  }
+
+  function skillNode(sk, st) {
+    const cur = st.skillLevels[sk.id] || 0
+    const reason = investBlockReason(sk.id, st.skillLevels, st.level)
+    const maxed = cur >= sk.maxLevel
+    const canInvest = !reason && st.skillPoints > 0
+    const isActive = !!ACTIVE_SKILLS[sk.id]
+
+    let statusCls = 'locked'
+    if (maxed) statusCls = 'maxed'
+    else if (canInvest) statusCls = 'ready'
+    else if (!reason) statusCls = 'nopoint'
+
+    const badge = cur === 0 && !reason ? '<span class="node-new">NEW</span>' : ''
+    const sub = maxed
+      ? 'MAX'
+      : reason
+        ? reason
+        : `${cur}/${sk.maxLevel}`
+
+    return `
+      <div class="skill-node ${statusCls}">
+        <div class="node-top">
+          <span class="node-name">${isActive ? '◆' : '○'} ${sk.name}${badge}</span>
+          <button class="node-btn" data-invest="${sk.id}" ${canInvest ? '' : 'disabled'}>+</button>
+        </div>
+        <div class="node-sub">${sub}</div>
+        <div class="node-desc">${sk.desc}</div>
       </div>`
-    footEl.innerHTML = ''
   }
 
   // --- 이벤트 (위임) ---
@@ -121,6 +168,10 @@ export function createGrowthScreen({ getState, onApply, onClose }) {
         pending[t.dataset.plus]++
         render()
       }
+      return
+    }
+    if (t.dataset.invest) {
+      if (onSkillInvest(t.dataset.invest)) render() // 성공하면 갱신
       return
     }
     if (t.dataset.act === 'reset') {
