@@ -28,6 +28,7 @@ function passiveTotals(skills) {
     grenadeDmgPct: 0,
     grenadeRadiusPct: 0,
     critPct: 0,
+    dodgePct: 0,
   }
   for (const id of Object.keys(PASSIVE_SKILLS)) {
     const lv = skills[id] || 0
@@ -36,6 +37,33 @@ function passiveTotals(skills) {
     for (const k in per) if (k in t) t[k] += per[k] * lv
   }
   return t
+}
+
+// 능력치 구간 보너스 (10/20/30/40 통과 시 발동). 3단계 심화 효과.
+function tierBonuses(attr, pass) {
+  const has = (v, n) => v >= n
+  const S = attr.str
+  const D = attr.dex
+  const I = attr.int
+  const V = attr.vit
+
+  return {
+    allDmgPct: has(S, 20) ? 0.1 : 0, // 힘20: 모든 피해 +10%
+    pierceAdd: has(S, 30) ? 1 : 0, // 힘30: 관통 +1
+    killExplodeChance: has(S, 40) ? 0.08 : 0, // 힘40: 처치 시 8% 폭발
+    critChance: (has(D, 10) ? 0.03 : 0) + pass.critPct, // 민첩10 + 치명타 훈련
+    critDmg: 1.5 + (has(S, 10) ? 0.1 : 0), // 기본 150%, 힘10 +10%
+    movePct: has(D, 20) ? 0.05 : 0, // 민첩20: 이동 +5%
+    extraArrows: has(D, 30) ? 1 : 0, // 민첩30: 기본 활 추가 화살 +1
+    dodge: (has(D, 40) ? 0.08 : 0) + pass.dodgePct, // 민첩40 + 회피 훈련
+    skillDmgPct: has(I, 10) ? 0.08 : 0, // 지능10: 스킬 피해 +8%
+    skillAreaPct: has(I, 20) ? 0.1 : 0, // 지능20: 스킬 범위 +10%
+    skillDurPct: has(I, 30) ? 0.15 : 0, // 지능30: 지속 +15%
+    cdRefundChance: has(I, 40) ? 0.1 : 0, // 지능40: 10% 쿨타임 반환
+    regen: (has(V, 10) ? 0.5 : 0) + (has(V, 30) ? 0.5 : 0), // 활력10+30
+    dmgTakenMul: has(V, 20) ? 0.95 : 1, // 활력20: 받는 피해 -5%
+    revive: has(V, 40), // 활력40: 부활
+  }
 }
 
 // 능력치·스킬·특화 → 최종 전투 stats.
@@ -49,8 +77,9 @@ export function deriveStats(cfg, attr, skills, specs = {}) {
   const cdr = Math.min(attr.int * A.intCdrPerPoint, A.cdrCap)
   const hpAdd = attr.vit * A.vitHpPerPoint
 
-  // 패시브
+  // 패시브 + 능력치 구간 보너스
   const p = passiveTotals(skills)
+  const tb = tierBonuses(attr, p)
 
   const s = clone({
     player: cfg.player,
@@ -63,18 +92,34 @@ export function deriveStats(cfg, attr, skills, specs = {}) {
   })
   s.skills = skills
 
-  // 기본 활 — 힘(전체 피해) + 궁술숙련(기본활 전용)
-  s.weapon.damage = cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct)
+  // 기본 활 — 힘(전체 피해) + 궁술숙련 + 힘20 모든피해
+  s.weapon.damage =
+    cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct) * (1 + tb.allDmgPct)
   s.weapon.cooldown = cfg.weapon.cooldown / (1 + atkSpd)
   s.weapon.speed = cfg.weapon.speed * (1 + p.projSpeedPct)
-  s.weapon.pierce = cfg.weapon.pierce + p.pierce
+  s.weapon.pierce = cfg.weapon.pierce + p.pierce + tb.pierceAdd
+  s.weapon.extraArrows = tb.extraArrows // 민첩30: 기본 활 추가 화살
 
-  // 이동 — 민첩 + 이동강화 패시브
-  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct)
+  // 이동 — 민첩 + 이동강화 패시브 + 민첩20
+  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct)
   s.player.maxHp = cfg.player.maxHp + hpAdd
 
-  // 액티브 스킬별 최종 수치 (레벨 반영). 힘은 스킬 피해에도 적용, 궁술숙련은 미적용.
-  const skillBaseDmg = cfg.weapon.damage * dmgMul * cfg.skill.damageMul
+  // 확률/런타임 전투 수치 (game/sim 이 매 판정마다 참조)
+  s.combat = {
+    critChance: Math.min(tb.critChance, 1),
+    critDmg: tb.critDmg,
+    dodge: Math.min(tb.dodge, 0.75),
+    dmgTakenMul: tb.dmgTakenMul,
+    regen: tb.regen,
+    killExplodeChance: tb.killExplodeChance,
+    cdRefundChance: tb.cdRefundChance,
+    revive: tb.revive,
+  }
+
+  // 액티브 스킬별 최종 수치. 힘·모든피해·지능10 스킬피해 적용.
+  const skillBaseDmg =
+    cfg.weapon.damage * dmgMul * cfg.skill.damageMul *
+    (1 + tb.allDmgPct) * (1 + tb.skillDmgPct)
   const skillCd = (base) => Math.max(A.minSkillCooldown, base * (1 - cdr))
 
   s.skillStats = {}
@@ -99,10 +144,14 @@ export function deriveStats(cfg, attr, skills, specs = {}) {
       st.shots = e.shots
       st.interval = cfg.skill.shotInterval * (e.intervalMul || 1)
     }
-    if (id === 'barrage') st.duration = e.duration
+    if (id === 'barrage') st.duration = e.duration * (1 + tb.skillDurPct)
     if (id === 'grenade') {
       st.count = e.count
-      st.radius = cfg.skill.grenadeRadius * (e.radiusMul || 1) * (1 + p.grenadeRadiusPct)
+      st.radius =
+        cfg.skill.grenadeRadius *
+        (e.radiusMul || 1) *
+        (1 + p.grenadeRadiusPct) *
+        (1 + tb.skillAreaPct)
       st.dmg *= 1 + p.grenadeDmgPct
     }
 

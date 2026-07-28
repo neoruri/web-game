@@ -71,6 +71,9 @@ class GameScene extends Phaser.Scene {
     this.userPaused = false // 멈춤 버튼으로 정지
     this.growthOpen = false // 성장 화면 열림
     this.gameOver = false
+    this.revived = false // 활력40 부활 사용 여부
+    this.lastKillExplode = 0 // 힘40 처치폭발 내부 쿨
+    this._chainGuard = false // 처치폭발 연쇄 방지
 
     this.skillAcc = {} // 스킬별 쿨다운 누적
     for (const id of ACTIVE_IDS) this.skillAcc[id] = 0
@@ -621,7 +624,14 @@ class GameScene extends Phaser.Scene {
 
   fireAt(target) {
     const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x)
-    this.fireAngle(angle, this.stats.weapon.damage)
+    const dmg = this.stats.weapon.damage
+    this.fireAngle(angle, dmg)
+    // 민첩30 추가 화살 — 살짝 벌려서 발사
+    const extra = this.stats.weapon.extraArrows || 0
+    for (let i = 1; i <= extra; i++) {
+      const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
+      this.fireAngle(angle + off, dmg)
+    }
   }
 
   // --- 액티브 스킬 (스킬 트리 레벨 기반) -----------------------------------
@@ -647,6 +657,12 @@ class GameScene extends Phaser.Scene {
 
       // 발동 실패(쏠 적 없음) 시 쿨다운을 소모하지 않는다
       this.skillAcc[id] = fired ? 0 : st.cooldown
+
+      // 지능40 쿨타임 반환 — 발동 시 확률로 쿨 절반 미리 채움
+      const c = this.stats.combat
+      if (fired && c.cdRefundChance > 0 && Math.random() < c.cdRefundChance) {
+        this.skillAcc[id] = st.cooldown * 0.5
+      }
     }
   }
 
@@ -777,6 +793,11 @@ class GameScene extends Phaser.Scene {
 
   damageEnemy(e, amount, dirX, dirY) {
     const w = this.stats.weapon
+    const c = this.stats.combat
+
+    // 치명타 판정
+    if (c.critChance > 0 && Math.random() < c.critChance) amount *= c.critDmg
+
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
@@ -784,11 +805,26 @@ class GameScene extends Phaser.Scene {
 
     if (e.hp > 0) return
 
+    const ex = e.x
+    const ey = e.y
     // 처치 즉시 경험치 (젬을 줍지 않는다). 보스는 e.gems 배수만큼.
     this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
     this.gainXp(e.gems * this.cfg.xp.gemValue)
+
+    // 힘40 처치 폭발 (연쇄 없음, 내부 쿨 0.2초)
+    if (
+      !this._chainGuard &&
+      c.killExplodeChance > 0 &&
+      this.elapsed - this.lastKillExplode > 0.2 &&
+      Math.random() < c.killExplodeChance
+    ) {
+      this.lastKillExplode = this.elapsed
+      this._chainGuard = true
+      this.explodeAt(ex, ey, 40, this.stats.weapon.damage)
+      this._chainGuard = false
+    }
   }
 
   // --- 경험치 -------------------------------------------------------------
@@ -914,6 +950,15 @@ class GameScene extends Phaser.Scene {
   }
 
   hitPlayer(amount) {
+    const c = this.stats.combat
+
+    // 회피 판정 (민첩40 + 회피 훈련)
+    if (c.dodge > 0 && Math.random() < c.dodge) {
+      this.showDodge()
+      return
+    }
+
+    amount *= c.dmgTakenMul // 활력20 받는 피해 감소
     this.hp = Math.max(0, this.hp - amount)
     this.refreshHpBar()
     this.invulnLeft = this.stats.player.invuln
@@ -928,7 +973,57 @@ class GameScene extends Phaser.Scene {
       onComplete: () => this.player.setAlpha(1),
     })
 
-    if (this.hp === 0) this.endGame()
+    if (this.hp === 0) {
+      // 활력40 부활 (한 판 1회)
+      if (c.revive && !this.revived) {
+        this.doRevive()
+        return
+      }
+      this.endGame()
+    }
+  }
+
+  doRevive() {
+    this.revived = true
+    this.hp = this.stats.player.maxHp * 0.3
+    this.refreshHpBar()
+    this.invulnLeft = 2 // 2초 무적
+
+    const t = this.add
+      .text(W / 2, H / 2, 'REVIVE', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '48px',
+        color: '#a6e3a1',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(24)
+    this.tweens.add({
+      targets: t,
+      alpha: 0,
+      scale: 1.5,
+      duration: 900,
+      onComplete: () => t.destroy(),
+    })
+  }
+
+  showDodge() {
+    const t = this.add
+      .text(this.player.x, this.player.y - 24, 'DODGE', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '18px',
+        color: '#89dceb',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+    this.tweens.add({
+      targets: t,
+      y: t.y - 20,
+      alpha: 0,
+      duration: 500,
+      onComplete: () => t.destroy(),
+    })
   }
 
   endGame() {
@@ -982,6 +1077,13 @@ class GameScene extends Phaser.Scene {
     this.elapsed += dt
     this.invulnLeft = Math.max(0, this.invulnLeft - dt)
     this.timeText.setText(this.formatTime())
+
+    // 활력 구간 HP 회복
+    const regen = this.stats.combat.regen
+    if (regen > 0 && this.hp > 0 && this.hp < this.stats.player.maxHp) {
+      this.hp = Math.min(this.stats.player.maxHp, this.hp + regen * dt)
+      this.refreshHpBar()
+    }
 
     const mult = this.spawnMultiplier
     this.waveText.setText(`x${mult.toFixed(1)}  ·  적HP ${this.enemyHpNow}`)

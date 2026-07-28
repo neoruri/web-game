@@ -41,6 +41,9 @@ export function simulate(cfg, opts = {}) {
   let stats = deriveStats(cfg, attr, skills, specs)
   let attrCursor = 0 // 봇 능력치 배분 순환 위치
   let skillPoints = 0 // 봇 미사용 스킬 포인트
+  let revived = false // 활력40 부활 사용
+  let lastKillExplode = 0 // 힘40 처치폭발 내부 쿨
+  let chainGuard = false // 처치폭발 연쇄 방지
 
   const state = {
     t: 0,
@@ -175,7 +178,13 @@ export function simulate(cfg, opts = {}) {
 
   function fireAt(target) {
     const ang = Math.atan2(target.y - state.py, target.x - state.px)
-    fireAngle(ang, stats.weapon.damage, stats.weapon.pierce)
+    const dmg = stats.weapon.damage
+    fireAngle(ang, dmg, stats.weapon.pierce)
+    const extra = stats.weapon.extraArrows || 0
+    for (let i = 1; i <= extra; i++) {
+      const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
+      fireAngle(ang + off, dmg, stats.weapon.pierce)
+    }
   }
 
   // --- 액티브 스킬 (main.js 와 동일 규칙, skillStats 기반) ---
@@ -217,6 +226,10 @@ export function simulate(cfg, opts = {}) {
       }
 
       skillAcc[id] = fired ? 0 : st.cooldown
+      const c = stats.combat
+      if (fired && c.cdRefundChance > 0 && Math.random() < c.cdRefundChance) {
+        skillAcc[id] = st.cooldown * 0.5
+      }
     }
   }
 
@@ -280,16 +293,34 @@ export function simulate(cfg, opts = {}) {
 
   function damageEnemy(e, amount, dirX, dirY) {
     const w = stats.weapon
+    const c = stats.combat
+    if (c.critChance > 0 && Math.random() < c.critChance) amount *= c.critDmg
+
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
     if (e.hp > 0) return
 
+    const ex = e.x
+    const ey = e.y
     const idx = state.enemies.indexOf(e)
     removeSwap(state.enemies, idx, enemyPool)
     state.kills++
     if (e.boss) state.bossKills++
     gainXp(e.gems * cfg.xp.gemValue) // 처치 즉시 경험치
+
+    // 힘40 처치 폭발
+    if (
+      !chainGuard &&
+      c.killExplodeChance > 0 &&
+      state.t - lastKillExplode > 0.2 &&
+      Math.random() < c.killExplodeChance
+    ) {
+      lastKillExplode = state.t
+      chainGuard = true
+      explodeAt(ex, ey, 40, stats.weapon.damage)
+      chainGuard = false
+    }
   }
 
   function gainXp(amount) {
@@ -338,10 +369,19 @@ export function simulate(cfg, opts = {}) {
   }
 
   function hitPlayer(amount) {
+    const c = stats.combat
+    if (c.dodge > 0 && Math.random() < c.dodge) return // 회피
+    amount *= c.dmgTakenMul // 활력20 받는 피해 감소
     state.hp = Math.max(0, state.hp - amount)
     state.invulnLeft = stats.player.invuln
     if (state.firstCrisis == null && state.hp <= stats.player.maxHp * 0.5) {
       state.firstCrisis = state.t
+    }
+    // 활력40 부활
+    if (state.hp <= 0 && c.revive && !revived) {
+      revived = true
+      state.hp = stats.player.maxHp * 0.3
+      state.invulnLeft = 2
     }
   }
 
@@ -384,6 +424,11 @@ export function simulate(cfg, opts = {}) {
   while (state.t < maxTime && state.hp > 0) {
     state.t += dt
     state.invulnLeft = Math.max(0, state.invulnLeft - dt)
+
+    const regen = stats.combat.regen
+    if (regen > 0 && state.hp > 0 && state.hp < stats.player.maxHp) {
+      state.hp = Math.min(stats.player.maxHp, state.hp + regen * dt)
+    }
 
     // 스폰
     state.spawnAcc += dt

@@ -111,6 +111,15 @@ export const PASSIVE_SKILLS = {
     per: { movePct: 0.02 },
     desc: '레벨당 이동 속도 +2%',
   },
+  dodgeTraining: {
+    id: 'dodgeTraining',
+    name: '회피 훈련',
+    tree: 'mobility',
+    unlockLevel: 1,
+    maxLevel: 5,
+    per: { dodgePct: 0.01 },
+    desc: '레벨당 회피 확률 +1%',
+  },
   explosiveMastery: {
     id: 'explosiveMastery',
     name: '폭발물 숙련',
