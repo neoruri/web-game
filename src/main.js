@@ -268,14 +268,14 @@ class GameScene extends Phaser.Scene {
 
     // 성장 버튼 (하단 중앙). 미사용 포인트가 있으면 금색으로 강조된다.
     this.growthBtn = this.add
-      .rectangle(W / 2, H - 44, 220, 42, 0x313244, 0.92)
+      .rectangle(W / 2, H - 70, 240, 46, 0x313244, 0.92)
       .setStrokeStyle(2, 0x585b70)
       .setDepth(15)
       .setInteractive({ useHandCursor: true })
     this.growthBtn.on('pointerdown', () => this.openGrowth())
 
     this.growthBtnText = this.add
-      .text(W / 2, H - 44, 'C  성장', { ...font, fontSize: '15px' })
+      .text(W / 2, H - 70, 'C  성장', { ...font, fontSize: '15px' })
       .setOrigin(0.5)
       .setDepth(16)
   }
