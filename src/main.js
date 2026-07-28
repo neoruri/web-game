@@ -84,11 +84,9 @@ class GameScene extends Phaser.Scene {
 
     this.enemies = []
     this.arrows = []
-    this.gems = []
     this.explosions = [] // 수류탄 폭발 이펙트
     this.enemyPool = []
     this.arrowPool = []
-    this.gemPool = []
     this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
@@ -97,7 +95,6 @@ class GameScene extends Phaser.Scene {
 
     this.buildBackground()
 
-    this.gfxGems = this.add.graphics().setDepth(1)
     this.gfxEnemies = this.add.graphics().setDepth(2)
     this.gfxArrows = this.add.graphics().setDepth(3)
     this.gfxFx = this.add.graphics().setDepth(3)
@@ -787,18 +784,11 @@ class GameScene extends Phaser.Scene {
 
     if (e.hp > 0) return
 
-    for (let i = 0; i < e.gems; i++) {
-      // 보스는 젬을 여러 개 흩뿌린다
-      const spread = e.boss ? 26 : 0
-      this.dropGem(
-        e.x + (Math.random() - 0.5) * spread * 2,
-        e.y + (Math.random() - 0.5) * spread * 2
-      )
-    }
-
+    // 처치 즉시 경험치 (젬을 줍지 않는다). 보스는 e.gems 배수만큼.
     this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
+    this.gainXp(e.gems * this.cfg.xp.gemValue)
   }
 
   // --- 경험치 -------------------------------------------------------------
@@ -806,13 +796,6 @@ class GameScene extends Phaser.Scene {
   xpFor(level) {
     const x = this.cfg.xp
     return Math.ceil(x.levelBase * Math.pow(x.levelGrowth, level - 1))
-  }
-
-  dropGem(x, y) {
-    const g = this.gemPool.pop() || {}
-    g.x = x
-    g.y = y
-    this.gems.push(g)
   }
 
   gainXp(amount) {
@@ -1054,11 +1037,10 @@ class GameScene extends Phaser.Scene {
 
     this.updateArrows(dt)
     this.updateEnemies(dt)
-    this.updateGems(dt)
     this.render()
 
     this.perfText.setText(
-      `${Math.round(this.game.loop.actualFps)} fps  ·  적 ${this.enemies.length}  ·  젬 ${this.gems.length}`
+      `${Math.round(this.game.loop.actualFps)} fps  ·  적 ${this.enemies.length}`
     )
     this.statText.setText(
       `내속도 ${Math.round(this.stats.player.speed)}  ·  적속도 ${this.cfg.enemy.speed}  ·  DMG ${this.stats.weapon.damage}`
@@ -1108,6 +1090,8 @@ class GameScene extends Phaser.Scene {
   updateEnemies(dt) {
     const pr = this.stats.player.radius
     const decay = Math.max(0, 1 - KNOCKBACK_FRICTION * dt)
+    const sepR = this.cfg.enemy.sepRadius
+    const sepStr = this.cfg.enemy.sepStrength
     const px = this.player.x
     const py = this.player.y
 
@@ -1120,8 +1104,29 @@ class GameScene extends Phaser.Scene {
       const dy = py - e.y
       const len = Math.hypot(dx, dy) || 1
 
-      e.x += (dx / len) * e.speed * dt + e.kbx * dt
-      e.y += (dy / len) * e.speed * dt + e.kby * dt
+      // 겹침 방지: 그리드로 근처 적만 조회해 밀어냄 (최대 6마리)
+      let sx = 0
+      let sy = 0
+      if (sepStr > 0) {
+        const near = this.grid.query(e.x, e.y, sepR, this.queryBuf)
+        let cnt = 0
+        for (let j = 0; j < near.length; j++) {
+          const n = near[j]
+          if (n === e) continue
+          const ndx = e.x - n.x
+          const ndy = e.y - n.y
+          const nd2 = ndx * ndx + ndy * ndy
+          if (nd2 > 0 && nd2 < sepR * sepR) {
+            const nd = Math.sqrt(nd2)
+            sx += ndx / nd
+            sy += ndy / nd
+            if (++cnt >= 6) break
+          }
+        }
+      }
+
+      e.x += (dx / len) * e.speed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += (dy / len) * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
       if (e.flash > 0) e.flash -= dt
@@ -1141,38 +1146,6 @@ class GameScene extends Phaser.Scene {
       ex.life -= dt
       if (ex.life <= 0) this.explosions.splice(i, 1)
     }
-  }
-
-  updateGems(dt) {
-    const p = this.stats.player
-    const magnet2 = p.pickupRadius * p.pickupRadius
-    const pick2 = (p.radius + 6) * (p.radius + 6)
-    const speed = this.cfg.xp.magnetSpeed
-    const px = this.player.x
-    const py = this.player.y
-
-    let gained = 0
-
-    for (let i = this.gems.length - 1; i >= 0; i--) {
-      const g = this.gems[i]
-      const dx = px - g.x
-      const dy = py - g.y
-      const d2 = dx * dx + dy * dy
-
-      if (d2 < pick2) {
-        gained += this.cfg.xp.gemValue
-        this.removeSwap(this.gems, i, this.gemPool)
-        continue
-      }
-
-      if (d2 < magnet2) {
-        const len = Math.sqrt(d2) || 1
-        g.x += (dx / len) * speed * dt
-        g.y += (dy / len) * speed * dt
-      }
-    }
-
-    if (gained > 0) this.gainXp(gained)
   }
 
   // --- 렌더 ---------------------------------------------------------------
@@ -1218,14 +1191,6 @@ class GameScene extends Phaser.Scene {
       ge.fillRect(bx, by, bw, 5)
       ge.fillStyle(0xf38ba8, 1)
       ge.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 5)
-    }
-
-    const gg = this.gfxGems
-    gg.clear()
-    gg.fillStyle(COLOR_GEM, 1)
-    for (let i = 0; i < this.gems.length; i++) {
-      const g = this.gems[i]
-      gg.fillRect(g.x - 3, g.y - 3, 6, 6)
     }
 
     const ga = this.gfxArrows

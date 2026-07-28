@@ -59,7 +59,6 @@ export function simulate(cfg, opts = {}) {
     fireAcc: 0,
     enemies: [],
     arrows: [],
-    gems: [],
   }
 
   const skillAcc = {}
@@ -77,7 +76,6 @@ export function simulate(cfg, opts = {}) {
   const explodeBuf = [] // 폭발 조회용 (buf 와 겹치면 안 됨)
   const enemyPool = []
   const arrowPool = []
-  const gemPool = []
 
   const minute = () => Math.floor(state.t / 60)
   const spawnMult = () =>
@@ -287,18 +285,11 @@ export function simulate(cfg, opts = {}) {
     e.kby += dirY * w.knockback * e.kbResist
     if (e.hp > 0) return
 
-    for (let i = 0; i < e.gems; i++) dropGem(e.x, e.y)
     const idx = state.enemies.indexOf(e)
     removeSwap(state.enemies, idx, enemyPool)
     state.kills++
     if (e.boss) state.bossKills++
-  }
-
-  function dropGem(x, y) {
-    const g = gemPool.pop() || {}
-    g.x = x
-    g.y = y
-    state.gems.push(g)
+    gainXp(e.gems * cfg.xp.gemValue) // 처치 즉시 경험치
   }
 
   function gainXp(amount) {
@@ -375,28 +366,7 @@ export function simulate(cfg, opts = {}) {
       ax /= tl
       ay /= tl
     }
-
-    // 가장 가까운 젬 쪽으로 약하게 당김 (성장을 위해 젬을 주우러 감).
-    // 위협 회피(크기 1)보다 약하게 둬서, 적이 붙으면 회피가 우선한다.
-    let bestD = Infinity
-    let gx = 0
-    let gy = 0
-    for (let i = 0; i < state.gems.length; i++) {
-      const g = state.gems[i]
-      const dx = g.x - state.px
-      const dy = g.y - state.py
-      const d2 = dx * dx + dy * dy
-      if (d2 < bestD) {
-        bestD = d2
-        gx = dx
-        gy = dy
-      }
-    }
-    if (bestD < Infinity) {
-      const d = Math.sqrt(bestD) || 1
-      ax += (gx / d) * 0.55
-      ay += (gy / d) * 0.55
-    }
+    // 젬을 줍지 않으므로(즉시 경험치) 봇은 위협 회피 + 중앙 유지만 한다
 
     // 벽에 몰리지 않게 중앙으로 약하게
     ax += ((W / 2 - state.px) / W) * 0.4
@@ -454,7 +424,6 @@ export function simulate(cfg, opts = {}) {
     updateBursts()
     updateArrows()
     updateEnemies()
-    updateGems()
   }
 
   function updateArrows() {
@@ -491,45 +460,46 @@ export function simulate(cfg, opts = {}) {
   function updateEnemies() {
     const pr = stats.player.radius
     const decay = Math.max(0, 1 - KNOCKBACK_FRICTION * dt)
+    const sepR = cfg.enemy.sepRadius
+    const sepStr = cfg.enemy.sepStrength
     let incoming = 0
+
     for (let i = 0; i < state.enemies.length; i++) {
       const e = state.enemies[i]
       const dx = state.px - e.x
       const dy = state.py - e.y
       const len = Math.hypot(dx, dy) || 1
-      e.x += (dx / len) * e.speed * dt + e.kbx * dt
-      e.y += (dy / len) * e.speed * dt + e.kby * dt
+
+      // 겹침 방지: 근처 적들로부터 밀려나는 힘 (그리드로 이웃만, 최대 6마리)
+      let sx = 0
+      let sy = 0
+      if (sepStr > 0) {
+        const near = grid.query(e.x, e.y, sepR, buf)
+        let cnt = 0
+        for (let j = 0; j < near.length; j++) {
+          const n = near[j]
+          if (n === e) continue
+          const ndx = e.x - n.x
+          const ndy = e.y - n.y
+          const nd2 = ndx * ndx + ndy * ndy
+          if (nd2 > 0 && nd2 < sepR * sepR) {
+            const nd = Math.sqrt(nd2)
+            sx += ndx / nd
+            sy += ndy / nd
+            if (++cnt >= 6) break
+          }
+        }
+      }
+
+      e.x += (dx / len) * e.speed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += (dy / len) * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
+
       const touch = pr + e.r
       if (dx * dx + dy * dy < touch * touch && e.dmg > incoming) incoming = e.dmg
     }
     if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
-  }
-
-  function updateGems() {
-    const p = stats.player
-    const magnet2 = p.pickupRadius * p.pickupRadius
-    const pick2 = (p.radius + 6) * (p.radius + 6)
-    const speed = cfg.xp.magnetSpeed
-    let gained = 0
-    for (let i = state.gems.length - 1; i >= 0; i--) {
-      const g = state.gems[i]
-      const dx = state.px - g.x
-      const dy = state.py - g.y
-      const d2 = dx * dx + dy * dy
-      if (d2 < pick2) {
-        gained += cfg.xp.gemValue
-        removeSwap(state.gems, i, gemPool)
-        continue
-      }
-      if (d2 < magnet2) {
-        const len = Math.sqrt(d2) || 1
-        g.x += (dx / len) * speed * dt
-        g.y += (dy / len) * speed * dt
-      }
-    }
-    if (gained > 0) gainXp(gained)
   }
 
   return {

@@ -25,6 +25,8 @@ export const DEFAULTS = {
     contactDamage: 8,
     radius: 8,
     hpRampPerMin: 1.1,
+    sepStrength: 45, // 겹침 방지: 서로 밀어내는 힘 (0=겹침 허용)
+    sepRadius: 20, // 이 거리 안의 적끼리만 밀어냄
   },
   spawn: {
     baseInterval: 1,
@@ -240,6 +242,22 @@ export const SCHEMA = [
         max: 2,
         step: 0.05,
         effect: '↑ 1분마다 적 체력 급증(후반 급격)  ·  ↓ 완만하게 상승',
+      },
+      {
+        key: 'sepStrength',
+        label: '겹침 방지 힘',
+        min: 0,
+        max: 150,
+        step: 5,
+        effect: '↑ 적들이 서로 강하게 밀어내 안 겹침  ·  0=완전히 겹침',
+      },
+      {
+        key: 'sepRadius',
+        label: '겹침 방지 범위',
+        min: 8,
+        max: 60,
+        step: 2,
+        effect: '↑ 넓은 간격 유지(퍼짐)  ·  ↓ 가까이 붙어야 밀어냄',
       },
     ],
   },
