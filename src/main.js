@@ -1,7 +1,9 @@
 import Phaser from 'phaser'
 import './style.css'
 import { loadConfig, onConfigChange } from './config.js'
-import { UPGRADES, drawCards, SKILL_IDS, emptySkills } from './upgrades.js'
+import { SKILL_IDS, emptySkills } from './upgrades.js'
+import { deriveStats, emptyAttributes } from './progression.js'
+import { createGrowthScreen } from './growth-ui.js'
 import { Grid } from './grid.js'
 
 // 세로 모드 (모바일 우선). 9:16 비율.
@@ -35,25 +37,31 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this.cfg = loadConfig()
-    this.stats = JSON.parse(JSON.stringify(this.cfg)) // 업그레이드로 변하는 실시간 스탯
-    this.stats.skills = emptySkills() // 액티브 스킬 보유 레벨 (0 = 없음)
+
+    // --- 성장 상태 (디아블로식 포인트 투자) ---
+    const dbg = this.cfg.debug
+    this.attributes = emptyAttributes() // 확정 능력치
+    this.skillLevels = emptySkills() // 스킬 보유 레벨 (스킬트리는 2단계)
+    this.attrPoints = dbg.startAttrPoints // 미사용 능력치 포인트
+    this.skillPoints = dbg.startSkillPoints // 미사용 스킬 포인트
+
+    // 능력치·스킬 → 최종 전투 stats (단일 재계산 지점)
+    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels)
 
     this.elapsed = 0
     this.kills = 0
-    this.level = 1
+    this.level = Math.max(1, dbg.startLevel)
     this.xp = 0
-    this.xpNeed = this.xpFor(1)
+    this.xpNeed = this.xpFor(this.level)
     this.hp = this.stats.player.maxHp
     this.invulnLeft = 0
     this.spawnAcc = 0
     this.bossAcc = 0
     this.bossCount = 0
     this.fireAcc = 0
-    this.paused = false // 레벨업 카드 선택 중
     this.userPaused = false // 멈춤 버튼으로 정지
+    this.growthOpen = false // 성장 화면 열림
     this.gameOver = false
-    this.pendingLevels = 0
-    this.taken = {}
 
     this.skillAcc = {} // 스킬별 쿨다운 누적
     for (const id of SKILL_IDS) this.skillAcc[id] = 0
@@ -91,6 +99,48 @@ class GameScene extends Phaser.Scene {
 
     this.buildHud()
     this.setupInput()
+    this.setupGrowth()
+  }
+
+  // --- 성장 시스템 -------------------------------------------------------
+
+  setupGrowth() {
+    this.growth = createGrowthScreen({
+      getState: () => ({
+        level: this.level,
+        attrPoints: this.attrPoints,
+        attributes: this.attributes,
+        cfg: this.cfg,
+      }),
+      onApply: (finalAttr, spent) => {
+        this.attributes = finalAttr
+        this.attrPoints -= spent
+        this.recompute()
+        this.refreshGrowthHud()
+      },
+      onClose: () => {
+        this.growthOpen = false
+      },
+    })
+    this.refreshGrowthHud()
+  }
+
+  openGrowth() {
+    if (this.gameOver) return
+    this.growthOpen = true
+    this.releaseStick()
+    this.growth.open()
+  }
+
+  // 능력치가 바뀔 때마다 최종 전투 stats 를 통째로 다시 계산한다.
+  // 최대 HP 증가분만큼 현재 HP 도 함께 올린다 (활력 스펙).
+  recompute() {
+    const prevMax = this.stats.player.maxHp
+    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels)
+    const gained = this.stats.player.maxHp - prevMax
+    if (gained > 0) this.hp += gained
+    this.hp = Math.min(this.hp, this.stats.player.maxHp)
+    this.refreshHpBar()
   }
 
   // --- 배경 -------------------------------------------------------------
@@ -210,6 +260,38 @@ class GameScene extends Phaser.Scene {
       .text(20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
       .setOrigin(0, 1)
       .setDepth(d)
+
+    // 능력치 요약 (좌상단, 레벨 아래)
+    this.attrHudText = this.add
+      .text(20, 74, '', { ...font, fontSize: '13px', color: '#94e2d5' })
+      .setDepth(d)
+
+    // 성장 버튼 (하단 중앙). 미사용 포인트가 있으면 금색으로 강조된다.
+    this.growthBtn = this.add
+      .rectangle(W / 2, H - 44, 220, 42, 0x313244, 0.92)
+      .setStrokeStyle(2, 0x585b70)
+      .setDepth(15)
+      .setInteractive({ useHandCursor: true })
+    this.growthBtn.on('pointerdown', () => this.openGrowth())
+
+    this.growthBtnText = this.add
+      .text(W / 2, H - 44, 'C  성장', { ...font, fontSize: '15px' })
+      .setOrigin(0.5)
+      .setDepth(16)
+  }
+
+  refreshGrowthHud() {
+    const a = this.attributes
+    this.attrHudText.setText(
+      `힘 ${a.str}  민 ${a.dex}  지 ${a.int}  활 ${a.vit}`
+    )
+
+    const has = this.attrPoints > 0 || this.skillPoints > 0
+    this.growthBtnText.setText(
+      `C  성장   ·   능력치 ${this.attrPoints}  스킬 ${this.skillPoints}`
+    )
+    this.growthBtnText.setColor(has ? '#f9e2af' : '#cdd6f4')
+    this.growthBtn.setStrokeStyle(2, has ? 0xf9e2af : 0x585b70)
   }
 
   // 우측 상단 멈춤 버튼 + 일시정지 오버레이
@@ -257,8 +339,8 @@ class GameScene extends Phaser.Scene {
   }
 
   togglePause() {
-    // 게임오버·레벨업 선택 중에는 멈춤 토글을 무시한다
-    if (this.gameOver || this.paused) return
+    // 게임오버·성장화면 중에는 멈춤 토글을 무시한다
+    if (this.gameOver || this.growthOpen) return
 
     this.userPaused = !this.userPaused
     this.releaseStick()
@@ -286,9 +368,10 @@ class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (p) => {
       if (this.gameOver) return this.scene.restart()
-      // 멈춤 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
+      // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
       if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
-      if (this.paused || this.userPaused) return
+      if (this.growthBtn.getBounds().contains(p.x, p.y)) return
+      if (this.userPaused || this.growthOpen) return
 
       this.stick.active = true
       this.stick.ox = p.x
@@ -323,11 +406,11 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ESC', () => this.togglePause())
     this.input.keyboard.on('keydown-P', () => this.togglePause())
 
-    for (const n of [1, 2, 3]) {
-      this.input.keyboard.on(`keydown-${['ONE', 'TWO', 'THREE'][n - 1]}`, () => {
-        if (this.paused && this.cards) this.pickCard(n - 1)
-      })
-    }
+    // C: 성장 화면 토글
+    this.input.keyboard.on('keydown-C', () => {
+      if (this.growthOpen) this.growth.close()
+      else this.openGrowth()
+    })
   }
 
   releaseStick() {
@@ -520,7 +603,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updateSkills(dt) {
-    const cd = this.cfg.skill.cooldown
+    const cd = this.stats.skill.cooldown // 지능 쿨감이 반영된 최종 쿨타임
     for (const id of SKILL_IDS) {
       const level = this.stats.skills[id]
       if (level <= 0) continue
@@ -687,123 +770,56 @@ class GameScene extends Phaser.Scene {
   gainXp(amount) {
     this.xp += amount
 
+    let levelsGained = 0
     while (this.xp >= this.xpNeed) {
       this.xp -= this.xpNeed
       this.level++
       this.xpNeed = this.xpFor(this.level)
-      this.pendingLevels++
+      levelsGained++
     }
 
     this.xpBar.scaleX = this.xp / this.xpNeed
+
+    if (levelsGained > 0) this.onLevelUp(levelsGained)
+  }
+
+  // 레벨업 — 게임을 멈추지 않고 포인트만 지급하고 알림을 띄운다 (스펙).
+  // 여러 레벨이 한 번에 올라도 알림은 한 번으로 합친다.
+  onLevelUp(levels) {
+    const ap = levels * this.cfg.attr.pointsPerLevel
+    const sp = levels * this.cfg.attr.skillPointsPerLevel
+    this.attrPoints += ap
+    this.skillPoints += sp
+
     this.lvText.setText('Lv ' + this.level)
-
-    if (this.pendingLevels > 0 && !this.paused) this.showLevelUp()
+    this.refreshGrowthHud()
+    this.showLevelToast(levels, ap, sp)
   }
 
-  // --- 레벨업 카드 ---------------------------------------------------------
+  showLevelToast(levels, ap, sp) {
+    const msg =
+      (levels > 1 ? `LEVEL UP +${levels}` : 'LEVEL UP') +
+      `\n능력치 +${ap}   스킬 +${sp}`
 
-  showLevelUp() {
-    this.paused = true
-    this.releaseStick()
+    const toast = this.add
+      .text(W / 2, H * 0.3, msg, {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '26px',
+        color: '#f9e2af',
+        align: 'center',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(23)
 
-    this.cards = drawCards(this.taken, 3)
-    this.cardUi = []
-
-    this.cardUi.push(
-      this.add.rectangle(W / 2, H / 2, W, H, 0x11111b, 0.82).setDepth(20)
-    )
-
-    this.cardUi.push(
-      this.add
-        .text(W / 2, H * 0.24, `LEVEL ${this.level}`, {
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '40px',
-          color: '#f9e2af',
-        })
-        .setOrigin(0.5)
-        .setDepth(21)
-    )
-
-    // 세로 모드: 가로로 넓은 카드를 세로로 쌓는다 (모바일 뱀서 방식)
-    const cw = W - 56
-    const ch = 128
-    const gap = 16
-    const totalH = ch * this.cards.length + gap * (this.cards.length - 1)
-    const startY = H / 2 + 30 - totalH / 2 + ch / 2
-    const left = W / 2 - cw / 2 + 24
-
-    this.cards.forEach((u, i) => {
-      const cx = W / 2
-      const cy = startY + i * (ch + gap)
-
-      const card = this.add
-        .rectangle(cx, cy, cw, ch, 0x313244)
-        .setStrokeStyle(3, 0x585b70)
-        .setDepth(21)
-        .setInteractive({ useHandCursor: true })
-
-      card.on('pointerover', () => card.setStrokeStyle(3, 0xf9e2af))
-      card.on('pointerout', () => card.setStrokeStyle(3, 0x585b70))
-      card.on('pointerdown', () => this.pickCard(i))
-
-      const lv = this.taken[u.id] || 0
-
-      this.cardUi.push(
-        card,
-        this.add
-          .text(left, cy - 30, u.name, {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '25px',
-            color: '#ffffff',
-          })
-          .setOrigin(0, 0.5)
-          .setDepth(22),
-        this.add
-          .text(left, cy + 22, u.desc(this.cfg), {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '17px',
-            color: '#cdd6f4',
-            wordWrap: { width: cw - 110 },
-          })
-          .setOrigin(0, 0.5)
-          .setDepth(22),
-        this.add
-          .text(cx + cw / 2 - 20, cy - 34, lv > 0 ? `Lv ${lv}→${lv + 1}` : 'NEW', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '14px',
-            color: lv > 0 ? '#a6adc8' : '#a6e3a1',
-          })
-          .setOrigin(1, 0.5)
-          .setDepth(22),
-        this.add
-          .text(cx + cw / 2 - 30, cy + 14, `${i + 1}`, {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '30px',
-            color: '#585b70',
-          })
-          .setOrigin(0.5)
-          .setDepth(22)
-      )
+    this.tweens.add({
+      targets: toast,
+      y: H * 0.24,
+      alpha: { from: 1, to: 0 },
+      duration: 1400,
+      ease: 'Quad.easeOut',
+      onComplete: () => toast.destroy(),
     })
-  }
-
-  pickCard(i) {
-    const u = this.cards[i]
-    if (!u) return
-
-    u.apply(this.stats, this.cfg, this)
-    this.taken[u.id] = (this.taken[u.id] || 0) + 1
-
-    for (const o of this.cardUi) o.destroy()
-    this.cardUi = null
-    this.cards = null
-
-    this.pendingLevels--
-    if (this.pendingLevels > 0) {
-      this.showLevelUp()
-    } else {
-      this.paused = false
-    }
   }
 
   // --- 체력 ---------------------------------------------------------------
@@ -881,7 +897,7 @@ class GameScene extends Phaser.Scene {
   // --- 루프 ---------------------------------------------------------------
 
   update(time, delta) {
-    if (this.gameOver || this.paused || this.userPaused) return
+    if (this.gameOver || this.userPaused || this.growthOpen) return
 
     const dt = Math.min(delta / 1000, MAX_DT)
 

@@ -56,6 +56,30 @@ export const DEFAULTS = {
     maxHpAdd: 20,
     pickupAdd: 10,
   },
+  // 능력치 시스템 (디아블로식 포인트 투자)
+  // 구간 보너스(힘10 치명타 등)의 심화 효과는 3단계에서 추가된다. 지금은 선형 계수만.
+  attr: {
+    pointsPerLevel: 3, // 레벨업당 능력치 포인트
+    skillPointsPerLevel: 1, // 레벨업당 스킬 포인트
+    strDamagePerPoint: 0.015, // 힘: 피해 +1.5%/pt
+    dexAtkSpeedPerPoint: 0.007, // 민첩: 공격속도 +0.7%/pt
+    dexMovePerPoint: 0.0025, // 민첩: 이동속도 +0.25%/pt
+    intCdrPerPoint: 0.005, // 지능: 스킬 쿨감 +0.5%/pt
+    vitHpPerPoint: 2, // 활력: 최대HP +2/pt
+    atkSpeedCap: 0.75, // 공격속도 증가 상한 +75%
+    moveCap: 0.35, // 이동속도 증가 상한 +35%
+    cdrCap: 0.4, // 쿨감 일반 상한 40%
+    minSkillCooldown: 1, // 스킬 최종 쿨타임 하한(초)
+  },
+
+  // 개발/테스트 편의 (스펙 요구). 시작 상태를 조정한다.
+  debug: {
+    startLevel: 1,
+    startAttrPoints: 0,
+    startSkillPoints: 0,
+    freeRespec: false, // 능력치 자유 초기화 허용
+  },
+
   // 액티브 스킬 — 획득하면 쿨다운마다 자동 발동
   skill: {
     cooldown: 10,

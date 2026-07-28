@@ -10,7 +10,8 @@
 // 세팅 A vs B 의 상대 비교에 쓴다.
 
 import { Grid } from './grid.js'
-import { UPGRADES, drawCards, SKILL_IDS, emptySkills } from './upgrades.js'
+import { SKILL_IDS, emptySkills } from './upgrades.js'
+import { deriveStats, emptyAttributes } from './progression.js'
 
 const W = 540
 const H = 960
@@ -25,8 +26,11 @@ export function simulate(cfg, opts = {}) {
   const maxTime = opts.maxTime ?? 480 // 이 시간까지 살면 클리어로 본다
   const dt = opts.dt ?? 1 / 30
 
-  const stats = clone(cfg) // 업그레이드로 변하는 실시간 스탯
-  stats.skills = emptySkills()
+  // 능력치·스킬 → 최종 stats (게임과 동일한 재계산 함수)
+  const attr = emptyAttributes()
+  const skills = emptySkills()
+  let stats = deriveStats(cfg, attr, skills)
+  let attrCursor = 0 // 봇 능력치 배분 순환 위치
 
   const state = {
     t: 0,
@@ -43,7 +47,6 @@ export function simulate(cfg, opts = {}) {
     spawnAcc: 0,
     bossAcc: 0,
     fireAcc: 0,
-    taken: {},
     enemies: [],
     arrows: [],
     gems: [],
@@ -177,7 +180,7 @@ export function simulate(cfg, opts = {}) {
       const level = stats.skills[id]
       if (level <= 0) continue
       skillAcc[id] += dt
-      if (skillAcc[id] < cfg.skill.cooldown) continue
+      if (skillAcc[id] < stats.skill.cooldown) continue
 
       // 발동 실패 시 쿨다운을 소모하지 않는다 (main.js 와 동일 규칙)
       let fired = false
@@ -211,7 +214,7 @@ export function simulate(cfg, opts = {}) {
         }
       }
 
-      skillAcc[id] = fired ? 0 : cfg.skill.cooldown
+      skillAcc[id] = fired ? 0 : stats.skill.cooldown
     }
   }
 
@@ -293,16 +296,17 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
-  // 봇의 레벨업 카드 선택 — 무작위(평균적 플레이어 근사)
-  const heal = (a) => {
-    state.hp = Math.min(stats.player.maxHp, state.hp + a)
-  }
+  // 봇의 능력치 자동 배분 — 딜/생존 위주로 순환 (스킬이 없는 1단계 기준).
+  // 지능(스킬 쿨감)은 스킬을 배우는 2단계에서 배분 대상에 넣는다.
+  const BOT_ATTR_ORDER = ['str', 'dex', 'vit']
   function autoLevelUp() {
-    const cards = drawCards(state.taken, 3)
-    if (!cards.length) return
-    const pick = cards[(Math.random() * cards.length) | 0]
-    pick.apply(stats, cfg, { heal })
-    state.taken[pick.id] = (state.taken[pick.id] || 0) + 1
+    const prevMax = stats.player.maxHp
+    for (let i = 0; i < cfg.attr.pointsPerLevel; i++) {
+      attr[BOT_ATTR_ORDER[attrCursor % BOT_ATTR_ORDER.length]]++
+      attrCursor++
+    }
+    stats = deriveStats(cfg, attr, skills)
+    state.hp += stats.player.maxHp - prevMax // 활력 증가분만큼 현재 HP도
   }
 
   function hitPlayer(amount) {
