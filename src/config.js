@@ -17,7 +17,9 @@ export const DEFAULTS = {
     speed: 1200,
     pierce: 1,
     knockback: 70,
-    range: 150,
+    // 무한 월드에서는 사거리가 화면을 덮을 만큼 넉넉해야 한다.
+    // 짧으면 이동 중 적이 뒤처져 조준 대상이 사라져 발사가 끊긴다.
+    range: 380,
   },
   enemy: {
     hp: 10,
@@ -37,8 +39,8 @@ export const DEFAULTS = {
     shooterSpeedMul: 0.85,
     shooterHpMul: 0.9,
     shooterStartSec: 75, // 이 시간(초) 후부터 등장
-    shooterRange: 130, // 이 거리에서 멈춰 쏨 (무기 사거리보다 짧게!)
-    shooterRetreat: 85, // 이보다 가까우면 후퇴
+    shooterRange: 300, // 이 거리에서 멈춰 쏨 (무기 사거리보다 짧게!)
+    shooterRetreat: 200, // 이보다 가까우면 후퇴
     shooterInterval: 3.5, // 발사 주기(초) — 클수록 뜸하게
     shooterBoltSpeed: 190,
     shooterBoltDamage: 7,
@@ -218,7 +220,8 @@ export const SCHEMA = [
         min: 80,
         max: 800,
         step: 10,
-        effect: '↑ 먼 적까지 자동 조준·발사  ·  ↓ 가까이 와야 쏨',
+        effect:
+          '↑ 먼 적까지 조준  ·  ↓ 가까이 와야 쏨. 너무 짧으면 이동 중 적이 뒤처져 발사가 끊긴다(권장 300+)',
       },
     ],
   },
