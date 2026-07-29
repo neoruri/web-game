@@ -134,15 +134,21 @@ export function simulate(cfg, opts = {}) {
     const p = edge(40)
 
     const roll = Math.random()
+    const canRush = state.t >= c.rusherStartSec
+    const canShoot = state.t >= c.shooterStartSec
     let type = 'basic'
     let speed = c.speed
     let hp = enemyHpNow()
     let ranged = false
-    if (roll < c.rusherChance) {
+    if (canRush && roll < c.rusherChance) {
       type = 'rusher'
       speed = c.speed * c.rusherSpeedMul
       hp = enemyHpNow() * c.rusherHpMul
-    } else if (roll < c.rusherChance + c.shooterChance) {
+    } else if (
+      canShoot &&
+      roll >= c.rusherChance &&
+      roll < c.rusherChance + c.shooterChance
+    ) {
       type = 'shooter'
       speed = c.speed * c.shooterSpeedMul
       hp = enemyHpNow() * c.shooterHpMul

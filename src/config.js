@@ -31,13 +31,15 @@ export const DEFAULTS = {
     rusherChance: 0.22,
     rusherSpeedMul: 1.4,
     rusherHpMul: 0.55,
-    // 원거리형: 느리고 카이팅하며 탄 발사
+    rusherStartSec: 30, // 이 시간(초) 후부터 등장
+    // 원거리형: 카이팅하며 탄 발사. 무기 사거리보다 안쪽에서 멈춰야 반격 가능
     shooterChance: 0.16,
     shooterSpeedMul: 0.85,
     shooterHpMul: 0.9,
-    shooterRange: 250, // 이 거리에서 멈춰 쏨
-    shooterRetreat: 150, // 이보다 가까우면 후퇴
-    shooterInterval: 2.2, // 발사 주기
+    shooterStartSec: 75, // 이 시간(초) 후부터 등장
+    shooterRange: 130, // 이 거리에서 멈춰 쏨 (무기 사거리보다 짧게!)
+    shooterRetreat: 85, // 이보다 가까우면 후퇴
+    shooterInterval: 3.5, // 발사 주기(초) — 클수록 뜸하게
     shooterBoltSpeed: 190,
     shooterBoltDamage: 7,
     wobble: 0.35, // 유기적 움직임: 추격 방향에 주는 좌우 흔들림(0=직선)
@@ -280,6 +282,84 @@ export const SCHEMA = [
         step: 2,
         effect: '↑ 넓은 간격 유지(퍼짐)  ·  ↓ 가까이 붙어야 밀어냄',
       },
+      {
+        key: 'wobble',
+        label: '유기적 흔들림',
+        min: 0,
+        max: 1.5,
+        step: 0.05,
+        effect: '↑ 좌우로 크게 흔들며 접근  ·  0=직선으로만',
+      },
+    ],
+  },
+  {
+    key: 'enemy',
+    label: '적 종류 (돌진·원거리)',
+    fields: [
+      {
+        key: 'rusherStartSec',
+        label: '돌진형 등장 시간(초)',
+        min: 0,
+        max: 300,
+        step: 5,
+        effect: '↑ 늦게 등장(초반 쉬움)  ·  ↓ 일찍 등장',
+      },
+      {
+        key: 'rusherChance',
+        label: '돌진형 비율',
+        min: 0,
+        max: 0.6,
+        step: 0.02,
+        effect: '↑ 빠른 돌진형이 많아짐  ·  ↓ 적어짐',
+      },
+      {
+        key: 'rusherSpeedMul',
+        label: '돌진형 속도 배율',
+        min: 1,
+        max: 2.5,
+        step: 0.1,
+        effect: '↑ 더 빠름(1.6 넘으면 플레이어보다 빨라 회피 불가)  ·  ↓ 느림',
+      },
+      {
+        key: 'shooterStartSec',
+        label: '원거리형 등장 시간(초)',
+        min: 0,
+        max: 300,
+        step: 5,
+        effect: '↑ 늦게 등장  ·  ↓ 일찍 등장',
+      },
+      {
+        key: 'shooterChance',
+        label: '원거리형 비율',
+        min: 0,
+        max: 0.5,
+        step: 0.02,
+        effect: '↑ 탄 쏘는 원거리형 많아짐  ·  ↓ 적어짐',
+      },
+      {
+        key: 'shooterRange',
+        label: '원거리형 사거리',
+        min: 60,
+        max: 400,
+        step: 10,
+        effect: '이 거리에서 멈춰 쏨. 무기 사거리보다 짧아야 반격 가능',
+      },
+      {
+        key: 'shooterInterval',
+        label: '원거리형 발사 주기(초)',
+        min: 1,
+        max: 8,
+        step: 0.5,
+        effect: '↑ 뜸하게 쏨(쉬움)  ·  ↓ 자주 쏨(위협↑)',
+      },
+      {
+        key: 'shooterBoltDamage',
+        label: '원거리형 탄 피해',
+        min: 1,
+        max: 40,
+        step: 1,
+        effect: '↑ 탄 하나가 아픔  ·  ↓ 덜 아픔',
+      },
     ],
   },
   {
@@ -411,6 +491,22 @@ export const SCHEMA = [
         max: 60,
         step: 1,
         effect: '↑ 탄 하나가 치명적  ·  ↓ 덜 아픔',
+      },
+      {
+        key: 'telegraphTime',
+        label: '예고 시간(초)',
+        min: 0.2,
+        max: 2,
+        step: 0.1,
+        effect: '↑ 예고 길어 피하기 쉬움  ·  ↓ 짧아서 급박',
+      },
+      {
+        key: 'boltSpeed',
+        label: '탄 속도',
+        min: 80,
+        max: 500,
+        step: 10,
+        effect: '↑ 빨라서 피하기 어려움  ·  ↓ 느려서 피하기 쉬움',
       },
     ],
   },

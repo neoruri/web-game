@@ -566,17 +566,23 @@ class GameScene extends Phaser.Scene {
     const c = this.cfg.enemy
     const p = this.edgePosition(40)
 
-    // 타입 선택: 돌진 / 원거리 / 기본
+    // 타입 선택: 시간이 지나야 돌진/원거리가 해금된다 (단계별 난이도)
     const roll = Math.random()
+    const canRush = this.elapsed >= c.rusherStartSec
+    const canShoot = this.elapsed >= c.shooterStartSec
     let type = 'basic'
     let speed = c.speed
     let hp = this.enemyHpNow
     let ranged = false
-    if (roll < c.rusherChance) {
+    if (canRush && roll < c.rusherChance) {
       type = 'rusher'
       speed = c.speed * c.rusherSpeedMul
       hp = this.enemyHpNow * c.rusherHpMul
-    } else if (roll < c.rusherChance + c.shooterChance) {
+    } else if (
+      canShoot &&
+      roll >= c.rusherChance &&
+      roll < c.rusherChance + c.shooterChance
+    ) {
       type = 'shooter'
       speed = c.speed * c.shooterSpeedMul
       hp = this.enemyHpNow * c.shooterHpMul
