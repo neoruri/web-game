@@ -27,6 +27,20 @@ export const DEFAULTS = {
     hpRampPerMin: 1.1,
     sepStrength: 45, // 겹침 방지: 서로 밀어내는 힘 (0=겹침 허용)
     sepRadius: 20, // 이 거리 안의 적끼리만 밀어냄
+    // 돌진형: 조금 빠르지만 약함 (플레이어 이속보다는 느리게 — 회피 가능)
+    rusherChance: 0.22,
+    rusherSpeedMul: 1.4,
+    rusherHpMul: 0.55,
+    // 원거리형: 느리고 카이팅하며 탄 발사
+    shooterChance: 0.16,
+    shooterSpeedMul: 0.85,
+    shooterHpMul: 0.9,
+    shooterRange: 250, // 이 거리에서 멈춰 쏨
+    shooterRetreat: 150, // 이보다 가까우면 후퇴
+    shooterInterval: 2.2, // 발사 주기
+    shooterBoltSpeed: 190,
+    shooterBoltDamage: 7,
+    wobble: 0.35, // 유기적 움직임: 추격 방향에 주는 좌우 흔들림(0=직선)
   },
   spawn: {
     baseInterval: 1,

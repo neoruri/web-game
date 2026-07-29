@@ -115,23 +115,50 @@ export function simulate(cfg, opts = {}) {
     en.kbResist = spec.kbResist
     en.gems = spec.gems
     en.boss = spec.boss
+    en.type = spec.type || 'basic'
+    en.ranged = spec.ranged || false
     en.kbx = 0
     en.kby = 0
-    en.atk = spec.boss ? cfg.boss.attackInterval : 0
+    en.wob = Math.random() * Math.PI * 2
+    en.atk = spec.boss
+      ? cfg.boss.attackInterval
+      : spec.ranged
+        ? cfg.enemy.shooterInterval
+        : 0
     state.enemies.push(en)
   }
 
   function spawnEnemy() {
     if (state.enemies.length >= cfg.spawn.maxEnemies) return
+    const c = cfg.enemy
     const p = edge(40)
+
+    const roll = Math.random()
+    let type = 'basic'
+    let speed = c.speed
+    let hp = enemyHpNow()
+    let ranged = false
+    if (roll < c.rusherChance) {
+      type = 'rusher'
+      speed = c.speed * c.rusherSpeedMul
+      hp = enemyHpNow() * c.rusherHpMul
+    } else if (roll < c.rusherChance + c.shooterChance) {
+      type = 'shooter'
+      speed = c.speed * c.shooterSpeedMul
+      hp = enemyHpNow() * c.shooterHpMul
+      ranged = true
+    }
+
     makeEnemy(p.x, p.y, {
-      hp: enemyHpNow(),
-      r: cfg.enemy.radius,
-      speed: cfg.enemy.speed,
-      dmg: cfg.enemy.contactDamage,
+      hp,
+      r: c.radius,
+      speed,
+      dmg: c.contactDamage,
       kbResist: 1,
       gems: 1,
       boss: false,
+      type,
+      ranged,
     })
   }
 
@@ -145,6 +172,7 @@ export function simulate(cfg, opts = {}) {
       kbResist: cfg.boss.knockbackResist,
       gems: cfg.boss.gems,
       boss: true,
+      type: 'boss',
     })
   }
 
@@ -283,6 +311,19 @@ export function simulate(cfg, opts = {}) {
         fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
       }
     }
+  }
+
+  function fireEnemyShot(e) {
+    const c = cfg.enemy
+    const ang = Math.atan2(state.py - e.y, state.px - e.x)
+    const p = eProjPool.pop() || {}
+    p.x = e.x
+    p.y = e.y
+    p.vx = Math.cos(ang) * c.shooterBoltSpeed
+    p.vy = Math.sin(ang) * c.shooterBoltSpeed
+    p.dmg = c.shooterBoltDamage
+    p.life = 4
+    state.eProjectiles.push(p)
   }
 
   // 보스 탄막 (main.js 와 동일)
@@ -450,32 +491,51 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
-  // 봇 이동: 근처 적에게서 멀어지고 + 화면 중앙으로 약하게 당김
+  // 봇 이동: 접촉/탄이 임박할 때만 피하고 평소엔 제자리에서 자동발사로 딜한다.
+  // 무한 월드 + 원거리 적 조합에서 봇의 최적 플레이(원운동 등)는 어려워
+  // 절대 킬 수는 낮게 나온다 — 시뮬은 세팅 간 "상대 비교"로 쓴다.
   function botDir() {
     let ax = 0
     let ay = 0
-    const near = grid.query(state.px, state.py, 220, buf)
-    let nearest2 = Infinity
+    let threat = false
+
+    for (let i = 0; i < state.eProjectiles.length; i++) {
+      const p = state.eProjectiles[i]
+      const dx = state.px - p.x
+      const dy = state.py - p.y
+      const d2 = dx * dx + dy * dy
+      if (d2 > 0 && d2 < 85 * 85) {
+        const d = Math.sqrt(d2)
+        ax += (dx / d) * 2.5
+        ay += (dy / d) * 2.5
+        threat = true
+      }
+    }
+
+    const ideal = stats.player.radius + 72
+    const near = grid.query(state.px, state.py, ideal + 40, buf)
+    let bestD2 = Infinity
+    let bx = 0
+    let by = 0
     for (let i = 0; i < near.length; i++) {
       const e = near[i]
       const dx = state.px - e.x
       const dy = state.py - e.y
       const d2 = dx * dx + dy * dy
-      if (d2 < nearest2) nearest2 = d2
-      if (d2 < 1) continue
-      const w = 1 / d2 // 가까운 적일수록 강하게 회피
-      const d = Math.sqrt(d2)
-      ax += (dx / d) * w
-      ay += (dy / d) * w
+      if (d2 < bestD2) {
+        bestD2 = d2
+        bx = dx
+        by = dy
+      }
+    }
+    if (bestD2 < ideal * ideal && bestD2 > 0) {
+      const d = Math.sqrt(bestD2)
+      ax += (bx / d) * 1.5
+      ay += (by / d) * 1.5
+      threat = true
     }
 
-    // 무한 월드에서 봇이 적을 완전히 따돌리면 안 싸우게 된다.
-    // 가장 가까운 적이 사거리 안쪽 절반보다 멀면 정지해 적을 유인하고,
-    // 가까이 붙었을 때만 회피한다.
-    const range = stats.weapon.range
-    const keepDist = range * 0.55
-    if (nearest2 > keepDist * keepDist) return { ax: 0, ay: 0 }
-
+    if (!threat) return { ax: 0, ay: 0 }
     const tl = Math.hypot(ax, ay)
     if (tl > 0) {
       ax /= tl
@@ -612,8 +672,23 @@ export function simulate(cfg, opts = {}) {
         }
       }
 
-      e.x += (dx / len) * e.speed * dt + sx * sepStr * dt + e.kbx * dt
-      e.y += (dy / len) * e.speed * dt + sy * sepStr * dt + e.kby * dt
+      let mvx, mvy
+      if (e.ranged) {
+        const c = cfg.enemy
+        let dir = 0
+        if (len < c.shooterRetreat) dir = -1
+        else if (len > c.shooterRange) dir = 1
+        mvx = (dx / len) * dir
+        mvy = (dy / len) * dir
+      } else {
+        e.wob += dt * 3
+        const wob = Math.sin(e.wob) * cfg.enemy.wobble
+        mvx = dx / len + (-dy / len) * wob
+        mvy = dy / len + (dx / len) * wob
+      }
+
+      e.x += mvx * e.speed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += mvy * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
 
@@ -622,6 +697,12 @@ export function simulate(cfg, opts = {}) {
         if (e.atk <= 0) {
           e.atk += cfg.boss.attackInterval
           fireBossLine(e)
+        }
+      } else if (e.ranged) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += cfg.enemy.shooterInterval
+          fireEnemyShot(e)
         }
       }
 

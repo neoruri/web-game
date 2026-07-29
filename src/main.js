@@ -20,6 +20,8 @@ const H = 960
 const COLOR_BG = 0x1e1e2e
 const COLOR_PLAYER = 0x89b4fa
 const COLOR_ENEMY = 0xf38ba8
+const COLOR_RUSHER = 0xf9a860 // 돌진형(빠름)
+const COLOR_SHOOTER = 0x94e2d5 // 원거리형(카이팅)
 const COLOR_ENEMY_HIT = 0xffffff
 const COLOR_BOSS = 0xcba6f7
 const COLOR_ARROW = 0xfab387
@@ -544,10 +546,17 @@ class GameScene extends Phaser.Scene {
     e.kbResist = spec.kbResist
     e.gems = spec.gems
     e.boss = spec.boss
+    e.type = spec.type || 'basic'
+    e.ranged = spec.ranged || false
     e.kbx = 0
     e.kby = 0
     e.flash = 0
-    e.atk = spec.boss ? this.cfg.boss.attackInterval : 0 // 보스 탄막 타이머
+    e.wob = Math.random() * Math.PI * 2 // 유기적 흔들림 위상
+    e.atk = spec.boss
+      ? this.cfg.boss.attackInterval
+      : spec.ranged
+        ? this.cfg.enemy.shooterInterval
+        : 0
     this.enemies.push(e)
     return e
   }
@@ -556,14 +565,34 @@ class GameScene extends Phaser.Scene {
     if (this.enemies.length >= this.cfg.spawn.maxEnemies) return
     const c = this.cfg.enemy
     const p = this.edgePosition(40)
+
+    // 타입 선택: 돌진 / 원거리 / 기본
+    const roll = Math.random()
+    let type = 'basic'
+    let speed = c.speed
+    let hp = this.enemyHpNow
+    let ranged = false
+    if (roll < c.rusherChance) {
+      type = 'rusher'
+      speed = c.speed * c.rusherSpeedMul
+      hp = this.enemyHpNow * c.rusherHpMul
+    } else if (roll < c.rusherChance + c.shooterChance) {
+      type = 'shooter'
+      speed = c.speed * c.shooterSpeedMul
+      hp = this.enemyHpNow * c.shooterHpMul
+      ranged = true
+    }
+
     this.makeEnemy(p.x, p.y, {
-      hp: this.enemyHpNow,
+      hp,
       r: c.radius,
-      speed: c.speed,
+      speed,
       dmg: c.contactDamage,
       kbResist: 1,
       gems: 1,
       boss: false,
+      type,
+      ranged,
     })
   }
 
@@ -578,6 +607,7 @@ class GameScene extends Phaser.Scene {
       kbResist: b.knockbackResist,
       gems: b.gems,
       boss: true,
+      type: 'boss',
     })
 
     this.bossCount++
@@ -815,6 +845,20 @@ class GameScene extends Phaser.Scene {
       t.max = b.telegraphTime
       this.telegraphs.push(t)
     }
+  }
+
+  // 원거리형 적의 단발 탄 (예고 없이 즉시)
+  fireEnemyShot(e) {
+    const c = this.cfg.enemy
+    const ang = Math.atan2(this.player.y - e.y, this.player.x - e.x)
+    const p = this.eProjPool.pop() || {}
+    p.x = e.x
+    p.y = e.y
+    p.vx = Math.cos(ang) * c.shooterBoltSpeed
+    p.vy = Math.sin(ang) * c.shooterBoltSpeed
+    p.dmg = c.shooterBoltDamage
+    p.life = 4
+    this.eProjectiles.push(p)
   }
 
   updateTelegraphs(dt) {
@@ -1326,18 +1370,42 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      e.x += (dx / len) * e.speed * dt + sx * sepStr * dt + e.kbx * dt
-      e.y += (dy / len) * e.speed * dt + sy * sepStr * dt + e.kby * dt
+      // 타입별 이동 방향
+      let mvx, mvy
+      if (e.ranged) {
+        // 원거리형 카이팅 — 거리 유지 (너무 가까우면 후퇴, 멀면 접근)
+        const c = this.cfg.enemy
+        let dir = 0
+        if (len < c.shooterRetreat) dir = -1
+        else if (len > c.shooterRange) dir = 1
+        mvx = (dx / len) * dir
+        mvy = (dy / len) * dir
+      } else {
+        // 추격 + 좌우 흔들림 (유기적)
+        e.wob += dt * 3
+        const wob = Math.sin(e.wob) * this.cfg.enemy.wobble
+        mvx = dx / len + (-dy / len) * wob
+        mvy = dy / len + (dx / len) * wob
+      }
+
+      e.x += mvx * e.speed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += mvy * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
       if (e.flash > 0) e.flash -= dt
 
-      // 보스 탄막 타이머
+      // 보스 라인 탄막 / 원거리형 단발
       if (e.boss) {
         e.atk -= dt
         if (e.atk <= 0) {
           e.atk += this.cfg.boss.attackInterval
           this.fireBossLine(e)
+        }
+      } else if (e.ranged) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += this.cfg.enemy.shooterInterval
+          this.fireEnemyShot(e)
         }
       }
 
@@ -1366,14 +1434,21 @@ class GameScene extends Phaser.Scene {
     const ge = this.gfxEnemies
     ge.clear()
 
-    // 같은 색끼리 몰아 그려야 스타일 전환 비용이 줄어든다
-    ge.fillStyle(COLOR_ENEMY, 1)
-    for (let i = 0; i < this.enemies.length; i++) {
-      const e = this.enemies[i]
-      if (e.boss || e.flash > 0) continue
-      // 남은 체력이 적을수록 작게 → 몇 대 맞았는지 눈에 보인다
-      const s = e.r * 2 * (0.72 + 0.28 * (e.hp / e.maxHp))
-      ge.fillRect(e.x - s / 2, e.y - s / 2, s, s)
+    // 타입별로 색을 몰아 그려야 스타일 전환 비용이 줄어든다
+    const typePasses = [
+      ['basic', COLOR_ENEMY],
+      ['rusher', COLOR_RUSHER],
+      ['shooter', COLOR_SHOOTER],
+    ]
+    for (let t = 0; t < typePasses.length; t++) {
+      ge.fillStyle(typePasses[t][1], 1)
+      for (let i = 0; i < this.enemies.length; i++) {
+        const e = this.enemies[i]
+        if (e.type !== typePasses[t][0] || e.flash > 0) continue
+        // 남은 체력이 적을수록 작게 → 몇 대 맞았는지 눈에 보인다
+        const s = e.r * 2 * (0.72 + 0.28 * (e.hp / e.maxHp))
+        ge.fillRect(e.x - s / 2, e.y - s / 2, s, s)
+      }
     }
 
     ge.fillStyle(COLOR_BOSS, 1)
