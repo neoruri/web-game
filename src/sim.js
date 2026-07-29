@@ -261,6 +261,8 @@ export function simulate(cfg, opts = {}) {
       } else if (id === 'grenade') {
         if (state.enemies.length) {
           for (let i = 0; i < st.count; i++) {
+            // 앞선 폭발이 적을 다 죽였을 수 있으니 매번 재확인
+            if (!state.enemies.length) break
             const t = state.enemies[(Math.random() * state.enemies.length) | 0]
             explodeAt(t.x, t.y, st.radius, st.dmg)
           }
@@ -610,7 +612,10 @@ export function simulate(cfg, opts = {}) {
       const a = state.arrows[i]
       a.x += a.vx * dt
       a.y += a.vy * dt
-      if (a.x < -30 || a.x > W + 30 || a.y < -30 || a.y > H + 30) {
+      // 플레이어 기준 거리로 제거 (월드 좌표 — main.js 와 동일 수정)
+      const adx = a.x - state.px
+      const ady = a.y - state.py
+      if (adx * adx + ady * ady > DESPAWN_DIST * DESPAWN_DIST) {
         removeSwap(state.arrows, i, arrowPool)
         continue
       }

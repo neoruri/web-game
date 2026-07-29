@@ -757,6 +757,8 @@ class GameScene extends Phaser.Scene {
   triggerGrenade(st) {
     if (this.enemies.length === 0) return false
     for (let i = 0; i < st.count; i++) {
+      // 앞선 폭발이 적을 다 죽였을 수 있으니 매번 재확인
+      if (this.enemies.length === 0) break
       const t = this.enemies[(Math.random() * this.enemies.length) | 0]
       this.explodeAt(t.x, t.y, st.radius, st.dmg)
     }
@@ -1298,7 +1300,12 @@ class GameScene extends Phaser.Scene {
       a.x += a.vx * dt
       a.y += a.vy * dt
 
-      if (a.x < -30 || a.x > W + 30 || a.y < -30 || a.y > H + 30) {
+      // 플레이어에서 너무 멀어진 화살 제거 (월드 좌표 기준!).
+      // 화면 좌표(0~W)로 판정하면 무한 월드에서 플레이어가 이동했을 때
+      // 화살이 생성 즉시 제거되어 발사가 안 되는 것처럼 보인다.
+      const adx = a.x - this.player.x
+      const ady = a.y - this.player.y
+      if (adx * adx + ady * ady > DESPAWN_DIST * DESPAWN_DIST) {
         this.removeSwap(this.arrows, i, this.arrowPool)
         continue
       }
