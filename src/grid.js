@@ -13,8 +13,20 @@ export class Grid {
     this.cols = Math.ceil((width + margin * 2) / cellSize)
     this.rows = Math.ceil((height + margin * 2) / cellSize)
 
+    // 원점(월드 좌표). 카메라가 움직이는 무한 월드에서, 매 프레임 플레이어
+    // 기준으로 옮겨 "플레이어 주변 화면 영역"만 셀로 커버한다. 화면 밖 먼 적은
+    // 가장자리 셀로 clamp 되지만, 어차피 화면 근처 충돌만 의미가 있다.
+    this.ox = 0
+    this.oy = 0
+
     this.cells = new Array(this.cols * this.rows)
     for (let i = 0; i < this.cells.length; i++) this.cells[i] = []
+  }
+
+  // 이번 프레임 그리드가 커버할 월드 영역의 좌상단(-margin 지점)
+  setOrigin(ox, oy) {
+    this.ox = ox
+    this.oy = oy
   }
 
   clear() {
@@ -22,12 +34,12 @@ export class Grid {
   }
 
   cellX(x) {
-    const c = Math.floor((x + this.margin) / this.cell)
+    const c = Math.floor((x - this.ox + this.margin) / this.cell)
     return c < 0 ? 0 : c >= this.cols ? this.cols - 1 : c
   }
 
   cellY(y) {
-    const c = Math.floor((y + this.margin) / this.cell)
+    const c = Math.floor((y - this.oy + this.margin) / this.cell)
     return c < 0 ? 0 : c >= this.rows ? this.rows - 1 : c
   }
 

@@ -24,6 +24,8 @@ import {
 const W = 540
 const H = 960
 const KNOCKBACK_FRICTION = 8
+const SPAWN_DIST = Math.hypot(W, H) / 2 + 40
+const DESPAWN_DIST = SPAWN_DIST + 280
 
 function clone(o) {
   return JSON.parse(JSON.stringify(o))
@@ -88,12 +90,14 @@ export function simulate(cfg, opts = {}) {
   const bossHpNow = () =>
     Math.round(cfg.boss.hp * Math.pow(cfg.boss.hpRampPerMin, minute()))
 
+  // 플레이어 기준 화면 밖 원둘레 스폰 (무한 월드)
   function edge(margin) {
-    const e = (Math.random() * 4) | 0
-    if (e === 0) return { x: rand(-margin, W + margin), y: -margin }
-    if (e === 1) return { x: W + margin, y: rand(-margin, H + margin) }
-    if (e === 2) return { x: rand(-margin, W + margin), y: H + margin }
-    return { x: -margin, y: rand(-margin, H + margin) }
+    const ang = Math.random() * Math.PI * 2
+    const dist = SPAWN_DIST + margin
+    return {
+      x: state.px + Math.cos(ang) * dist,
+      y: state.py + Math.sin(ang) * dist,
+    }
   }
 
   function makeEnemy(x, y, spec) {
@@ -389,33 +393,32 @@ export function simulate(cfg, opts = {}) {
   function botDir() {
     let ax = 0
     let ay = 0
-    const near = grid.query(state.px, state.py, 200, buf)
+    const near = grid.query(state.px, state.py, 220, buf)
+    let nearest2 = Infinity
     for (let i = 0; i < near.length; i++) {
       const e = near[i]
       const dx = state.px - e.x
       const dy = state.py - e.y
       const d2 = dx * dx + dy * dy
+      if (d2 < nearest2) nearest2 = d2
       if (d2 < 1) continue
       const w = 1 / d2 // 가까운 적일수록 강하게 회피
       const d = Math.sqrt(d2)
       ax += (dx / d) * w
       ay += (dy / d) * w
     }
+
+    // 무한 월드에서 봇이 적을 완전히 따돌리면 안 싸우게 된다.
+    // 가장 가까운 적이 사거리 안쪽 절반보다 멀면 정지해 적을 유인하고,
+    // 가까이 붙었을 때만 회피한다.
+    const range = stats.weapon.range
+    const keepDist = range * 0.55
+    if (nearest2 > keepDist * keepDist) return { ax: 0, ay: 0 }
+
     const tl = Math.hypot(ax, ay)
     if (tl > 0) {
       ax /= tl
       ay /= tl
-    }
-    // 젬을 줍지 않으므로(즉시 경험치) 봇은 위협 회피 + 중앙 유지만 한다
-
-    // 벽에 몰리지 않게 중앙으로 약하게
-    ax += ((W / 2 - state.px) / W) * 0.4
-    ay += ((H / 2 - state.py) / H) * 0.4
-
-    const len = Math.hypot(ax, ay)
-    if (len > 1) {
-      ax /= len
-      ay /= len
     }
     return { ax, ay }
   }
@@ -448,8 +451,8 @@ export function simulate(cfg, opts = {}) {
     // 봇 이동
     const { ax, ay } = botDir()
     const p = stats.player
-    state.px = clamp(state.px + ax * p.speed * dt, p.radius, W - p.radius)
-    state.py = clamp(state.py + ay * p.speed * dt, p.radius, H - p.radius)
+    state.px += ax * p.speed * dt // 무한 월드 — 벽 clamp 없음
+    state.py += ay * p.speed * dt
 
     // 발사
     state.fireAcc += dt
@@ -461,7 +464,8 @@ export function simulate(cfg, opts = {}) {
       }
     }
 
-    // 그리드 채우기 (봇 회피 + 화살 충돌 + 폭발 공용)
+    // 그리드를 플레이어 주변으로 옮기고 채운다 (무한 월드)
+    grid.setOrigin(state.px - W / 2, state.py - H / 2)
     grid.clear()
     for (let i = 0; i < state.enemies.length; i++) grid.insert(state.enemies[i])
 
@@ -508,11 +512,20 @@ export function simulate(cfg, opts = {}) {
     const sepR = cfg.enemy.sepRadius
     const sepStr = cfg.enemy.sepStrength
     let incoming = 0
+    const despawn2 = DESPAWN_DIST * DESPAWN_DIST
 
     for (let i = 0; i < state.enemies.length; i++) {
       const e = state.enemies[i]
       const dx = state.px - e.x
       const dy = state.py - e.y
+
+      // 너무 멀어진 적 제거
+      if (dx * dx + dy * dy > despawn2) {
+        removeSwap(state.enemies, i, enemyPool)
+        i--
+        continue
+      }
+
       const len = Math.hypot(dx, dy) || 1
 
       // 겹침 방지: 근처 적들로부터 밀려나는 힘 (그리드로 이웃만, 최대 6마리)

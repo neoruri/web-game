@@ -29,10 +29,15 @@ const KNOCKBACK_FRICTION = 8
 const FLASH_TIME = 0.06
 const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 
-// 배경 시차(parallax) 계수. 플레이어가 움직이면 배경이 반대로 흘러
-// "넓은 벌판을 돌아다니는" 느낌을 준다. 값이 클수록 가까이 있는 것처럼 빨리 흐른다.
-const PARALLAX_GRID = 0.6
+// 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
+// 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
+const PARALLAX_GRID = 1.0
 const PARALLAX_DOTS = 1.15
+
+// 무한 월드 — 적은 플레이어 기준 화면 밖 둘레(원)에서 스폰하고,
+// 너무 멀어지면(반대편으로 밀려나거나) 제거한다.
+const SPAWN_DIST = Math.hypot(W, H) / 2 + 40
+const DESPAWN_DIST = SPAWN_DIST + 280
 
 // 적/화살/젬은 GameObject 가 아니라 평범한 객체다.
 //  - 생성/파괴 비용 없음 (풀에서 재사용)
@@ -98,14 +103,26 @@ class GameScene extends Phaser.Scene {
 
     this.buildBackground()
 
-    this.gfxEnemies = this.add.graphics().setDepth(2)
-    this.gfxArrows = this.add.graphics().setDepth(3)
-    this.gfxFx = this.add.graphics().setDepth(3)
+    // 월드 레이어 — 모든 월드 오브젝트를 담아 매 프레임 플레이어 반대로 옮긴다.
+    // 이러면 플레이어는 항상 화면 중앙에 보이고, HUD/조이스틱은 화면 좌표
+    // 그대로 두면 된다(카메라 무관). 게임 로직 좌표는 전부 월드 좌표.
+    this.worldLayer = this.add.container(0, 0).setDepth(1)
+
+    this.gfxEnemies = this.add.graphics()
+    this.gfxArrows = this.add.graphics()
+    this.gfxFx = this.add.graphics()
 
     this.player = this.add
       .circle(W / 2, H / 2, this.stats.player.radius, COLOR_PLAYER)
       .setStrokeStyle(3, 0xcdd6f4)
-      .setDepth(4)
+
+    // 렌더 순서: 적 → 화살/이펙트 → 플레이어
+    this.worldLayer.add([
+      this.gfxEnemies,
+      this.gfxArrows,
+      this.gfxFx,
+      this.player,
+    ])
 
     this.buildHud()
     this.setupInput()
@@ -499,12 +516,14 @@ class GameScene extends Phaser.Scene {
     return Math.round(b.hp * Math.pow(b.hpRampPerMin, this.minutes))
   }
 
-  edgePosition(margin) {
-    const edge = (Math.random() * 4) | 0
-    if (edge === 0) return { x: Phaser.Math.Between(-margin, W + margin), y: -margin }
-    if (edge === 1) return { x: W + margin, y: Phaser.Math.Between(-margin, H + margin) }
-    if (edge === 2) return { x: Phaser.Math.Between(-margin, W + margin), y: H + margin }
-    return { x: -margin, y: Phaser.Math.Between(-margin, H + margin) }
+  // 플레이어 기준 화면 밖 원둘레에서 스폰 (무한 월드)
+  edgePosition(extra) {
+    const ang = Math.random() * Math.PI * 2
+    const dist = SPAWN_DIST + extra
+    return {
+      x: this.player.x + Math.cos(ang) * dist,
+      y: this.player.y + Math.sin(ang) * dist,
+    }
   }
 
   // 적 하나를 풀에서 꺼내 초기화. 보스도 같은 구조를 쓴다 —
@@ -780,7 +799,7 @@ class GameScene extends Phaser.Scene {
     const ring = this.add
       .circle(this.player.x, this.player.y, this.stats.player.radius + 6)
       .setStrokeStyle(3, color)
-      .setDepth(5)
+    this.worldLayer.add(ring) // 월드 좌표에 표시 (카메라 따라감)
 
     this.tweens.add({
       targets: ring,
@@ -1016,7 +1035,7 @@ class GameScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
-      .setDepth(6)
+    this.worldLayer.add(t) // 월드 좌표
     this.tweens.add({
       targets: t,
       y: t.y - 20,
@@ -1107,16 +1126,12 @@ class GameScene extends Phaser.Scene {
 
     const { vx, vy } = this.moveInput()
     const p = this.stats.player
-    this.player.x = Phaser.Math.Clamp(
-      this.player.x + vx * p.speed * dt,
-      p.radius,
-      W - p.radius
-    )
-    this.player.y = Phaser.Math.Clamp(
-      this.player.y + vy * p.speed * dt,
-      p.radius,
-      H - p.radius
-    )
+    // 무한 월드 — 벽 clamp 없이 자유 이동
+    this.player.x += vx * p.speed * dt
+    this.player.y += vy * p.speed * dt
+
+    // 월드 레이어를 플레이어 반대로 옮겨 플레이어를 화면 중앙에 고정
+    this.worldLayer.setPosition(W / 2 - this.player.x, H / 2 - this.player.y)
     this.updateBackground()
 
     this.fireAcc += dt
@@ -1132,6 +1147,8 @@ class GameScene extends Phaser.Scene {
     this.updateBursts(dt)
     this.updateExplosions(dt)
 
+    // 그리드를 플레이어 주변 화면 영역으로 옮긴다 (무한 월드 대응)
+    this.grid.setOrigin(this.player.x - W / 2, this.player.y - H / 2)
     this.grid.clear()
     for (let i = 0; i < this.enemies.length; i++) {
       this.grid.insert(this.enemies[i])
@@ -1198,12 +1215,21 @@ class GameScene extends Phaser.Scene {
     const py = this.player.y
 
     let incoming = 0 // 이번 프레임에 닿은 적 중 가장 아픈 것
+    const despawn2 = DESPAWN_DIST * DESPAWN_DIST
 
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i]
 
       const dx = px - e.x
       const dy = py - e.y
+
+      // 너무 멀어진 적은 제거 (화면 밖 거리 임계 — sort 없이)
+      if (dx * dx + dy * dy > despawn2) {
+        this.removeSwap(this.enemies, i, this.enemyPool)
+        i--
+        continue
+      }
+
       const len = Math.hypot(dx, dy) || 1
 
       // 겹침 방지: 그리드로 근처 적만 조회해 밀어냄 (최대 6마리)
