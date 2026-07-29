@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>스킬 트리 시안 — 사냥꾼</title>
+<style>
+  :root{
+    --bg:#12151c; --panel:#1b202b; --panel2:#232a38; --line:#2f3849;
+    --txt:#e6ebf2; --dim:#8b95a7; --gold:#f2c14e;
+    --t1:#ff6b6b; --t2:#4dd0a0; --t3:#ffa94d; /* 계열 색 */
+    --locked:#3a4152; --avail:#2b4a6b; --owned:#2f6b45; --max:#7a5a12;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+  }
+  header{
+    padding:10px 14px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  header h1{font-size:15px; margin:0; font-weight:700}
+  .pts{font-size:13px; color:var(--gold); font-weight:700; white-space:nowrap}
+  .pts small{color:var(--dim); font-weight:500}
+
+  /* 탭 */
+  .tabs{display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line)}
+  .tab{
+    flex:1; padding:9px 4px; border:1px solid var(--line); border-radius:10px;
+    background:var(--panel); color:var(--dim); font-size:12.5px; font-weight:700;
+    text-align:center; cursor:pointer; line-height:1.3; transition:.12s;
+  }
+  .tab .em{display:block; font-size:16px; margin-bottom:2px}
+  .tab.active{color:var(--txt)}
+  .tab[data-tree="a"].active{border-color:var(--t1); background:#2a1e22}
+  .tab[data-tree="b"].active{border-color:var(--t2); background:#1a2a25}
+  .tab[data-tree="c"].active{border-color:var(--t3); background:#2a241a}
+
+  /* 능력치 패널 (탭 위) */
+  .statbar{padding:10px 10px 8px; border-bottom:1px solid var(--line)}
+  .stat-hd{font-size:12px; color:var(--dim); font-weight:700; margin:0 2px 8px}
+  .stat-hd span{color:var(--gold); font-size:14px}
+  .stat-hd small{font-weight:500}
+  .stat-row{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+  .stat{
+    border:1.5px solid var(--line); border-radius:10px; background:var(--panel);
+    padding:7px 4px 6px; text-align:center; cursor:pointer; transition:.12s;
+  }
+  .stat:active{transform:scale(.96)}
+  .stat .si{font-size:17px; line-height:1}
+  .stat .snm{font-size:10.5px; color:var(--dim); margin-top:2px}
+  .stat .sv{font-size:14px; font-weight:800; margin-top:1px}
+  .stat.sel{border-color:var(--gold); background:var(--panel2)}
+  .stat-detail{
+    display:flex; align-items:center; gap:10px; margin-top:8px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:9px 10px 9px 12px;
+  }
+  .stat-detail .sd-body{flex:1; min-width:0}
+  .stat-detail .sd-eff{font-size:12px; color:var(--gold); font-weight:700; line-height:1.4}
+  .stat-detail .sd-desc{font-size:11px; color:var(--dim); line-height:1.45; margin-top:2px}
+  .stat-up{
+    flex:none; width:44px; height:44px; border:none; border-radius:11px;
+    background:var(--gold); color:#0e1119; font-size:22px; font-weight:800; cursor:pointer;
+  }
+  .stat-up:disabled{background:var(--panel); color:var(--dim); border:1px solid var(--line); cursor:not-allowed}
+
+  /* 트리 영역 */
+  .tree-wrap{flex:1; overflow-y:auto; overflow-x:hidden; padding:12px 12px 24px}
+  .tree-head{font-size:12px; color:var(--dim); margin:2px 2px 12px; line-height:1.5}
+  .tier{margin-bottom:6px}
+  .tier-label{
+    font-size:11px; color:var(--dim); font-weight:700; letter-spacing:.02em;
+    display:flex; align-items:center; gap:8px; margin:6px 2px 8px;
+  }
+  .tier-label::after{content:""; flex:1; height:1px; background:var(--line)}
+  .nodes{display:grid; grid-template-columns:repeat(2,1fr); gap:10px}
+
+  /* 노드 = 네모 아이콘 */
+  .node{
+    position:relative; border:1.5px solid var(--line); border-radius:12px;
+    background:var(--panel); padding:10px 10px 9px; cursor:pointer;
+    display:flex; flex-direction:column; gap:6px; min-height:78px; transition:.12s;
+  }
+  .node:active{transform:scale(.97)}
+  .node .icon{
+    width:34px; height:34px; border-radius:9px; display:grid; place-items:center;
+    font-size:19px; background:var(--panel2); border:1px solid var(--line);
+  }
+  .node .nm{font-size:12.5px; font-weight:700; line-height:1.25}
+  .node .lv{
+    position:absolute; top:8px; right:9px; font-size:11px; font-weight:800;
+    color:var(--dim);
+  }
+  .node .kind{position:absolute; top:8px; left:9px; font-size:12px}
+  .node .barwrap{height:4px; border-radius:3px; background:#0e1119; overflow:hidden; margin-top:auto}
+  .node .bar{height:100%; width:0; background:var(--gold); transition:.2s}
+
+  .node.locked{opacity:.5; filter:grayscale(.4)}
+  .node.avail{border-color:var(--avail)}
+  .node.avail .icon{border-color:#3f6ea3}
+  .node.owned{border-color:var(--owned)}
+  .node.maxed{border-color:var(--max)}
+  .node.maxed .lv{color:var(--gold)}
+  .node.cap .icon{background:linear-gradient(135deg,#3a2f10,#1b202b)}
+  .node.cap{border-style:dashed}
+
+  /* 액티브 스킬 = 계열색 배경으로 구분(아이콘 표식 대신) */
+  .tree-wrap[data-tree="a"] .node.act{background:linear-gradient(150deg,#3a2126,var(--panel)); border-color:var(--t1)}
+  .tree-wrap[data-tree="b"] .node.act{background:linear-gradient(150deg,#16332a,var(--panel)); border-color:var(--t2)}
+  .tree-wrap[data-tree="c"] .node.act{background:linear-gradient(150deg,#3a2c17,var(--panel)); border-color:var(--t3)}
+  .node.act .icon{background:rgba(0,0,0,.28)}
+
+  /* 주력 액티브 = 최상단 전용 가로 카드 */
+  .node.featured{
+    flex-direction:row; align-items:center; gap:12px; min-height:0;
+    padding:12px 14px; margin-bottom:14px; border-width:2px;
+  }
+  .node.featured .icon{width:44px; height:44px; font-size:24px; flex:none}
+  .node.featured .feat-body{flex:1; display:flex; flex-direction:column; gap:4px}
+  .node.featured .feat-tag{font-size:10.5px; font-weight:800; letter-spacing:.03em; color:var(--gold)}
+  .node.featured .nm{font-size:15px}
+  .node.featured .feat-sub{font-size:11px; color:var(--dim)}
+  .node.featured .lv{position:static; align-self:flex-start; font-size:13px}
+  .node.featured .barwrap{margin-top:4px}
+
+  /* 상세 시트 (하단 슬라이드) */
+  .backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.55); opacity:0; pointer-events:none;
+    transition:.18s; z-index:20;
+  }
+  .backdrop.on{opacity:1; pointer-events:auto}
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:21;
+    background:var(--panel); border-top:1px solid var(--line);
+    border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+    transform:translateY(102%); transition:transform .22s cubic-bezier(.2,.8,.2,1);
+    max-height:82dvh; overflow-y:auto;
+  }
+  .sheet.on{transform:translateY(0)}
+  .grab{width:38px; height:4px; border-radius:3px; background:var(--line); margin:2px auto 12px}
+  .sheet .s-top{display:flex; gap:12px; align-items:flex-start; margin-bottom:10px}
+  .sheet .s-icon{
+    width:46px; height:46px; border-radius:11px; display:grid; place-items:center;
+    font-size:25px; background:var(--panel2); border:1px solid var(--line); flex:none;
+  }
+  .sheet .s-title{font-size:16px; font-weight:800; line-height:1.3}
+  .sheet .s-sub{font-size:11.5px; color:var(--dim); margin-top:3px}
+  .sheet .s-desc{font-size:13px; color:#cdd5e2; line-height:1.6; margin:10px 0 12px}
+  .sheet .s-effect{
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-size:12.5px; line-height:1.7; margin-bottom:12px;
+  }
+  .sheet .s-effect .row{display:flex; justify-content:space-between; gap:10px}
+  .sheet .s-effect .row.now{color:var(--gold); font-weight:700}
+  .sheet .s-effect .row .k{color:var(--dim)}
+  .sheet .prereq{font-size:12px; margin-bottom:12px}
+  .sheet .prereq.ok{color:var(--t2)} .sheet .prereq.no{color:var(--t1)}
+
+  .learn{
+    width:100%; padding:14px; border:none; border-radius:12px; font-size:15px;
+    font-weight:800; color:#0e1119; background:var(--gold); cursor:pointer;
+  }
+  .learn:disabled{background:var(--panel2); color:var(--dim); cursor:not-allowed}
+  .learn.reset{background:transparent; color:var(--dim); border:1px solid var(--line);
+    font-size:12.5px; padding:9px; margin-top:8px; font-weight:600}
+
+  .toast{
+    position:fixed; left:50%; top:64px; transform:translateX(-50%) translateY(-12px);
+    background:#0e1119; border:1px solid var(--line); color:var(--txt);
+    padding:9px 16px; border-radius:20px; font-size:12.5px; font-weight:600;
+    opacity:0; pointer-events:none; transition:.2s; z-index:30; white-space:nowrap;
+  }
+  .toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+  <header>
+    <h1>🏹 사냥꾼 스킬 트리 <span style="color:var(--dim);font-weight:500;font-size:12px">시안</span></h1>
+    <div class="pts">보유 <span id="ptsN">12</span><small> pt</small></div>
+  </header>
+
+  <section class="statbar">
+    <div class="stat-hd">능력치 <span id="apN">8</span><small> pt</small></div>
+    <div class="stat-row" id="statRow"></div>
+    <div class="stat-detail" id="statDetail"></div>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <div class="tab active" data-tree="a"><span class="em">🎯</span>정밀 사격</div>
+    <div class="tab" data-tree="b"><span class="em">🌪️</span>질풍 사냥</div>
+    <div class="tab" data-tree="c"><span class="em">💣</span>사냥 도구</div>
+  </nav>
+
+  <main class="tree-wrap" id="treeWrap"></main>
+
+  <div class="backdrop" id="backdrop"></div>
+  <section class="sheet" id="sheet"></section>
+  <div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// 데이터 (docs/skill_tree_design.md 기반). eff(lv)= 해당 레벨의 효과 텍스트.
+// kind: 'passive'|'active'|'cap' · req: [노드id, 필요레벨]
+// ─────────────────────────────────────────────────────────────
+const CHAR_LV = 30; // 시안: 캐릭터 레벨(해금 판정용)
+const TREES = {
+ a:{ name:'정밀 사격', color:'var(--t1)',
+   desc:'보스 킬러 — 단일 폭딜·치명타. 궁합: 힘(피해·크리피해).',
+   nodes:[
+    {id:'archery', tier:1, unlock:1, kind:'passive', icon:'🏹', name:'궁술 숙련', max:5,
+     sub:'기본 활 피해', eff:l=>`활 피해 +${l*5}% · 투사체 속도 +${l*3}%`,
+     desc:'기본 활이 상시 딜의 근간. 초반 1순위 투자.'},
+    {id:'focus', tier:1, unlock:1, kind:'passive', icon:'🎯', name:'집중', max:5,
+     sub:'치명타 확률', eff:l=>`치명타 확률 +${l*2}%`,
+     desc:'치명타 빌드의 관문. 아래 치명타 훈련의 선행 조건.'},
+    {id:'rapid', tier:2, unlock:5, kind:'active', icon:'💥', name:'연발 사격', max:10,
+     sub:'단일 대상 집중 연사 · 쿨 4초', req:null,
+     eff:l=>{const shots=l>=7?9:l>=4?7:l>=2?6:5;
+       let s=`${shots}발 · 발당 피해 무기×50%`;
+       if(l>=3)s+=' · 연사속도 +18%'; if(l>=9)s+=' +28%';
+       if(l>=6)s+=' · 관통+1'; if(l>=9)s+=' · 막화살 ×2.5'; if(l>=10)s+=' · 막화살 폭발';
+       return s;},
+     desc:'보스에게 화살을 퍼붓는 주력기. 레벨업마다 발수가 핵심.'},
+    {id:'crit', tier:2, unlock:5, kind:'passive', icon:'⚡', name:'치명타 훈련', max:5,
+     sub:'치명타 피해', req:['focus',2],
+     eff:l=>`치명타 피해 +${l*8}% (배수 최대 1.9)`,
+     desc:'크리 배수를 키운다. 집중과 세트로.'},
+    {id:'pierce', tier:3, unlock:10, kind:'passive', icon:'➹', name:'관통 화살', max:3,
+     sub:'관통 수', req:['archery',2],
+     eff:l=>`관통 +${l} (적 ${l}겹 추가 관통)`,
+     desc:'기본 활·사격계열이 여러 겹을 뚫는다. 일렬 물량에 강함.'},
+    {id:'weak', tier:3, unlock:10, kind:'passive', icon:'🩸', name:'약점 간파', max:4,
+     sub:'보스·정예 추가 피해', req:['crit',2],
+     eff:l=>`보스/정예 추가 피해 +${l*6}%`,
+     desc:'일반 적엔 무효, 보스에만 적용. 순수 보스 특화.'},
+    {id:'snipe', tier:4, unlock:15, kind:'passive', icon:'🔭', name:'저격 자세', max:1,
+     sub:'사거리·정지 보너스', req:['pierce',1],
+     eff:_=>`사거리 +10% · 정지 0.5초 후 피해 +12%`,
+     desc:'자리 잡고 쏘는 플레이 보상. 기동형과 반대 컨셉.'},
+    {id:'rapid2', tier:4, unlock:15, kind:'passive', icon:'✥', name:'연발 강화', max:1,
+     sub:'연발 사격 강화', req:['rapid',3],
+     eff:_=>`연발 발수 +2 · 연사속도 +15%`,
+     desc:'주력기를 한 단계 더. 연발 빌드 완성.'},
+    {id:'cap_a', tier:5, unlock:20, kind:'cap', icon:'👑', name:'헤드헌터', max:1,
+     sub:'⭐ 캡스톤', req:['snipe',1,'weak',1], reqAny:true,
+     eff:_=>`치명타 처치 시 관통 폭발(무기 피해 100%) · 내부쿨 0.3초`,
+     desc:'치명타 빌드의 궁극. 잡몹을 크리로 터뜨리며 연쇄시킨다.'},
+   ]},
+ b:{ name:'질풍 사냥', color:'var(--t2)',
+   desc:'물량·기동·생존 — 연사·광역·회피. 궁합: 민첩(공속·이속·회피).',
+   nodes:[
+    {id:'haste', tier:1, unlock:1, kind:'passive', icon:'💨', name:'속사', max:5,
+     sub:'기본 활 공격 속도', eff:l=>`공격 속도 +${l*4}% (상한 +75%)`,
+     desc:'기본 활 연사력. 물량 상시 처리.'},
+    {id:'dodge', tier:1, unlock:1, kind:'passive', icon:'🌀', name:'회피 훈련', max:5,
+     sub:'회피 확률', eff:l=>`회피 확률 +${l}%`,
+     desc:'피격을 확률로 무효. 생존의 시작.'},
+    {id:'multi', tier:2, unlock:5, kind:'active', icon:'🔱', name:'다발 사격', max:10,
+     sub:'전방 부채꼴 광역 · 쿨 3초', req:null,
+     eff:l=>{const shots=l>=7?9:l>=4?7:l>=2?6:5; let s=`${shots}발 부채꼴 · 발당 무기×50%`;
+       if(l>=3)s+=' · 피해+15%'; if(l>=8)s+=' +20%'; if(l>=6)s+=' · 관통+1';
+       if(l>=9)s+=' · 파편화살'; if(l>=10)s+=' · 중앙폭발'; return s;},
+     desc:'몰려오는 적을 부채꼴로 쓸어담는 주력 광역기.'},
+    {id:'move', tier:2, unlock:5, kind:'passive', icon:'👟', name:'이동 강화', max:5,
+     sub:'이동 속도', eff:l=>`이동 속도 +${l*2}% (상한 +35%)`,
+     desc:'적을 끌고 다니는 카이팅의 핵심. 빠를수록 안전.'},
+    {id:'frenzy', tier:3, unlock:10, kind:'passive', icon:'📈', name:'광폭 사격', max:3,
+     sub:'다발·난사 발수', req:['multi',2],
+     eff:l=>`액티브 발수 +${l}`,
+     desc:'광역 스킬의 화살 수를 직접 늘림. 물량 대응 최고 효율.'},
+    {id:'rush', tier:3, unlock:10, kind:'passive', icon:'🏃', name:'피격 후 가속', max:3,
+     sub:'피격 시 순간 가속', req:['move',2],
+     eff:l=>`피격 후 2초간 이속 +${l*5}%`,
+     desc:'위기 순간 탈출력. 공격적 회피 플레이.'},
+    {id:'storm', tier:4, unlock:15, kind:'active', icon:'🌪️', name:'난사', max:10,
+     sub:'주변 360° 연속 사격 · 쿨 7초', req:['multi',3],
+     eff:l=>{const d=l>=8?2.2:l>=4?1.8:1.5; let s=`지속 ${d}초 · 발당 무기×50%`;
+       if(l>=2)s+=' · 빈도↑'; if(l>=6)s+=' · 관통+1';
+       if(l>=7)s+=' · 난사 중 이속+10%'; if(l>=10)s+=' · 종료 시 충격파'; return s;},
+     desc:'포위됐을 때 사방으로 탈출구를 뚫는 광역기.'},
+    {id:'evade', tier:4, unlock:15, kind:'passive', icon:'🛡️', name:'전투 회피', max:5,
+     sub:'회피+무적', req:['dodge',2],
+     eff:l=>`회피 확률 +${(l*1.5).toFixed(1)}% · 회피 성공 시 0.3초 무적`,
+     desc:'회피가 단순 무피해를 넘어 짧은 무적으로. 탱킹형 생존.'},
+    {id:'cap_b', tier:5, unlock:20, kind:'cap', icon:'👑', name:'화살 폭풍', max:1,
+     sub:'⭐ 캡스톤', req:['storm',1,'evade',1], reqAny:true,
+     eff:_=>`난사 중 분신 생성(같이 난사) · 난사 중 이속 대폭↑ · 종료 충격파 강화`,
+     desc:'질풍 빌드의 궁극. 움직이며 사방을 화살로 덮는다.'},
+   ]},
+ c:{ name:'사냥 도구', color:'var(--t3)',
+   desc:'떼몰이 광역 — 폭발·함정. 궁합: 지능(쿨감·범위·지속).',
+   nodes:[
+    {id:'explo', tier:1, unlock:1, kind:'passive', icon:'🧨', name:'폭발물 숙련', max:5,
+     sub:'수류탄 피해·범위', eff:l=>`수류탄 피해 +${l*5}% · 범위 +${l*2}%`,
+     desc:'폭발 계열의 기본기.'},
+    {id:'fuse', tier:1, unlock:1, kind:'passive', icon:'🔥', name:'도화선', max:3,
+     sub:'폭발물 쿨타임 감소', eff:l=>`폭발물 쿨타임 -${l*3}%`,
+     desc:'폭발을 더 자주. 물량 폭증 구간 대비.'},
+    {id:'nade', tier:2, unlock:10, kind:'active', icon:'💣', name:'수류탄', max:10,
+     sub:'밀집 지점 포물선 폭발 · 쿨 5초', req:null,
+     eff:l=>{const n=l>=8?3:l>=4?2:1; let s=`${n}개 · 폭발 무기×50% · 밀집 자동조준`;
+       if(l>=2)s+=' · 범위↑'; if(l>=3)s+=' · 피해+15%';
+       if(l>=7)s+=' · 화염지대'; if(l>=9)s+=' · 중심추가'; if(l>=10)s+=' · 파편폭탄'; return s;},
+     desc:'가장 많이 뭉친 곳을 자동 조준. 물량 정리의 핵심.'},
+    {id:'radius', tier:2, unlock:10, kind:'passive', icon:'⭕', name:'폭발 범위', max:5,
+     sub:'폭발 반경', req:['explo',2],
+     eff:l=>`폭발 범위 +${l*4}%`,
+     desc:'한 번에 더 넓게. 겹친 적을 통째로.'},
+    {id:'frag', tier:3, unlock:15, kind:'passive', icon:'✳️', name:'파편 폭발', max:3,
+     sub:'폭발 시 파편', req:['nade',2],
+     eff:l=>`폭발 시 파편 ${l===3?10:l===2?7:4}개 생성`,
+     desc:'폭발 1회가 2차 피해로. 잡몹 무리에 특효.'},
+    {id:'fire', tier:3, unlock:15, kind:'passive', icon:'🌋', name:'화염 지대', max:3,
+     sub:'바닥 지속 피해', req:['nade',3],
+     eff:l=>`폭발 후 화염 장판 지속 ${l+1}초 (초당 피해)`,
+     desc:'적이 지나는 길목을 불바다로. 지역 장악.'},
+    {id:'multinade', tier:4, unlock:20, kind:'passive', icon:'🎇', name:'다연장', max:2,
+     sub:'동시 투척 수', req:['radius',2],
+     eff:l=>`수류탄 동시 투척 +${l}`,
+     desc:'여러 밀집 지점을 동시에. 광역 폭딜.'},
+    {id:'chain', tier:4, unlock:20, kind:'passive', icon:'♻️', name:'처치 연쇄', max:3,
+     sub:'처치 시 2차 폭발', req:['fire',1],
+     eff:l=>`폭발 처치 시 ${l===3?60:l===2?45:30}% 확률 2차 폭발`,
+     desc:'물량이 많을수록 연쇄가 커지는 스노볼.'},
+    {id:'cap_c', tier:5, unlock:25, kind:'cap', icon:'👑', name:'융단 폭격', max:1,
+     sub:'⭐ 캡스톤', req:['multinade',1,'chain',1], reqAny:true,
+     eff:_=>`일정 시간마다 화면 곳곳 자동 폭격(예고 후 착탄) · 밀집지 초토화`,
+     desc:'폭발 빌드의 궁극. 가만히 있어도 사방이 터진다.'},
+   ]},
+};
+
+// ─────────────────────────────────────────────────────────────
+// 능력치 (스킬과 별도 포인트 풀). per=1pt당 효과, 계열 궁합.
+// ─────────────────────────────────────────────────────────────
+const ATTRS = [
+  {id:'str', icon:'💪', name:'힘',   per:'기본 활 피해 +2 · 모든 피해 +1%',
+    desc:'모든 피해의 바닥을 올린다. 정밀 사격(보스)과 궁합.'},
+  {id:'agi', icon:'🏃', name:'민첩', per:'이동속도 +1% · 공격속도 +1.5%',
+    desc:'더 빠르게 쏘고 피한다. 질풍 사냥(카이팅)과 궁합.'},
+  {id:'int', icon:'🧠', name:'지능', per:'스킬 쿨감 +0.6%(상한 40) · 스킬 범위 +1%',
+    desc:'스킬을 더 자주·넓게. 사냥 도구(폭발)와 궁합.'},
+  {id:'vit', icon:'❤️', name:'활력', per:'최대 체력 +6 · 초당 회복 +0.1',
+    desc:'맞아도 버틴다. 어느 빌드든 생존 보강.'},
+];
+
+// ─── 상태 ───
+let points = 12;                 // 스킬 포인트
+let apoints = 8;                 // 능력치 포인트
+let cur = 'a';
+let openNode = null;
+let selAttr = 'str';
+const attr = {str:5, agi:3, int:2, vit:4};   // 시안 초기값
+const lvl = {}; // id -> 현재 레벨
+Object.values(TREES).forEach(t=>t.nodes.forEach(n=>lvl[n.id]=0));
+
+const $ = s=>document.querySelector(s);
+const nodeById = id=>{for(const t of Object.values(TREES)){const n=t.nodes.find(x=>x.id===id); if(n)return n;} return null;};
+
+// 노드 상태 계산: locked / avail / owned / maxed
+function nodeState(n){
+  if(lvl[n.id]>=n.max) return 'maxed';
+  if(lvl[n.id]>0) return 'owned';
+  // 미투자 → 해금 조건 판정
+  return canLearn(n) ? 'avail' : 'locked';
+}
+function prereqOk(n){
+  if(!n.req) return true;
+  if(n.reqAny){ // [id,lv, id,lv] 중 하나 이상
+    for(let i=0;i<n.req.length;i+=2){ if(lvl[n.req[i]]>=n.req[i+1]) return true; }
+    return false;
+  }
+  return lvl[n.req[0]] >= n.req[1];
+}
+function canLearn(n){
+  if(lvl[n.id]>=n.max) return false;
+  if(CHAR_LV < n.unlock) return false;
+  if(!prereqOk(n)) return false;
+  if(points<=0) return false;
+  return true;
+}
+
+// ─── 능력치 렌더 ───
+function renderStats(){
+  $('#apN').textContent = apoints;
+  const row = $('#statRow');
+  row.innerHTML = ATTRS.map(a=>`
+    <div class="stat ${a.id===selAttr?'sel':''}" data-attr="${a.id}">
+      <div class="si">${a.icon}</div>
+      <div class="snm">${a.name}</div>
+      <div class="sv">${attr[a.id]}</div>
+    </div>`).join('');
+  row.querySelectorAll('.stat').forEach(el=>{
+    el.onclick=()=>{ selAttr=el.dataset.attr; renderStats(); };
+  });
+  const a = ATTRS.find(x=>x.id===selAttr);
+  $('#statDetail').innerHTML = `
+    <div class="sd-body">
+      <div class="sd-eff">${a.icon} ${a.name} · +1pt당 ${a.per}</div>
+      <div class="sd-desc">${a.desc} (현재 ${attr[a.id]})</div>
+    </div>
+    <button class="stat-up" id="statUp" ${apoints<=0?'disabled':''}>+</button>`;
+  const up=$('#statUp');
+  if(up) up.onclick=()=>{
+    if(apoints<=0) return;
+    apoints--; attr[selAttr]++;
+    toast(`${a.name} ${attr[selAttr]} (+1)`);
+    renderStats();
+  };
+}
+
+// ─── 렌더 ───
+const UNLOCK_OF = {1:'Lv1',2:'Lv5',3:'Lv10',4:'Lv15',5:'Lv20+'};
+
+function nodeCard(n, featured){
+  const st = nodeState(n);
+  const pct = Math.round(lvl[n.id]/n.max*100);
+  const cls = ['node', st,
+    n.kind==='active'?'act':'', n.kind==='cap'?'cap':'', featured?'featured':''
+  ].filter(Boolean).join(' ');
+  if(featured){
+    return `<div class="${cls}" data-id="${n.id}">
+      <div class="icon">${n.icon}</div>
+      <div class="feat-body">
+        <div class="feat-tag">주력 액티브 · TIER ${n.tier} 해금</div>
+        <div class="nm">${n.name}</div>
+        <div class="feat-sub">${n.sub}</div>
+        <div class="barwrap"><div class="bar" style="width:${pct}%"></div></div>
+      </div>
+      <span class="lv">${lvl[n.id]}/${n.max}</span>
+    </div>`;
+  }
+  const capMark = n.kind==='cap' ? '<span class="kind">⭐</span>' : '';
+  return `<div class="${cls}" data-id="${n.id}">
+    ${capMark}
+    <span class="lv">${lvl[n.id]}/${n.max}</span>
+    <div class="icon">${n.icon}</div>
+    <div class="nm">${n.name}</div>
+    <div class="barwrap"><div class="bar" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+function render(){
+  $('#ptsN').textContent = points;
+  const t = TREES[cur];
+  const wrap = $('#treeWrap');
+  wrap.dataset.tree = cur;                      // 계열색(active 배경) 판정용
+  const tiers = [...new Set(t.nodes.map(n=>n.tier))].sort((a,b)=>a-b);
+  const primary = t.nodes.find(n=>n.kind==='active');  // 처음 배우는 액티브 = 주력기
+
+  let html = `<div class="tree-head">${t.desc}</div>`;
+  if(primary) html += nodeCard(primary, true);   // 제일 위 1순위
+
+  for(const tr of tiers){
+    const list = t.nodes.filter(x=>x.tier===tr && x!==primary);
+    if(!list.length) continue;
+    html += `<div class="tier"><div class="tier-label">TIER ${tr} · ${UNLOCK_OF[tr]||''} 해금</div><div class="nodes">`;
+    for(const n of list) html += nodeCard(n, false);
+    html += `</div></div>`;
+  }
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.node').forEach(el=>{
+    el.onclick = ()=>openSheet(el.dataset.id);
+  });
+}
+
+// ─── 상세 시트 ───
+function openSheet(id){
+  openNode = id;
+  const n = nodeById(id);
+  const lv = lvl[id];
+  const isMax = lv>=n.max;
+  const can = canLearn(n);
+
+  // 효과: 현재/다음 레벨
+  let effHtml = '';
+  const curEff = lv>0 ? n.eff(lv) : '—';
+  const nextEff = isMax ? null : n.eff(lv+1);
+  effHtml += `<div class="row ${lv>0?'now':''}"><span class="k">현재 (Lv${lv})</span><span>${curEff}</span></div>`;
+  if(nextEff) effHtml += `<div class="row"><span class="k">다음 (Lv${lv+1})</span><span>${nextEff}</span></div>`;
+
+  // 선행조건
+  let preHtml = '';
+  if(n.req){
+    const parts=[];
+    for(let i=0;i<n.req.length;i+=2){
+      const rn = nodeById(n.req[i]);
+      parts.push(`${rn.name} ${n.req[i+1]}`);
+    }
+    const joiner = n.reqAny ? ' 또는 ' : ', ';
+    const ok = prereqOk(n);
+    preHtml = `<div class="prereq ${ok?'ok':'no'}">${ok?'✔':'✖'} 선행: ${parts.join(joiner)}</div>`;
+  }
+  if(CHAR_LV < n.unlock){
+    preHtml += `<div class="prereq no">✖ 캐릭터 Lv${n.unlock} 필요 (현재 ${CHAR_LV})</div>`;
+  }
+
+  const kindTxt = n.kind==='active'?'🎯 액티브':n.kind==='cap'?'⭐ 캡스톤':'⬆ 패시브';
+  let btn;
+  if(isMax) btn = `<button class="learn" disabled>최대 레벨 달성</button>`;
+  else if(can) btn = `<button class="learn" id="doLearn">${lv>0?'업그레이드':'배우기'} (1 pt)</button>`;
+  else {
+    let why = points<=0 ? '포인트 부족' : CHAR_LV<n.unlock ? '레벨 부족' : '선행조건 미충족';
+    btn = `<button class="learn" disabled>${why}</button>`;
+  }
+  const resetBtn = lv>0 ? `<button class="learn reset" id="doReset">이 스킬 초기화 (${lv} pt 환급)</button>` : '';
+
+  $('#sheet').innerHTML = `
+    <div class="grab"></div>
+    <div class="s-top">
+      <div class="s-icon">${n.icon}</div>
+      <div>
+        <div class="s-title">${n.name}</div>
+        <div class="s-sub">${kindTxt} · ${n.sub}</div>
+      </div>
+    </div>
+    <div class="s-desc">${n.desc}</div>
+    <div class="s-effect">${effHtml}</div>
+    ${preHtml}
+    ${btn}
+    ${resetBtn}
+  `;
+  const dl=$('#doLearn'); if(dl) dl.onclick=()=>learn(id);
+  const dr=$('#doReset'); if(dr) dr.onclick=()=>resetNode(id);
+  $('#backdrop').classList.add('on');
+  $('#sheet').classList.add('on');
+}
+function closeSheet(){
+  $('#backdrop').classList.remove('on');
+  $('#sheet').classList.remove('on');
+  openNode=null;
+}
+
+function learn(id){
+  const n = nodeById(id);
+  if(!canLearn(n)) return;
+  lvl[id]++; points--;
+  toast(`${n.name} Lv${lvl[id]} ${lvl[id]===1?'배움':'업그레이드'}!`);
+  render(); openSheet(id); // 시트 갱신
+}
+function resetNode(id){
+  const n = nodeById(id);
+  // 이 노드를 선행으로 쓰는 다른 노드가 투자돼 있으면 막기(간단 검증)
+  for(const t of Object.values(TREES)) for(const o of t.nodes){
+    if(lvl[o.id]>0 && o.req){
+      for(let i=0;i<o.req.length;i+=2){
+        if(o.req[i]===id && !(o.reqAny)){ toast(`${o.name}가 이 스킬을 필요로 함`); return; }
+      }
+    }
+  }
+  points += lvl[id]; lvl[id]=0;
+  toast(`${n.name} 초기화`);
+  render(); openSheet(id);
+}
+
+let toastT;
+function toast(msg){
+  const el=$('#toast'); el.textContent=msg; el.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),1300);
+}
+
+// 탭
+$('#tabs').querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    $('#tabs').querySelector('.active').classList.remove('active');
+    tab.classList.add('active');
+    cur=tab.dataset.tree; closeSheet(); render();
+    $('#treeWrap').scrollTop=0;
+  };
+});
+$('#backdrop').onclick=closeSheet;
+
+renderStats();
+render();
+</script>
+</body>
+</html>
