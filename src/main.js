@@ -93,8 +93,12 @@ class GameScene extends Phaser.Scene {
     this.enemies = []
     this.arrows = []
     this.explosions = [] // 수류탄 폭발 이펙트
+    this.eProjectiles = [] // 적 투사체 (보스 탄막)
+    this.telegraphs = [] // 탄막 예고 표시
     this.enemyPool = []
     this.arrowPool = []
+    this.eProjPool = []
+    this.telePool = []
     this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
@@ -543,6 +547,7 @@ class GameScene extends Phaser.Scene {
     e.kbx = 0
     e.kby = 0
     e.flash = 0
+    e.atk = spec.boss ? this.cfg.boss.attackInterval : 0 // 보스 탄막 타이머
     this.enemies.push(e)
     return e
   }
@@ -792,6 +797,72 @@ class GameScene extends Phaser.Scene {
 
     this.explosions.push({ x, y, r, life: 0.3, max: 0.3 })
     this.cameras.main.shake(80, 0.003)
+  }
+
+  // --- 보스 탄막 (예고 → 실탄) ---------------------------------------------
+
+  fireBossLine(boss) {
+    const b = this.cfg.boss
+    const base = Math.atan2(this.player.y - boss.y, this.player.x - boss.x)
+    const mid = (b.lineCount - 1) / 2
+    for (let i = 0; i < b.lineCount; i++) {
+      const ang = base + (i - mid) * b.lineSpread
+      const t = this.telePool.pop() || {}
+      t.x = boss.x
+      t.y = boss.y
+      t.ang = ang
+      t.life = b.telegraphTime
+      t.max = b.telegraphTime
+      this.telegraphs.push(t)
+    }
+  }
+
+  updateTelegraphs(dt) {
+    const b = this.cfg.boss
+    for (let i = this.telegraphs.length - 1; i >= 0; i--) {
+      const t = this.telegraphs[i]
+      t.life -= dt
+      if (t.life > 0) continue
+      // 예고 끝 → 실탄 발사
+      const p = this.eProjPool.pop() || {}
+      p.x = t.x
+      p.y = t.y
+      p.vx = Math.cos(t.ang) * b.boltSpeed
+      p.vy = Math.sin(t.ang) * b.boltSpeed
+      p.dmg = b.boltDamage
+      p.life = 4
+      this.eProjectiles.push(p)
+      this.removeSwap(this.telegraphs, i, this.telePool)
+    }
+  }
+
+  updateEnemyProjectiles(dt) {
+    const pr = this.stats.player.radius
+    const px = this.player.x
+    const py = this.player.y
+    let incoming = 0
+
+    for (let i = this.eProjectiles.length - 1; i >= 0; i--) {
+      const p = this.eProjectiles[i]
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.life -= dt
+
+      const dx = px - p.x
+      const dy = py - p.y
+      const hit = pr + 5
+      if (dx * dx + dy * dy < hit * hit) {
+        if (p.dmg > incoming) incoming = p.dmg
+        this.removeSwap(this.eProjectiles, i, this.eProjPool)
+        continue
+      }
+      // 화면(플레이어 주변)에서 너무 멀어지거나 수명 끝
+      if (p.life <= 0 || dx * dx + dy * dy > DESPAWN_DIST * DESPAWN_DIST) {
+        this.removeSwap(this.eProjectiles, i, this.eProjPool)
+      }
+    }
+
+    if (incoming > 0 && this.invulnLeft === 0) this.hitPlayer(incoming)
   }
 
   // 스킬 발동 순간 플레이어를 잠깐 빛나게 (뭔가 터졌다는 신호)
@@ -1156,6 +1227,8 @@ class GameScene extends Phaser.Scene {
 
     this.updateArrows(dt)
     this.updateEnemies(dt)
+    this.updateTelegraphs(dt)
+    this.updateEnemyProjectiles(dt)
     this.render()
 
     this.perfText.setText(
@@ -1259,6 +1332,15 @@ class GameScene extends Phaser.Scene {
       e.kby *= decay
       if (e.flash > 0) e.flash -= dt
 
+      // 보스 탄막 타이머
+      if (e.boss) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += this.cfg.boss.attackInterval
+          this.fireBossLine(e)
+        }
+      }
+
       const touch = pr + e.r
       if (dx * dx + dy * dy < touch * touch && e.dmg > incoming) {
         incoming = e.dmg
@@ -1344,6 +1426,25 @@ class GameScene extends Phaser.Scene {
       gf.strokeCircle(ex.x, ex.y, ex.r * (1.3 - 0.3 * k))
       gf.fillStyle(COLOR_ARROW, k * 0.18)
       gf.fillCircle(ex.x, ex.y, ex.r)
+    }
+
+    // 보스 탄막 예고 — 발사 직전일수록 진해지는 라인
+    const TELE_LEN = 900
+    for (let i = 0; i < this.telegraphs.length; i++) {
+      const t = this.telegraphs[i]
+      const k = 1 - t.life / t.max // 0 → 1 (발사 임박)
+      gf.lineStyle(2 + k * 2, 0xf38ba8, 0.25 + k * 0.5)
+      gf.beginPath()
+      gf.moveTo(t.x, t.y)
+      gf.lineTo(t.x + Math.cos(t.ang) * TELE_LEN, t.y + Math.sin(t.ang) * TELE_LEN)
+      gf.strokePath()
+    }
+
+    // 적 투사체 (보스 탄)
+    gf.fillStyle(0xf38ba8, 1)
+    for (let i = 0; i < this.eProjectiles.length; i++) {
+      const p = this.eProjectiles[i]
+      gf.fillCircle(p.x, p.y, 6)
     }
   }
 }

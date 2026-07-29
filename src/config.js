@@ -43,6 +43,13 @@ export const DEFAULTS = {
     radius: 26,
     knockbackResist: 0.15,
     gems: 12,
+    // 라인 부채꼴 탄막 (예고 → 실탄)
+    attackInterval: 3.5, // 공격 주기(초)
+    lineCount: 5, // 부채꼴 라인 수
+    lineSpread: 0.3, // 라인 사이 각도(라디안)
+    boltSpeed: 210, // 탄속(px/s)
+    boltDamage: 12, // 탄 하나의 피해
+    telegraphTime: 0.8, // 예고 표시 시간(초)
   },
   xp: {
     gemValue: 1,
@@ -366,6 +373,30 @@ export const SCHEMA = [
         max: 50,
         step: 1,
         effect: '↑ 처치 시 성장 보상 큼  ·  ↓ 보상 적음',
+      },
+      {
+        key: 'attackInterval',
+        label: '탄막 주기(초)',
+        min: 1,
+        max: 10,
+        step: 0.5,
+        effect: '↑ 뜸하게 탄막  ·  ↓ 자주 쏨(위협↑)',
+      },
+      {
+        key: 'lineCount',
+        label: '탄막 라인 수',
+        min: 1,
+        max: 15,
+        step: 1,
+        effect: '↑ 부채꼴 라인 많아 피하기 어려움  ·  ↓ 적음',
+      },
+      {
+        key: 'boltDamage',
+        label: '탄 피해',
+        min: 1,
+        max: 60,
+        step: 1,
+        effect: '↑ 탄 하나가 치명적  ·  ↓ 덜 아픔',
       },
     ],
   },

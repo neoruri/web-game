@@ -64,6 +64,8 @@ export function simulate(cfg, opts = {}) {
     fireAcc: 0,
     enemies: [],
     arrows: [],
+    eProjectiles: [],
+    telegraphs: [],
   }
 
   const skillAcc = {}
@@ -81,6 +83,8 @@ export function simulate(cfg, opts = {}) {
   const explodeBuf = [] // 폭발 조회용 (buf 와 겹치면 안 됨)
   const enemyPool = []
   const arrowPool = []
+  const eProjPool = []
+  const telePool = []
 
   const minute = () => Math.floor(state.t / 60)
   const spawnMult = () =>
@@ -113,6 +117,7 @@ export function simulate(cfg, opts = {}) {
     en.boss = spec.boss
     en.kbx = 0
     en.kby = 0
+    en.atk = spec.boss ? cfg.boss.attackInterval : 0
     state.enemies.push(en)
   }
 
@@ -278,6 +283,62 @@ export function simulate(cfg, opts = {}) {
         fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
       }
     }
+  }
+
+  // 보스 탄막 (main.js 와 동일)
+  function fireBossLine(boss) {
+    const b = cfg.boss
+    const base = Math.atan2(state.py - boss.y, state.px - boss.x)
+    const mid = (b.lineCount - 1) / 2
+    for (let i = 0; i < b.lineCount; i++) {
+      const t = telePool.pop() || {}
+      t.x = boss.x
+      t.y = boss.y
+      t.ang = base + (i - mid) * b.lineSpread
+      t.life = b.telegraphTime
+      state.telegraphs.push(t)
+    }
+  }
+
+  function updateTelegraphs() {
+    const b = cfg.boss
+    for (let i = state.telegraphs.length - 1; i >= 0; i--) {
+      const t = state.telegraphs[i]
+      t.life -= dt
+      if (t.life > 0) continue
+      const p = eProjPool.pop() || {}
+      p.x = t.x
+      p.y = t.y
+      p.vx = Math.cos(t.ang) * b.boltSpeed
+      p.vy = Math.sin(t.ang) * b.boltSpeed
+      p.dmg = b.boltDamage
+      p.life = 4
+      state.eProjectiles.push(p)
+      removeSwap(state.telegraphs, i, telePool)
+    }
+  }
+
+  function updateEnemyProjectiles() {
+    const pr = stats.player.radius
+    let incoming = 0
+    for (let i = state.eProjectiles.length - 1; i >= 0; i--) {
+      const p = state.eProjectiles[i]
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.life -= dt
+      const dx = state.px - p.x
+      const dy = state.py - p.y
+      const hit = pr + 5
+      if (dx * dx + dy * dy < hit * hit) {
+        if (p.dmg > incoming) incoming = p.dmg
+        removeSwap(state.eProjectiles, i, eProjPool)
+        continue
+      }
+      if (p.life <= 0 || dx * dx + dy * dy > DESPAWN_DIST * DESPAWN_DIST) {
+        removeSwap(state.eProjectiles, i, eProjPool)
+      }
+    }
+    if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
   }
 
   function explodeAt(x, y, r, dmg) {
@@ -473,6 +534,8 @@ export function simulate(cfg, opts = {}) {
     updateBursts()
     updateArrows()
     updateEnemies()
+    updateTelegraphs()
+    updateEnemyProjectiles()
   }
 
   function updateArrows() {
@@ -553,6 +616,14 @@ export function simulate(cfg, opts = {}) {
       e.y += (dy / len) * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
+
+      if (e.boss) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += cfg.boss.attackInterval
+          fireBossLine(e)
+        }
+      }
 
       const touch = pr + e.r
       if (dx * dx + dy * dy < touch * touch && e.dmg > incoming) incoming = e.dmg
