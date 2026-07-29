@@ -12,22 +12,40 @@
     --locked:#3a4152; --avail:#2b4a6b; --owned:#2f6b45; --max:#7a5a12;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%}
+  html,body{margin:0}
+  html{scroll-behavior:smooth}
   body{
     background:var(--bg); color:var(--txt);
     font-family:-apple-system,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
-    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+    min-height:100dvh; padding-bottom:76px;   /* 하단 스크롤 힌트 자리 */
   }
   header{
-    padding:10px 14px; border-bottom:1px solid var(--line);
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:11px 14px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:8px;
   }
   header h1{font-size:15px; margin:0; font-weight:700}
-  .pts{font-size:13px; color:var(--gold); font-weight:700; white-space:nowrap}
-  .pts small{color:var(--dim); font-weight:500}
+
+  /* 섹션 구분 */
+  .sect-gap{height:7px; background:#0c0e14; border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+  .sect-hd{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:13px; font-weight:800;
+  }
+  .sect-hd .badge{font-size:12px; color:var(--gold); font-weight:800; white-space:nowrap}
+  .sect-hd .badge small{color:var(--dim); font-weight:500}
+  .sect-stat{padding:12px 12px 4px}
+  .sect-stat .sect-hd{margin:0 2px 9px}
+
+  /* 스킬 섹션: 헤더+탭을 상단 고정 바로 (스크롤해도 탭 접근 가능) */
+  .skill-bar{
+    position:sticky; top:0; z-index:15;
+    background:var(--bg); border-bottom:1px solid var(--line);
+    padding:11px 12px 8px; box-shadow:0 6px 12px -8px rgba(0,0,0,.6);
+  }
+  .skill-bar .sect-hd{margin:0 2px 9px}
 
   /* 탭 */
-  .tabs{display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line)}
+  .tabs{display:flex; gap:6px}
   .tab{
     flex:1; padding:9px 4px; border:1px solid var(--line); border-radius:10px;
     background:var(--panel); color:var(--dim); font-size:12.5px; font-weight:700;
@@ -39,11 +57,8 @@
   .tab[data-tree="b"].active{border-color:var(--t2); background:#1a2a25}
   .tab[data-tree="c"].active{border-color:var(--t3); background:#2a241a}
 
-  /* 능력치 패널 (탭 위) */
-  .statbar{padding:10px 10px 8px; border-bottom:1px solid var(--line)}
-  .stat-hd{font-size:12px; color:var(--dim); font-weight:700; margin:0 2px 8px}
-  .stat-hd span{color:var(--gold); font-size:14px}
-  .stat-hd small{font-weight:500}
+  /* 능력치 패널 */
+  .statbar{padding:0 2px}
   .stat-row{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
   .stat{
     border:1.5px solid var(--line); border-radius:10px; background:var(--panel);
@@ -68,8 +83,8 @@
   }
   .stat-up:disabled{background:var(--panel); color:var(--dim); border:1px solid var(--line); cursor:not-allowed}
 
-  /* 트리 영역 */
-  .tree-wrap{flex:1; overflow-y:auto; overflow-x:hidden; padding:12px 12px 24px}
+  /* 트리 영역 (자체 스크롤 없음 — 페이지 전체가 스크롤) */
+  .tree-wrap{padding:14px 12px 8px}
   .tree-head{font-size:12px; color:var(--dim); margin:2px 2px 12px; line-height:1.5}
   .tier{margin-bottom:6px}
   .tier-label{
@@ -127,6 +142,25 @@
   .node.featured .lv{position:static; align-self:flex-start; font-size:13px}
   .node.featured .barwrap{margin-top:4px}
 
+  /* 하단 스크롤 힌트 (더 있음 표시) */
+  .scroll-fade{
+    position:fixed; left:0; right:0; bottom:0; height:64px; z-index:9;
+    background:linear-gradient(to top, var(--bg) 20%, transparent);
+    pointer-events:none; opacity:0; transition:opacity .2s;
+  }
+  .scroll-hint{
+    position:fixed; left:50%; bottom:16px; transform:translateX(-50%);
+    z-index:10; display:flex; align-items:center; gap:6px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:20px;
+    padding:7px 14px; font-size:12px; font-weight:700; color:var(--txt);
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+    opacity:0; transition:opacity .2s, transform .2s; pointer-events:none;
+  }
+  .scroll-hint .arw{display:inline-block; animation:bob 1s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(3px)}}
+  .scroll-fade.on{opacity:1}
+  .scroll-hint.on{opacity:1}
+
   /* 상세 시트 (하단 슬라이드) */
   .backdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.55); opacity:0; pointer-events:none;
@@ -179,23 +213,37 @@
 </head>
 <body>
   <header>
-    <h1>🏹 사냥꾼 스킬 트리 <span style="color:var(--dim);font-weight:500;font-size:12px">시안</span></h1>
-    <div class="pts">보유 <span id="ptsN">12</span><small> pt</small></div>
+    <h1>🏹 사냥꾼 성장 <span style="color:var(--dim);font-weight:500;font-size:12px">시안</span></h1>
   </header>
 
-  <section class="statbar">
-    <div class="stat-hd">능력치 <span id="apN">8</span><small> pt</small></div>
-    <div class="stat-row" id="statRow"></div>
-    <div class="stat-detail" id="statDetail"></div>
+  <!-- ⚔️ 능력치 섹션 -->
+  <section class="sect-stat">
+    <div class="sect-hd"><span>⚔️ 능력치</span>
+      <span class="badge"><span id="apN">8</span><small> pt</small></span></div>
+    <div class="statbar">
+      <div class="stat-row" id="statRow"></div>
+      <div class="stat-detail" id="statDetail"></div>
+    </div>
   </section>
 
-  <nav class="tabs" id="tabs">
-    <div class="tab active" data-tree="a"><span class="em">🎯</span>정밀 사격</div>
-    <div class="tab" data-tree="b"><span class="em">🌪️</span>질풍 사냥</div>
-    <div class="tab" data-tree="c"><span class="em">💣</span>사냥 도구</div>
-  </nav>
+  <div class="sect-gap"></div>
 
-  <main class="tree-wrap" id="treeWrap"></main>
+  <!-- 🌳 스킬 트리 섹션 -->
+  <section class="sect-skill">
+    <div class="skill-bar">
+      <div class="sect-hd"><span>🌳 스킬 트리</span>
+        <span class="badge"><span id="ptsN">12</span><small> pt</small></span></div>
+      <nav class="tabs" id="tabs">
+        <div class="tab active" data-tree="a"><span class="em">🎯</span>정밀 사격</div>
+        <div class="tab" data-tree="b"><span class="em">🌪️</span>질풍 사냥</div>
+        <div class="tab" data-tree="c"><span class="em">💣</span>사냥 도구</div>
+      </nav>
+    </div>
+    <main class="tree-wrap" id="treeWrap"></main>
+  </section>
+
+  <div class="scroll-fade" id="scrollFade"></div>
+  <div class="scroll-hint" id="scrollHint"><span class="arw">▼</span> 아래로 스크롤</div>
 
   <div class="backdrop" id="backdrop"></div>
   <section class="sheet" id="sheet"></section>
@@ -568,13 +616,27 @@ $('#tabs').querySelectorAll('.tab').forEach(tab=>{
     $('#tabs').querySelector('.active').classList.remove('active');
     tab.classList.add('active');
     cur=tab.dataset.tree; closeSheet(); render();
-    $('#treeWrap').scrollTop=0;
+    // 스킬 트리 상단(스티키 바)으로 포커스
+    document.querySelector('.sect-skill').scrollIntoView?.({block:'start'});
+    updateScrollHint();
   };
 });
 $('#backdrop').onclick=closeSheet;
 
+// 하단 스크롤 힌트: 더 볼 게 있으면 표시, 바닥이면 숨김
+function updateScrollHint(){
+  const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+  const atBottom = window.scrollY >= scrollable - 24;
+  const show = scrollable > 40 && !atBottom;
+  $('#scrollFade').classList.toggle('on', show);
+  $('#scrollHint').classList.toggle('on', show);
+}
+window.addEventListener('scroll', updateScrollHint, {passive:true});
+window.addEventListener('resize', updateScrollHint);
+
 renderStats();
 render();
+updateScrollHint();
 </script>
 </body>
 </html>

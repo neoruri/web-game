@@ -7,6 +7,7 @@ export default defineConfig({
         main: 'index.html',
         tuner: 'tuner.html', // 밸런스 튜너 (개발용, /tuner.html)
         lab: 'lab.html', // 밸런스 랩 (분석용, /lab.html)
+        skilltree: 'skilltree.html', // 스킬트리/능력치 UI 시안 (/skilltree.html)
       },
     },
   },
