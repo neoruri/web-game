@@ -1,7 +1,9 @@
 // 모든 튜닝 수치의 단일 출처.
 // 게임·튜너·랩·시뮬레이터가 이 파일을 공유하고, localStorage 로 값을 주고받는다.
 
-const KEY = 'survivor.config.v1'
+// 저장 키에 버전을 붙인다. 밸런스 기본값을 크게 바꿀 때 버전을 올리면
+// 브라우저에 남은 옛 저장값을 무시하고 새 기본값으로 시작한다.
+const KEY = 'survivor.config.v2'
 
 export const DEFAULTS = {
   player: {
@@ -17,9 +19,9 @@ export const DEFAULTS = {
     speed: 1200,
     pierce: 1,
     knockback: 70,
-    // 무한 월드에서는 사거리가 화면을 덮을 만큼 넉넉해야 한다.
-    // 짧으면 이동 중 적이 뒤처져 조준 대상이 사라져 발사가 끊긴다.
-    range: 380,
+    // 무한 월드에서는 사거리가 화면을 덮어야 한다. 화면 세로가 960이라
+    // 플레이어(중앙)에서 화면 끝까지 480 — 그보다 커야 화면 내 적을 항상 조준한다.
+    range: 620,
   },
   enemy: {
     hp: 10,
