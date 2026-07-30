@@ -713,6 +713,19 @@ export function simulate(cfg, opts = {}) {
       e.kbx *= decay
       e.kby *= decay
 
+      // 플레이어 겹침 방지 (main.js 동기화)
+      const minD = pr + e.r
+      const odx = e.x - state.px
+      const ody = e.y - state.py
+      const od2 = odx * odx + ody * ody
+      if (od2 < minD * minD) {
+        const od = Math.sqrt(od2)
+        const ux = od > 0.001 ? odx / od : 1
+        const uy = od > 0.001 ? ody / od : 0
+        e.x = state.px + ux * minD
+        e.y = state.py + uy * minD
+      }
+
       if (e.boss) {
         e.atk -= dt
         if (e.atk <= 0) {
@@ -728,7 +741,7 @@ export function simulate(cfg, opts = {}) {
       }
 
       const touch = pr + e.r
-      if (dx * dx + dy * dy < touch * touch && e.dmg > incoming) incoming = e.dmg
+      if (dx * dx + dy * dy <= touch * touch && e.dmg > incoming) incoming = e.dmg
     }
     if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
   }

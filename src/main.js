@@ -1459,6 +1459,19 @@ class GameScene extends Phaser.Scene {
       e.kby *= decay
       if (e.flash > 0) e.flash -= dt
 
+      // 플레이어 겹침 방지 — 접촉 반경 안으로 파고들면 가장자리로 밀어냄
+      const minD = pr + e.r
+      const odx = e.x - px
+      const ody = e.y - py
+      const od2 = odx * odx + ody * ody
+      if (od2 < minD * minD) {
+        const od = Math.sqrt(od2)
+        const ux = od > 0.001 ? odx / od : 1
+        const uy = od > 0.001 ? ody / od : 0
+        e.x = px + ux * minD
+        e.y = py + uy * minD
+      }
+
       // 보스 라인 탄막 / 원거리형 단발
       if (e.boss) {
         e.atk -= dt
@@ -1474,8 +1487,9 @@ class GameScene extends Phaser.Scene {
         }
       }
 
+      // 가장자리에 닿아 있으면(겹침 방지로 딱 붙은 상태 포함) 접촉 피해
       const touch = pr + e.r
-      if (dx * dx + dy * dy < touch * touch && e.dmg > incoming) {
+      if (dx * dx + dy * dy <= touch * touch && e.dmg > incoming) {
         incoming = e.dmg
       }
     }
