@@ -5,9 +5,9 @@
   inset: 0;
   z-index: 100;
   display: flex;
-  align-items: center;
+  align-items: stretch;              /* 세로로 꽉 채움 (전체 페이지) */
   justify-content: center;
-  background: rgba(17, 17, 27, 0.82);
+  background: #11111b;               /* 불투명 — 게임 씬 완전히 가림 */
   font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
   color: #cdd6f4;
   -webkit-user-select: none;
@@ -16,15 +16,17 @@
 #growth-modal.growth-hidden { display: none; }
 #growth-modal * { box-sizing: border-box; }
 
+/* 전체 화면 페이지 — 모바일은 꽉 차고, 넓은 화면에선 세로 게임 폭(560)만큼 중앙 */
 .growth-panel {
   position: relative;                /* 상세 시트 기준 */
-  width: min(94vw, 460px);
-  height: min(92dvh, 820px);         /* dvh: 모바일 주소창 포함 안 함 → 헤더 잘림 방지 */
+  width: min(100vw, 560px);
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: #1e1e2e;
-  border: 1px solid #45475a;
-  border-radius: 14px;
+  border: 0;
+  border-left: 1px solid #313244;
+  border-right: 1px solid #313244;
   overflow: hidden;
 }
 
@@ -32,7 +34,8 @@
 .growth-head {
   position: relative; z-index: 30; background: #1e1e2e;
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 14px; border-bottom: 1px solid #313244;
+  padding: max(12px, env(safe-area-inset-top)) 14px 12px;   /* 노치/상단바 안전영역 */
+  border-bottom: 1px solid #313244;
 }
 .growth-title { display: flex; flex-direction: column; gap: 2px; }
 .g-level { font-size: 17px; font-weight: 700; }
