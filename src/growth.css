@@ -1,11 +1,12 @@
-/* 성장 화면 오버레이 — 능력치 + 스킬 트리(시안 이식) */
+/* 성장 화면 — 게임 캔버스 위 전체 페이지. 3단 고정 레이아웃.
+   [헤더 고정] / [스크롤: 능력치+스킬트리] / [정보 독 하단 고정] — 오버레이 없음 */
 
 #growth-modal {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: flex;
-  align-items: stretch;              /* 세로로 꽉 채움 (전체 페이지) */
+  align-items: stretch;
   justify-content: center;
   background: #11111b;               /* 불투명 — 게임 씬 완전히 가림 */
   font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
@@ -16,25 +17,22 @@
 #growth-modal.growth-hidden { display: none; }
 #growth-modal * { box-sizing: border-box; }
 
-/* 전체 화면 페이지 — 모바일은 꽉 차고, 넓은 화면에선 세로 게임 폭(560)만큼 중앙 */
 .growth-panel {
-  position: relative;                /* 상세 시트 기준 */
   width: min(100vw, 560px);
   height: 100dvh;
   display: flex;
   flex-direction: column;
   background: #1e1e2e;
-  border: 0;
   border-left: 1px solid #313244;
   border-right: 1px solid #313244;
   overflow: hidden;
 }
 
-/* 헤더 — 백드롭 위(z30)로 올려 시트 열려도 항상 보이고 조작 가능 */
+/* 헤더 (고정) */
 .growth-head {
-  position: relative; z-index: 30; background: #1e1e2e;
+  flex: none;
   display: flex; justify-content: space-between; align-items: center;
-  padding: max(12px, env(safe-area-inset-top)) 14px 12px;   /* 노치/상단바 안전영역 */
+  padding: max(12px, env(safe-area-inset-top)) 14px 12px;
   border-bottom: 1px solid #313244;
 }
 .growth-title { display: flex; flex-direction: column; gap: 2px; }
@@ -50,8 +48,8 @@
 .g-close { padding: 8px 11px !important; }
 .growth-actions button:active { transform: scale(0.96); }
 
-/* 본문 (페이지 전체 스크롤) */
-.growth-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
+/* 스크롤 영역 (능력치 + 스킬트리) */
+.growth-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
 
 /* 섹션 공통 */
 .gv-hd {
@@ -63,38 +61,25 @@
 .gv-gap { height: 7px; background: #11111b; border-top: 1px solid #313244; border-bottom: 1px solid #313244; }
 
 /* ⚔️ 능력치 */
-.gv-sect-stat { padding: 12px 12px 10px; }
+.gv-sect-stat { padding: 12px 12px 12px; }
 .gv-sect-stat .gv-hd { margin: 0 2px 9px; }
 .gv-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .gv-stat {
   border: 1.5px solid #313244; border-radius: 10px; background: #181825;
-  padding: 7px 4px 6px; text-align: center; cursor: pointer; transition: 0.12s;
+  padding: 8px 4px 7px; text-align: center; cursor: pointer; transition: 0.12s;
 }
 .gv-stat:active { transform: scale(0.96); }
-.gv-si { font-size: 17px; line-height: 1; }
-.gv-snm { font-size: 10.5px; color: #6c7086; margin-top: 2px; }
+.gv-si { font-size: 18px; line-height: 1; }
+.gv-snm { font-size: 10.5px; color: #6c7086; margin-top: 3px; }
 .gv-sv { font-size: 14px; font-weight: 800; margin-top: 1px; font-variant-numeric: tabular-nums; }
 .gv-sv b { color: #a6e3a1; margin-left: 3px; font-size: 12px; }
-.gv-stat.sel { border-color: #f9e2af; background: #232338; }
-.gv-stat-detail {
-  display: flex; align-items: center; gap: 10px; margin-top: 8px;
-  background: #232338; border: 1px solid #313244; border-radius: 10px; padding: 9px 10px 9px 12px;
-}
-.gv-sd-body { flex: 1; min-width: 0; }
-.gv-sd-eff { font-size: 12px; color: #94e2d5; font-weight: 700; line-height: 1.4; }
-.gv-sd-next { font-size: 11px; color: #6c7086; line-height: 1.45; margin-top: 2px; }
-.gv-up {
-  flex: none; width: 44px; height: 44px; border: 0; border-radius: 11px;
-  background: #89b4fa; color: #1e1e2e; font-size: 22px; font-weight: 800; cursor: pointer;
-}
-.gv-up:disabled { background: #313244; color: #6c7086; cursor: default; }
-.gv-up:active:not(:disabled) { transform: scale(0.92); }
+.gv-stat.sel { border-color: #f9e2af; background: #232338; box-shadow: 0 0 8px rgba(249,226,175,0.15); }
 
-/* 🌳 스킬 트리 — 헤더+탭 상단 고정. z15(백드롭 위, 시트 아래) → 탭 안 어둡고 눌림 */
+/* 🌳 스킬 트리 — 헤더+탭은 스크롤 상단에 고정(sticky) */
 .gv-skillbar {
-  position: sticky; top: 0; z-index: 15;
+  position: sticky; top: 0; z-index: 2;
   background: #1e1e2e; border-bottom: 1px solid #313244;
-  padding: 11px 12px 8px; box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.6);
+  padding: 12px 12px 8px; box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.6);
 }
 .gv-skillbar .gv-hd { margin: 0 2px 9px; }
 .gv-tabs { display: flex; gap: 6px; }
@@ -106,7 +91,7 @@
 .gv-tab.on { color: #cdd6f4; border-color: var(--tc); background: #232338; }
 .gv-tab:active { transform: scale(0.97); }
 
-.gv-tree { padding: 13px 12px 8px; }
+.gv-tree { padding: 13px 12px 16px; }
 .gv-tree-head {
   font-size: 12px; color: #a6adc8; line-height: 1.5;
   border-left: 3px solid #45475a; padding-left: 8px; margin: 0 2px 12px;
@@ -114,7 +99,7 @@
 .gv-tier { margin-bottom: 4px; }
 .gv-tier-lb {
   font-size: 11px; color: #6c7086; font-weight: 700; letter-spacing: 0.02em;
-  display: flex; align-items: center; gap: 8px; margin: 6px 2px 8px;
+  display: flex; align-items: center; gap: 8px; margin: 8px 2px 8px;
 }
 .gv-tier-lb::after { content: ''; flex: 1; height: 1px; background: #313244; }
 .gv-nodes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -136,13 +121,15 @@
 .gv-bar { height: 100%; width: 0; background: #f9e2af; transition: 0.2s; }
 
 .gv-node.locked { opacity: 0.5; filter: grayscale(0.4); }
-.gv-node.avail { border-color: #89b4fa; box-shadow: 0 0 8px rgba(137, 180, 250, 0.2); }
+.gv-node.avail { border-color: #89b4fa; }
 .gv-node.owned { border-color: #a6e3a1; }
 .gv-node.maxed { border-color: #f9e2af; }
 .gv-node.maxed .gv-lv { color: #f9e2af; }
 /* 액티브 = 배경색으로 구분 (트리색 테두리 + 짙은 배경) */
 .gv-node.act { background: #242438; border-color: var(--tc); }
 .gv-node.act .gv-icon { background: rgba(255, 255, 255, 0.06); }
+/* 현재 선택된 노드(하단 독에 표시 중) */
+.gv-node.sel { box-shadow: 0 0 0 2px #f9e2af inset; }
 
 /* 주력 액티브 = 최상단 가로 카드 */
 .gv-node.feat {
@@ -157,62 +144,41 @@
 .gv-node.feat .gv-lv { position: static; align-self: flex-start; font-size: 13px; }
 .gv-node.feat .gv-barwrap { margin-top: 4px; }
 
-/* 하단 스크롤 힌트 */
-.gv-hint {
-  position: sticky; bottom: 8px; margin: 4px auto 12px; width: fit-content;
-  display: flex; align-items: center; gap: 6px;
-  background: #232338; border: 1px solid #45475a; border-radius: 20px;
-  padding: 6px 13px; font-size: 12px; font-weight: 700; color: #cdd6f4;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  opacity: 0; transition: opacity 0.2s; pointer-events: none;
+/* 하단 정보 독 (고정) — 선택된 능력치/스킬 상세 + 투자 버튼 */
+.gv-dock {
+  flex: none;
+  border-top: 1px solid #45475a;
+  background: #191926;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  max-height: 42dvh; overflow-y: auto;
 }
-.gv-hint.on { opacity: 1; }
-.gv-hint .arw { display: inline-block; animation: gvbob 1s ease-in-out infinite; }
-@keyframes gvbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+.gv-dock-main { display: flex; align-items: center; gap: 12px; }
+.gv-dock-info { flex: 1; min-width: 0; }
+.gv-dock-title { font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.gv-dock-tag { font-size: 12px; }
+.gv-dock-lv { font-size: 12px; font-weight: 700; color: #6c7086; }
+.gv-dock-eff { font-size: 12.5px; color: #94e2d5; margin-top: 4px; line-height: 1.4; }
+.gv-dock-next { font-size: 11.5px; color: #a6adc8; margin-top: 3px; line-height: 1.45; }
+.gv-dock-btn {
+  flex: none; min-width: 96px; padding: 12px 14px; border: 0; border-radius: 11px;
+  font-size: 15px; font-weight: 800; color: #1e1e2e; background: #f9e2af; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.gv-dock-btn small { font-size: 10px; font-weight: 600; color: #1e1e2e; opacity: 0.65; }
+.gv-dock-btn:disabled { background: #313244; color: #6c7086; cursor: not-allowed; }
+.gv-dock-btn:disabled small { color: #6c7086; }
+.gv-dock-btn:active:not(:disabled) { transform: scale(0.96); }
 
-/* 상세 시트 (패널 내부 하단 슬라이드). 백드롭 z10 < 시트 z20 < 스킬바 z25 < 헤더 z30 */
-.gv-backdrop {
-  position: absolute; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.5);
-  opacity: 0; pointer-events: none; transition: 0.18s;
+/* 특화 (독 안) */
+.gv-dock-spec { display: flex; gap: 6px; margin-top: 10px; }
+.gv-dock-spec.chosen {
+  display: block; font-size: 12px; font-weight: 700; color: #a6e3a1;
+  background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 8px 10px;
 }
-.gv-backdrop.on { opacity: 1; pointer-events: auto; }
-.gv-sheet {
-  position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
-  background: #1e1e2e; border-top: 1px solid #45475a; border-radius: 18px 18px 0 0;
-  padding: 14px 16px 18px; transform: translateY(102%);
-  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
-  max-height: 60%; overflow-y: auto;
-}
-.gv-sheet.on { transform: translateY(0); }
-.gv-grab { width: 38px; height: 4px; border-radius: 3px; background: #45475a; margin: 0 auto 12px; }
-.gv-sh-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
-.gv-sh-icon {
-  width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center;
-  font-size: 25px; background: #232338; border: 1px solid #313244; flex: none;
-}
-.gv-sh-title { font-size: 16px; font-weight: 800; line-height: 1.3; }
-.gv-sh-sub { font-size: 11.5px; color: #6c7086; margin-top: 3px; }
-.gv-sh-desc { font-size: 13px; color: #cdd5e2; line-height: 1.6; margin: 8px 0 12px; }
-.gv-eff {
-  background: #232338; border: 1px solid #313244; border-radius: 10px;
-  padding: 10px 12px; font-size: 12.5px; line-height: 1.7; margin-bottom: 12px;
-}
-.gv-eff-row { display: flex; justify-content: space-between; gap: 10px; }
-.gv-eff-row.now { color: #f9e2af; font-weight: 700; }
-.gv-eff-row .k { color: #6c7086; }
-.gv-pre { font-size: 12px; margin-bottom: 12px; }
-.gv-pre.no { color: #f38ba8; }
-.gv-learn {
-  width: 100%; padding: 14px; border: 0; border-radius: 12px; font-size: 15px;
-  font-weight: 800; color: #1e1e2e; background: #f9e2af; cursor: pointer;
-}
-.gv-learn:disabled { background: #232338; color: #6c7086; cursor: not-allowed; }
-.gv-spec-lb { font-size: 12px; color: #a6adc8; margin: 14px 0 6px; font-weight: 700; }
-.gv-specs { display: flex; flex-direction: column; gap: 6px; }
 .gv-spec {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 9px 12px; font-size: 12.5px; font-weight: 700; color: #f9e2af;
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 11px; font-size: 12.5px; font-weight: 700; color: #f9e2af;
   background: #181825; border: 1px solid #f9e2af; border-radius: 9px; cursor: pointer; text-align: left;
 }
-.gv-spec em { font-style: normal; font-weight: 400; color: #a6adc8; font-size: 11px; }
-.gv-spec-chosen { margin-top: 12px; font-size: 12.5px; font-weight: 700; color: #a6e3a1; }
+.gv-spec em { font-style: normal; font-weight: 400; color: #a6adc8; font-size: 10.5px; }
+.gv-spec:active { transform: scale(0.97); }

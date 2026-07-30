@@ -1,4 +1,4 @@
-// 성장 화면 — HTML 오버레이 모달. Phaser 캔버스 위에 뜬다.
+// 성장 화면 — HTML 오버레이(게임 캔버스 위 전체 페이지).
 //
 // 게임 로직과의 계약(변경 없음):
 //   getState() → { level, attrPoints, attributes, skillPoints, skillLevels, specs, cfg }
@@ -7,9 +7,10 @@
 //   onSpecChoose(id, choice) → bool          (5레벨 특화 즉시 선택)
 //   onClose()                                (닫힘 — 게임 재개)
 //
-// 능력치는 임시 투자(pending) 후 [적용]에서만 확정된다. 스킬/특화는 즉시 확정.
-// 레이아웃은 skilltree.html 시안을 이식: 능력치 섹션 + 스킬 섹션(3계열 탭·티어·
-// 주력 액티브 상단 카드·액티브 배경색 구분·노드 탭→상세 시트→배우기).
+// 게임 UI 방식: 슬라이드업 시트/백드롭 없음. 3단 고정 레이아웃 —
+//   [헤더(고정)] / [스크롤: 능력치 + 스킬트리] / [정보 독(하단 고정)]
+// 능력치든 스킬이든 "선택된 것"의 상세·투자버튼이 항상 하단 독에 표시된다.
+// 겹치는 레이어가 없어 이전 화면 잔상 버그가 구조적으로 발생하지 않는다.
 
 import './growth.css'
 import { ATTR_KEYS, ATTR_LABELS, attrEffectText, nextTierText } from './progression.js'
@@ -22,7 +23,6 @@ import {
   SPEC_LEVEL,
 } from './skilltree.js'
 
-// 표시용 상수 (게임 데이터엔 없는 아이콘·설명만 UI 쪽에서 보강)
 const ATTR_ICON = { str: '💪', dex: '🏃', int: '🧠', vit: '❤️' }
 const SKILL_ICON = {
   multishot: '🔱', rapidfire: '💥', barrage: '🌪️', grenade: '💣',
@@ -34,7 +34,6 @@ const TREE_DESC = {
   mobility: '연사·이동·회피. 민첩과 궁합.',
   explosive: '폭발 광역. 지능과 궁합.',
 }
-// 패시브 per 키 → 표시 라벨/단위
 const PER_LABEL = {
   basicDmgPct: ['기본 활 피해', '%'], projSpeedPct: ['투사체 속도', '%'],
   pierce: ['관통', ''], movePct: ['이동속도', '%'],
@@ -42,7 +41,6 @@ const PER_LABEL = {
   critPct: ['치명타 확률', '%'], dodgePct: ['회피 확률', '%'],
 }
 
-// 스킬 레벨별 효과 문구
 function passiveText(sk, lv) {
   const parts = []
   for (const k in sk.per) {
@@ -81,14 +79,12 @@ export function createGrowthScreen({
 }) {
   let open = false
   let cfg = null
-  let base = null // 확정 능력치 (열 때 스냅샷)
-  let pending = null // 임시 능력치
-  let poolStart = 0 // 열 때 미사용 능력치 포인트
+  let base = null
+  let pending = null
+  let poolStart = 0
   let curTree = TREES[0].id
-  let selAttr = 'str'
-  let openSkillId = null
+  let sel = { type: 'attr', id: 'str' } // 하단 독에 표시할 대상
 
-  // --- DOM 뼈대 ---
   const root = document.createElement('div')
   root.id = 'growth-modal'
   root.className = 'growth-hidden'
@@ -106,17 +102,14 @@ export function createGrowthScreen({
         </div>
       </header>
 
-      <div class="growth-body" id="gvBody">
-        <!-- ⚔️ 능력치 -->
+      <div class="growth-scroll" id="gvScroll">
         <section class="gv-sect gv-sect-stat">
           <div class="gv-hd"><span>⚔️ 능력치</span><span class="gv-badge" id="gvAp"></span></div>
           <div class="gv-stat-row" id="gvStatRow"></div>
-          <div class="gv-stat-detail" id="gvStatDetail"></div>
         </section>
 
         <div class="gv-gap"></div>
 
-        <!-- 🌳 스킬 트리 -->
         <section class="gv-sect gv-sect-skill">
           <div class="gv-skillbar">
             <div class="gv-hd"><span>🌳 스킬 트리</span><span class="gv-badge" id="gvSp"></span></div>
@@ -124,49 +117,39 @@ export function createGrowthScreen({
           </div>
           <div class="gv-tree" id="gvTree"></div>
         </section>
-
-        <div class="gv-hint" id="gvHint"><span class="arw">▼</span> 아래로 스크롤</div>
       </div>
 
-      <div class="gv-backdrop" id="gvBackdrop"></div>
-      <div class="gv-sheet" id="gvSheet"></div>
+      <div class="gv-dock" id="gvDock"></div>
     </div>`
   document.body.appendChild(root)
 
   const $ = (s) => root.querySelector(s)
-  const bodyEl = $('#gvBody')
+  const scrollEl = $('#gvScroll')
   const levelEl = $('.g-level')
   const pointsEl = $('.g-points')
 
   const remaining = () =>
     poolStart - ATTR_KEYS.reduce((s, k) => s + (pending[k] - base[k]), 0)
 
-  // ─── 능력치 ───
-  function renderStats() {
-    const rem = remaining()
-    $('#gvAp').textContent = `${rem} pt`
-    $('#gvAp').classList.toggle('has', rem > 0)
+  const featuredOf = (treeId) =>
+    Object.values(ACTIVE_SKILLS)
+      .filter((s) => s.tree === treeId)
+      .sort((a, b) => a.unlockLevel - b.unlockLevel)[0] || null
 
+  // ─── 능력치 카드 ───
+  function renderStatRow() {
     $('#gvStatRow').innerHTML = ATTR_KEYS.map((k) => {
       const added = pending[k] - base[k]
-      return `<div class="gv-stat ${k === selAttr ? 'sel' : ''}" data-attr="${k}">
+      const on = sel.type === 'attr' && sel.id === k
+      return `<div class="gv-stat ${on ? 'sel' : ''}" data-attr="${k}">
         <div class="gv-si">${ATTR_ICON[k]}</div>
         <div class="gv-snm">${ATTR_LABELS[k]}</div>
         <div class="gv-sv">${pending[k]}${added > 0 ? `<b>+${added}</b>` : ''}</div>
       </div>`
     }).join('')
-
-    const k = selAttr
-    const canAdd = rem > 0
-    $('#gvStatDetail').innerHTML = `
-      <div class="gv-sd-body">
-        <div class="gv-sd-eff">${ATTR_ICON[k]} ${ATTR_LABELS[k]} · ${attrEffectText(cfg, k, pending[k])}</div>
-        <div class="gv-sd-next">다음 구간 → ${nextTierText(k, pending[k])}</div>
-      </div>
-      <button class="gv-up" data-attrplus="${k}" ${canAdd ? '' : 'disabled'}>+</button>`
   }
 
-  // ─── 스킬 ───
+  // ─── 스킬 트리 ───
   function renderTreeTabs() {
     $('#gvTreeTabs').innerHTML = TREES.map(
       (t) => `<button class="gv-tab ${t.id === curTree ? 'on' : ''}" data-tree="${t.id}"
@@ -186,8 +169,9 @@ export function createGrowthScreen({
   function nodeCard(sk, st, featured) {
     const cur = st.skillLevels[sk.id] || 0
     const isActive = !!ACTIVE_SKILLS[sk.id]
-    const cls = ['gv-node', statusClass(sk, st), isActive ? 'act' : '', featured ? 'feat' : '']
-      .filter(Boolean).join(' ')
+    const on = sel.type === 'skill' && sel.id === sk.id
+    const cls = ['gv-node', statusClass(sk, st), isActive ? 'act' : '',
+      featured ? 'feat' : '', on ? 'sel' : ''].filter(Boolean).join(' ')
     const pct = Math.round((cur / sk.maxLevel) * 100)
     const icon = SKILL_ICON[sk.id] || '•'
     if (featured) {
@@ -212,13 +196,11 @@ export function createGrowthScreen({
 
   function renderTree(st) {
     const tree = TREES.find((t) => t.id === curTree)
-    $('#gvTree').style.setProperty('--tc', tree.color) // 액티브 노드 테두리색
+    const treeEl = $('#gvTree')
+    treeEl.style.setProperty('--tc', tree.color)
     const all = { ...ACTIVE_SKILLS, ...PASSIVE_SKILLS }
     const nodes = Object.values(all).filter((s) => s.tree === curTree)
-    const actives = nodes
-      .filter((n) => ACTIVE_SKILLS[n.id])
-      .sort((a, b) => a.unlockLevel - b.unlockLevel)
-    const primary = actives[0] || null
+    const primary = featuredOf(curTree)
 
     let html = `<div class="gv-tree-head" style="border-color:${tree.color}">${TREE_DESC[curTree] || ''}</div>`
     if (primary) html += nodeCard(primary, st, true)
@@ -230,13 +212,32 @@ export function createGrowthScreen({
       html += `<div class="gv-tier"><div class="gv-tier-lb">Lv${tr} 해금</div>
         <div class="gv-nodes">${list.map((n) => nodeCard(n, st, false)).join('')}</div></div>`
     }
-    $('#gvTree').innerHTML = html
+    treeEl.innerHTML = html
   }
 
-  // ─── 상세 시트 ───
-  function openSheet(id) {
-    openSkillId = id
-    const st = getState()
+  // ─── 하단 정보 독 (선택된 능력치/스킬) ───
+  function renderDock(st) {
+    const dock = $('#gvDock')
+    if (sel.type === 'attr') {
+      const k = sel.id
+      const rem = remaining()
+      const added = pending[k] - base[k]
+      dock.innerHTML = `
+        <div class="gv-dock-main">
+          <div class="gv-dock-info">
+            <div class="gv-dock-title">${ATTR_ICON[k]} ${ATTR_LABELS[k]}
+              <span class="gv-dock-lv">Lv ${pending[k]}${added > 0 ? ` (+${added})` : ''}</span></div>
+            <div class="gv-dock-eff">${attrEffectText(cfg, k, pending[k])}</div>
+            <div class="gv-dock-next">다음 구간 → ${nextTierText(k, pending[k])}</div>
+          </div>
+          <button class="gv-dock-btn" data-act="invest" ${rem > 0 ? '' : 'disabled'}>
+            올리기<small>능력치 ${rem}pt</small></button>
+        </div>`
+      return
+    }
+
+    // skill
+    const id = sel.id
     const sk = ACTIVE_SKILLS[id] || PASSIVE_SKILLS[id]
     const cur = st.skillLevels[id] || 0
     const isActive = !!ACTIVE_SKILLS[id]
@@ -244,53 +245,40 @@ export function createGrowthScreen({
     const reason = investBlockReason(id, st.skillLevels, st.level)
     const canInvest = !reason && st.skillPoints > 0
 
-    let eff = `<div class="gv-eff-row ${cur > 0 ? 'now' : ''}"><span class="k">현재 (Lv${cur})</span><span>${skillEffText(sk, cur)}</span></div>`
-    if (!isMax) eff += `<div class="gv-eff-row"><span class="k">다음 (Lv${cur + 1})</span><span>${skillEffText(sk, cur + 1)}</span></div>`
-
-    let pre = ''
-    if (reason && !isMax) pre = `<div class="gv-pre no">✖ ${reason}</div>`
-
     let btn
-    if (isMax) btn = `<button class="gv-learn" disabled>최대 레벨</button>`
+    if (isMax) btn = `<button class="gv-dock-btn" disabled>최대 레벨</button>`
     else if (canInvest)
-      btn = `<button class="gv-learn" data-learn="${id}">${cur > 0 ? '업그레이드' : '배우기'} (스킬 1 pt)</button>`
-    else btn = `<button class="gv-learn" disabled>${reason ? reason : '스킬 포인트 없음'}</button>`
+      btn = `<button class="gv-dock-btn" data-act="invest">${cur > 0 ? '업그레이드' : '배우기'}<small>스킬 ${st.skillPoints}pt</small></button>`
+    else btn = `<button class="gv-dock-btn" disabled>${reason || '스킬 포인트 없음'}</button>`
+
+    const nextLine = isMax
+      ? '최대 레벨 도달'
+      : `현재 ${cur > 0 ? skillEffText(sk, cur) : '미습득'} → 다음 ${skillEffText(sk, cur + 1)}`
 
     // 5레벨 특화
-    let specHtml = ''
+    let spec = ''
     const specDef = SPECIALIZATIONS[id]
     if (specDef && cur >= SPEC_LEVEL) {
       const chosen = st.specs?.[id]
-      if (chosen) {
-        specHtml = `<div class="gv-spec-chosen">특화 선택됨: ${specDef[chosen].name}</div>`
-      } else {
-        specHtml = `<div class="gv-spec-lb">특화 선택 (한 번만)</div><div class="gv-specs">
-          <button class="gv-spec" data-spec="${id}" data-choice="A"><b>${specDef.A.name}</b><em>${specDef.A.desc}</em></button>
-          <button class="gv-spec" data-spec="${id}" data-choice="B"><b>${specDef.B.name}</b><em>${specDef.B.desc}</em></button>
-        </div>`
-      }
+      if (chosen) spec = `<div class="gv-dock-spec chosen">✔ 특화: ${specDef[chosen].name} — ${specDef[chosen].desc}</div>`
+      else spec = `<div class="gv-dock-spec">
+        <button class="gv-spec" data-spec="${id}" data-choice="A"><b>${specDef.A.name}</b><em>${specDef.A.desc}</em></button>
+        <button class="gv-spec" data-spec="${id}" data-choice="B"><b>${specDef.B.name}</b><em>${specDef.B.desc}</em></button>
+      </div>`
     }
 
-    const kindTxt = isActive ? '🎯 액티브' : '⬆ 패시브'
-    $('#gvSheet').innerHTML = `
-      <div class="gv-grab"></div>
-      <div class="gv-sh-top">
-        <div class="gv-sh-icon">${SKILL_ICON[id] || '•'}</div>
-        <div><div class="gv-sh-title">${sk.name}</div>
-          <div class="gv-sh-sub">${kindTxt} · 최대 ${sk.maxLevel}레벨 · 해금 Lv${sk.unlockLevel}</div></div>
+    dock.innerHTML = `
+      <div class="gv-dock-main">
+        <div class="gv-dock-info">
+          <div class="gv-dock-title">${SKILL_ICON[id] || '•'} ${sk.name}
+            <span class="gv-dock-tag">${isActive ? '🎯' : '⬆'}</span>
+            <span class="gv-dock-lv">${cur}/${sk.maxLevel}</span></div>
+          <div class="gv-dock-eff">${sk.desc}</div>
+          <div class="gv-dock-next">${nextLine}</div>
+        </div>
+        ${btn}
       </div>
-      <div class="gv-sh-desc">${sk.desc}</div>
-      <div class="gv-eff">${eff}</div>
-      ${pre}
-      ${btn}
-      ${specHtml}`
-    $('#gvBackdrop').classList.add('on')
-    $('#gvSheet').classList.add('on')
-  }
-  function closeSheet() {
-    openSkillId = null
-    $('#gvBackdrop').classList.remove('on')
-    $('#gvSheet').classList.remove('on')
+      ${spec}`
   }
 
   // ─── 전체 렌더 ───
@@ -298,30 +286,23 @@ export function createGrowthScreen({
     const st = getState()
     levelEl.textContent = `레벨 ${st.level}`
     const rem = remaining()
-    pointsEl.textContent =
-      rem > 0 || st.skillPoints > 0 ? '미사용 포인트를 배분하세요' : ''
-    pointsEl.classList.toggle('has', rem > 0 || st.skillPoints > 0)
+    $('#gvAp').textContent = `${rem} pt`
+    $('#gvAp').classList.toggle('has', rem > 0)
     $('#gvSp').textContent = `${st.skillPoints} pt`
     $('#gvSp').classList.toggle('has', st.skillPoints > 0)
-
-    renderStats()
+    pointsEl.textContent = rem > 0 || st.skillPoints > 0 ? '미사용 포인트 배분 가능' : ''
+    pointsEl.classList.toggle('has', rem > 0 || st.skillPoints > 0)
+    renderStatRow()
+    renderTreeTabs()
     renderTree(st)
-    updateHint()
+    renderDock(st)
   }
-
-  function updateHint() {
-    const more = bodyEl.scrollHeight - bodyEl.clientHeight - bodyEl.scrollTop
-    const show = bodyEl.scrollHeight - bodyEl.clientHeight > 30 && more > 24
-    $('#gvHint').classList.toggle('on', show)
-  }
-  bodyEl.addEventListener('scroll', updateHint, { passive: true })
 
   // ─── 이벤트 (위임) ───
   root.addEventListener('click', (e) => {
     const t = e.target
 
-    // 헤더 액션
-    const act = t.dataset.act
+    const act = t.dataset.act || (t.closest('[data-act]') && t.closest('[data-act]').dataset.act)
     if (act === 'apply') {
       const spent = ATTR_KEYS.reduce((s, k) => s + (pending[k] - base[k]), 0)
       onApply({ ...pending }, spent)
@@ -337,59 +318,49 @@ export function createGrowthScreen({
       close()
       return
     }
-
-    // 능력치
-    if (t.dataset.attr) {
-      selAttr = t.dataset.attr
-      renderStats()
+    if (act === 'invest') {
+      if (sel.type === 'attr') {
+        if (remaining() > 0) { pending[sel.id]++; render() }
+      } else {
+        if (onSkillInvest(sel.id)) render()
+      }
       return
     }
-    if (t.dataset.attrplus) {
-      if (remaining() > 0) {
-        pending[t.dataset.attrplus]++
-        render()
-      }
+
+    // 능력치 카드 선택
+    const statEl = t.closest('[data-attr]')
+    if (statEl) {
+      sel = { type: 'attr', id: statEl.dataset.attr }
+      render()
       return
     }
 
     // 트리 탭
-    if (t.dataset.tree) {
-      curTree = t.dataset.tree
-      closeSheet()
-      renderTreeTabs()
-      renderTree(getState())
-      $('.gv-sect-skill').scrollIntoView?.({ block: 'start' })
-      updateHint()
+    const tabEl = t.closest('[data-tree]')
+    if (tabEl) {
+      curTree = tabEl.dataset.tree
+      const f = featuredOf(curTree)
+      sel = f ? { type: 'skill', id: f.id } : { type: 'attr', id: 'str' }
+      render()
+      $('#gvTree').scrollIntoView?.({ block: 'nearest' })
       return
     }
 
-    // 노드 → 상세
+    // 스킬 노드 선택
     const nodeEl = t.closest('[data-node]')
     if (nodeEl) {
-      openSheet(nodeEl.dataset.node)
+      sel = { type: 'skill', id: nodeEl.dataset.node }
+      render()
       return
     }
 
-    // 상세: 배우기
-    if (t.dataset.learn) {
-      if (onSkillInvest(t.dataset.learn)) {
-        render()
-        openSheet(t.dataset.learn) // 시트 갱신
-      }
-      return
-    }
-    // 상세: 특화
+    // 특화 선택
     const specBtn = t.closest('[data-spec]')
     if (specBtn) {
-      if (onSpecChoose(specBtn.dataset.spec, specBtn.dataset.choice)) {
-        render()
-        openSheet(specBtn.dataset.spec)
-      }
+      if (onSpecChoose(specBtn.dataset.spec, specBtn.dataset.choice)) render()
       return
     }
   })
-
-  $('#gvBackdrop').addEventListener('click', closeSheet)
 
   // ─── 공개 API ───
   function openScreen() {
@@ -399,15 +370,11 @@ export function createGrowthScreen({
     pending = { ...st.attributes }
     poolStart = st.attrPoints
     curTree = TREES[0].id
-    selAttr = 'str'
-    closeSheet()
-    renderTreeTabs()
+    sel = { type: 'attr', id: 'str' }
     render()
-    bodyEl.scrollTop = 0
+    scrollEl.scrollTop = 0
     root.classList.remove('growth-hidden')
     open = true
-    // 열린 뒤 레이아웃 확정된 상태에서 힌트 재계산
-    requestAnimationFrame(updateHint)
   }
 
   function close() {
