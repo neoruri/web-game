@@ -31,6 +31,11 @@ const KNOCKBACK_FRICTION = 8
 const FLASH_TIME = 0.06
 const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 
+// 타격감(게임필) — 시각 전용. 전투 수치엔 영향 없음(sim 동기화 무관).
+const COLOR_CRIT = '#f9e2af'
+const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
+const MAX_PARTICLES = 140 // 파편 상한
+
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
 const PARALLAX_GRID = 1.0
@@ -95,6 +100,11 @@ class GameScene extends Phaser.Scene {
     this.enemies = []
     this.arrows = []
     this.explosions = [] // 수류탄 폭발 이펙트
+    this.particles = [] // 타격/사망 파편
+    this.partPool = []
+    this.popups = [] // 데미지 숫자
+    this.popupPool = []
+    this._lastCritShake = 0
     this.eProjectiles = [] // 적 투사체 (보스 탄막)
     this.telegraphs = [] // 탄막 예고 표시
     this.enemyPool = []
@@ -938,17 +948,40 @@ class GameScene extends Phaser.Scene {
     const c = this.stats.combat
 
     // 치명타 판정
-    if (c.critChance > 0 && Math.random() < c.critChance) amount *= c.critDmg
+    let crit = false
+    if (c.critChance > 0 && Math.random() < c.critChance) {
+      amount *= c.critDmg
+      crit = true
+    }
 
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
     e.flash = FLASH_TIME
 
+    // 데미지 숫자 (머리 위). 크리는 크고 금색.
+    this.spawnPopup(e.x, e.y - e.r - 6, Math.max(1, Math.round(amount)), crit)
+    // 크리 시 살짝 흔들림 — 스웜에서 과하지 않게 쿨다운
+    if (crit && this.elapsed - this._lastCritShake > 0.15) {
+      this._lastCritShake = this.elapsed
+      this.cameras.main.shake(60, 0.0035)
+    }
+
     if (e.hp > 0) return
 
     const ex = e.x
     const ey = e.y
+
+    // 사망 파편 — 적 색으로 튀어나가며 사라짐
+    const col = e.boss
+      ? COLOR_BOSS
+      : e.type === 'rusher'
+        ? COLOR_RUSHER
+        : e.type === 'shooter'
+          ? COLOR_SHOOTER
+          : COLOR_ENEMY
+    this.spawnParticles(ex, ey, e.boss ? 20 : 9, col, e.boss ? 240 : 170, e.boss ? 4 : 3, 0.45)
+    if (e.boss) this.cameras.main.shake(160, 0.006)
     // 처치 즉시 경험치 (젬을 줍지 않는다). 보스는 e.gems 배수만큼.
     this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
     this.kills++
@@ -1269,6 +1302,8 @@ class GameScene extends Phaser.Scene {
     this.updateSkills(dt)
     this.updateBursts(dt)
     this.updateExplosions(dt)
+    this.updatePopups(dt)
+    this.updateParticles(dt)
 
     // 그리드를 플레이어 주변 화면 영역으로 옮긴다 (무한 월드 대응)
     this.grid.setOrigin(this.player.x - W / 2, this.player.y - H / 2)
@@ -1324,6 +1359,8 @@ class GameScene extends Phaser.Scene {
 
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
+        // 화살 타격 스파크 (충돌 지점)
+        this.spawnParticles(a.x, a.y, 3, COLOR_ARROW, 130, 2, 0.22)
         this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
 
         if (--a.pierceLeft <= 0) {
@@ -1439,6 +1476,84 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // --- 타격감 이펙트 (시각 전용) -----------------------------------------
+
+  // 데미지 숫자 (풀 재사용, 월드 좌표). 크리는 크고 금색.
+  spawnPopup(x, y, amount, crit) {
+    if (this.popups.length >= MAX_POPUPS) {
+      const old = this.popups.shift() // 가장 오래된 것 재활용
+      old.t.setVisible(false)
+      this.popupPool.push(old.t)
+    }
+    let t = this.popupPool.pop()
+    if (!t) {
+      t = this.add
+        .text(0, 0, '', {
+          fontFamily: '-apple-system, "Segoe UI", Roboto, sans-serif',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+      this.worldLayer.add(t)
+    }
+    t.setText('' + amount)
+    t.setFontSize(crit ? 28 : 18)
+    t.setColor(crit ? COLOR_CRIT : '#ffffff')
+    t.setPosition(x + (Math.random() * 16 - 8), y)
+    t.setAlpha(1)
+    t.setVisible(true)
+    const life = crit ? 0.75 : 0.55
+    this.popups.push({ t, vy: -46, life, max: life })
+  }
+
+  updatePopups(dt) {
+    for (let i = this.popups.length - 1; i >= 0; i--) {
+      const p = this.popups[i]
+      p.life -= dt
+      if (p.life <= 0) {
+        p.t.setVisible(false)
+        this.popupPool.push(p.t)
+        this.popups.splice(i, 1)
+        continue
+      }
+      p.t.y += p.vy * dt
+      p.vy += 60 * dt // 솟았다가 서서히 감속
+      const k = p.life / p.max
+      p.t.setAlpha(k < 0.5 ? k * 2 : 1) // 후반부에 페이드아웃
+    }
+  }
+
+  // 파편 (평범한 객체 → gfxFx 에 사각형으로 그림). 타격/사망에 사용.
+  spawnParticles(x, y, count, color, spd, size, life) {
+    for (let n = 0; n < count; n++) {
+      if (this.particles.length >= MAX_PARTICLES) return
+      const a = Math.random() * Math.PI * 2
+      const s = spd * (0.4 + Math.random() * 0.6)
+      const p = this.partPool.pop() || {}
+      p.x = x
+      p.y = y
+      p.vx = Math.cos(a) * s
+      p.vy = Math.sin(a) * s
+      p.life = life * (0.7 + Math.random() * 0.3)
+      p.max = p.life
+      p.color = color
+      p.size = size
+      this.particles.push(p)
+    }
+  }
+
+  updateParticles(dt) {
+    const fr = Math.max(0, 1 - 6 * dt) // 감속
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i]
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.vx *= fr
+      p.vy *= fr
+      p.life -= dt
+      if (p.life <= 0) this.removeSwap(this.particles, i, this.partPool)
+    }
+  }
+
   // --- 렌더 ---------------------------------------------------------------
   // 적 400마리를 GameObject 로 만들면 400개 객체를 관리해야 하지만,
   // Graphics 에 몰아 그리면 clear 후 400번의 fillRect 로 끝난다.
@@ -1458,8 +1573,8 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < this.enemies.length; i++) {
         const e = this.enemies[i]
         if (e.type !== typePasses[t][0] || e.flash > 0) continue
-        // 남은 체력이 적을수록 작게 → 몇 대 맞았는지 눈에 보인다
-        const s = e.r * 2 * (0.72 + 0.28 * (e.hp / e.maxHp))
+        // 크기 고정 — 피격은 흰 플래시 + 데미지 숫자로 표현(크기 안 줄임)
+        const s = e.r * 2
         ge.fillRect(e.x - s / 2, e.y - s / 2, s, s)
       }
     }
@@ -1475,7 +1590,9 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i]
       if (e.flash <= 0) continue
-      ge.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2)
+      // 피격 순간 살짝 커짐 → 펀치감
+      const hs = e.r * 2 * 1.18
+      ge.fillRect(e.x - hs / 2, e.y - hs / 2, hs, hs)
     }
 
     // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다
@@ -1533,6 +1650,14 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < this.eProjectiles.length; i++) {
       const p = this.eProjectiles[i]
       gf.fillCircle(p.x, p.y, 6)
+    }
+
+    // 타격/사망 파편 — 남은 수명만큼 옅어짐
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i]
+      const k = p.life / p.max
+      gf.fillStyle(p.color, k)
+      gf.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)
     }
   }
 }
