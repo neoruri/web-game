@@ -24,7 +24,8 @@ const COLOR_RUSHER = 0xf9a860 // 돌진형(빠름)
 const COLOR_SHOOTER = 0x94e2d5 // 원거리형(카이팅)
 const COLOR_ENEMY_HIT = 0xffffff
 const COLOR_BOSS = 0xcba6f7
-const COLOR_ARROW = 0xfab387
+const COLOR_ARROW = 0xfab387 // 기본 활 (주황)
+const COLOR_SKILL_ARROW = 0x89dceb // 스킬 발사체 (하늘색 — 기본과 구분)
 const COLOR_GEM = 0x94e2d5
 
 const KNOCKBACK_FRICTION = 8
@@ -679,7 +680,7 @@ class GameScene extends Phaser.Scene {
   }
 
   // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지·관통이 달라서 화살마다 들고 있는다.
-  fireAngle(angle, dmg, pierce) {
+  fireAngle(angle, dmg, pierce, skill) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
@@ -689,6 +690,7 @@ class GameScene extends Phaser.Scene {
     a.angle = angle
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
+    a.skill = !!skill // 렌더 색 구분 (시각 전용)
     a.hit.clear()
     this.arrows.push(a)
   }
@@ -788,7 +790,7 @@ class GameScene extends Phaser.Scene {
       m.acc += dt
       while (m.acc >= iv && m.left > 0) {
         m.acc -= iv
-        this.fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce)
+        this.fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce, true)
         m.left--
       }
     }
@@ -808,7 +810,8 @@ class GameScene extends Phaser.Scene {
         this.fireAngle(
           Math.atan2(t.y - this.player.y, t.x - this.player.x),
           st.dmg,
-          st.pierce
+          st.pierce,
+          true
         )
         r.left--
       }
@@ -822,7 +825,7 @@ class GameScene extends Phaser.Scene {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
+        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, true)
       }
     }
   }
@@ -1362,9 +1365,8 @@ class GameScene extends Phaser.Scene {
 
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        // 화살 타격 스파크 — 밝은 흰 코어 + 활색 파편으로 임팩트
-        this.spawnParticles(a.x, a.y, 6, COLOR_ARROW, 230, 3, 0.3)
-        this.spawnParticles(a.x, a.y, 3, 0xffffff, 120, 4, 0.16)
+        // 화살 타격 스파크 — 짧은 직선이 희미하게 퍼짐
+        this.spawnSpark(a.x, a.y)
         this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
 
         if (--a.pierceLeft <= 0) {
@@ -1535,7 +1537,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // 파편 (평범한 객체 → gfxFx 에 사각형으로 그림). 타격/사망에 사용.
+  // 사각형 파편 (사망 등). gfxFx 에 fillRect.
   spawnParticles(x, y, count, color, spd, size, life) {
     for (let n = 0; n < count; n++) {
       if (this.particles.length >= MAX_PARTICLES) return
@@ -1550,6 +1552,30 @@ class GameScene extends Phaser.Scene {
       p.max = p.life
       p.color = color
       p.size = size
+      p.kind = 'rect'
+      this.particles.push(p)
+    }
+  }
+
+  // 타격 스파크 — 타격 지점에서 짧은 직선이 희미하게 퍼짐(사망 원퍼짐과 구분).
+  spawnSpark(x, y) {
+    const n = 5
+    for (let k = 0; k < n; k++) {
+      if (this.particles.length >= MAX_PARTICLES) return
+      const a = Math.random() * Math.PI * 2
+      const s = 130 + Math.random() * 150
+      const p = this.partPool.pop() || {}
+      p.x = x
+      p.y = y
+      p.vx = Math.cos(a) * s
+      p.vy = Math.sin(a) * s
+      p.nx = Math.cos(a) // 선 방향(꼬리는 반대쪽으로)
+      p.ny = Math.sin(a)
+      p.life = 0.1 + Math.random() * 0.08
+      p.max = p.life
+      p.color = 0xffffff
+      p.size = 7 + Math.random() * 5 // 선 길이
+      p.kind = 'line'
       this.particles.push(p)
     }
   }
@@ -1623,16 +1649,21 @@ class GameScene extends Phaser.Scene {
 
     const ga = this.gfxArrows
     ga.clear()
-    ga.lineStyle(2, COLOR_ARROW, 1)
-    ga.beginPath()
-    for (let i = 0; i < this.arrows.length; i++) {
-      const a = this.arrows[i]
-      const cx = Math.cos(a.angle) * 10
-      const cy = Math.sin(a.angle) * 10
-      ga.moveTo(a.x - cx, a.y - cy)
-      ga.lineTo(a.x + cx, a.y + cy)
+    // 기본 활(주황)과 스킬 발사체(하늘색)를 색으로 구분 — 각각 한 번에 스트로크
+    for (let pass = 0; pass < 2; pass++) {
+      const skillPass = pass === 1
+      ga.lineStyle(skillPass ? 2.5 : 2, skillPass ? COLOR_SKILL_ARROW : COLOR_ARROW, 1)
+      ga.beginPath()
+      for (let i = 0; i < this.arrows.length; i++) {
+        const a = this.arrows[i]
+        if (!!a.skill !== skillPass) continue
+        const cx = Math.cos(a.angle) * 10
+        const cy = Math.sin(a.angle) * 10
+        ga.moveTo(a.x - cx, a.y - cy)
+        ga.lineTo(a.x + cx, a.y + cy)
+      }
+      ga.strokePath()
     }
-    ga.strokePath()
 
     // 수류탄 폭발 — 커지면서 사라지는 링
     const gf = this.gfxFx
@@ -1665,12 +1696,24 @@ class GameScene extends Phaser.Scene {
       gf.fillCircle(p.x, p.y, 6)
     }
 
-    // 타격/사망 파편 — 남은 수명만큼 옅어짐
+    // 사망 파편 — 사각형, 남은 수명만큼 옅어짐
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i]
+      if (p.kind === 'line') continue
       const k = p.life / p.max
       gf.fillStyle(p.color, k)
       gf.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)
+    }
+    // 타격 스파크 — 짧은 직선(꼬리는 진행 반대쪽), 희미하게
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i]
+      if (p.kind !== 'line') continue
+      const k = p.life / p.max
+      gf.lineStyle(2, p.color, k * 0.55)
+      gf.beginPath()
+      gf.moveTo(p.x, p.y)
+      gf.lineTo(p.x - p.nx * p.size, p.y - p.ny * p.size)
+      gf.strokePath()
     }
   }
 }
