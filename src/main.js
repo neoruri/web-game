@@ -35,10 +35,6 @@ const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 const COLOR_CRIT = '#f9e2af'
 const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
 const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
-// 피격 리코일 — 시각 전용 오프셋(실제 위치/전투 불변, sim 무관). 피격 방향으로
-// 확 튕겼다 빠르게 복귀. SET 방식이라 다발 히트에도 누적 폭주 없음.
-const RECOIL_DIST = 15
-const RECOIL_DECAY = 16
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
@@ -564,8 +560,7 @@ class GameScene extends Phaser.Scene {
     e.ranged = spec.ranged || false
     e.kbx = 0
     e.kby = 0
-    e.rkx = 0 // 시각 리코일 오프셋(렌더 전용)
-    e.rky = 0
+    e.stun = 0 // 피격 경직 남은 시간(초)
     e.flash = 0
     e.wob = Math.random() * Math.PI * 2 // 유기적 흔들림 위상
     e.atk = spec.boss
@@ -964,11 +959,8 @@ class GameScene extends Phaser.Scene {
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
     e.flash = FLASH_TIME
-    // 시각 리코일 — 피격 방향으로 튕김 (보스는 무겁게: 제외). SET이라 누적 없음.
-    if (!e.boss) {
-      e.rkx = dirX * RECOIL_DIST
-      e.rky = dirY * RECOIL_DIST
-    }
+    // 피격 경직 — 잠깐 정지(보스 제외). config로 조절. SET이라 누적 없음.
+    if (!e.boss) e.stun = this.cfg.enemy.hitStunSec
 
     // 데미지 숫자 (머리 위). 크리는 크고 금색.
     this.spawnPopup(e.x, e.y - e.r - 6, Math.max(1, Math.round(amount)), crit)
@@ -1409,6 +1401,15 @@ class GameScene extends Phaser.Scene {
         continue
       }
 
+      // 피격 경직 — 이동/추격/분리/공격 전부 정지 (플래시·넉백만 감쇠)
+      if (e.stun > 0) {
+        e.stun -= dt
+        if (e.flash > 0) e.flash -= dt
+        e.kbx *= decay
+        e.kby *= decay
+        continue
+      }
+
       const len = Math.hypot(dx, dy) || 1
 
       // 겹침 방지: 그리드로 근처 적만 조회해 밀어냄 (최대 6마리)
@@ -1454,12 +1455,6 @@ class GameScene extends Phaser.Scene {
       e.y += mvy * e.speed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
-      // 시각 리코일 빠르게 복귀(0으로 감쇠)
-      if (e.rkx || e.rky) {
-        const rd = Math.max(0, 1 - RECOIL_DECAY * dt)
-        e.rkx *= rd
-        e.rky *= rd
-      }
       if (e.flash > 0) e.flash -= dt
 
       // 보스 라인 탄막 / 원거리형 단발
@@ -1593,7 +1588,7 @@ class GameScene extends Phaser.Scene {
         if (e.type !== typePasses[t][0] || e.flash > 0) continue
         // 크기 고정 — 피격은 흰 플래시 + 데미지 숫자로 표현(크기 안 줄임)
         const s = e.r * 2
-        ge.fillRect(e.x + e.rkx - s / 2, e.y + e.rky - s / 2, s, s)
+        ge.fillRect(e.x - s / 2, e.y - s / 2, s, s)
       }
     }
 
@@ -1608,9 +1603,9 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i]
       if (e.flash <= 0) continue
-      // 피격 순간 살짝 커짐 → 펀치감 (+ 리코일 오프셋)
+      // 피격 순간 살짝 커짐 → 펀치감
       const hs = e.r * 2 * 1.18
-      ge.fillRect(e.x + e.rkx - hs / 2, e.y + e.rky - hs / 2, hs, hs)
+      ge.fillRect(e.x - hs / 2, e.y - hs / 2, hs, hs)
     }
 
     // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다

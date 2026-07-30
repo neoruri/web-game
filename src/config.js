@@ -47,6 +47,7 @@ export const DEFAULTS = {
     shooterBoltSpeed: 190,
     shooterBoltDamage: 7,
     wobble: 0.35, // 유기적 움직임: 추격 방향에 주는 좌우 흔들림(0=직선)
+    hitStunSec: 0.2, // 피격 시 경직(정지) 시간(초). 0=경직 없음
   },
   spawn: {
     baseInterval: 1,
@@ -294,6 +295,14 @@ export const SCHEMA = [
         max: 1.5,
         step: 0.05,
         effect: '↑ 좌우로 크게 흔들며 접근  ·  0=직선으로만',
+      },
+      {
+        key: 'hitStunSec',
+        label: '피격 경직 시간',
+        min: 0,
+        max: 0.6,
+        step: 0.05,
+        effect: '↑ 맞은 적이 더 오래 멈춤(경직)  ·  0=경직 없음',
       },
     ],
   },

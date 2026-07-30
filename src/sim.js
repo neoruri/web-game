@@ -119,6 +119,7 @@ export function simulate(cfg, opts = {}) {
     en.ranged = spec.ranged || false
     en.kbx = 0
     en.kby = 0
+    en.stun = 0 // 피격 경직 남은 시간(초)
     en.wob = Math.random() * Math.PI * 2
     en.atk = spec.boss
       ? cfg.boss.attackInterval
@@ -413,6 +414,7 @@ export function simulate(cfg, opts = {}) {
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
+    if (!e.boss) e.stun = cfg.enemy.hitStunSec // 피격 경직 (main.js 동기화)
     if (e.hp > 0) return
 
     const ex = e.x
@@ -657,6 +659,14 @@ export function simulate(cfg, opts = {}) {
       if (dx * dx + dy * dy > despawn2) {
         removeSwap(state.enemies, i, enemyPool)
         i--
+        continue
+      }
+
+      // 피격 경직 — 이동/추격/분리/공격 정지 (main.js 동기화)
+      if (e.stun > 0) {
+        e.stun -= dt
+        e.kbx *= decay
+        e.kby *= decay
         continue
       }
 
