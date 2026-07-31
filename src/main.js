@@ -337,10 +337,12 @@ class GameScene extends Phaser.Scene {
     if (tex.frameTotal < 50) return // 로드 실패(플레이스홀더) 방어 — 정상은 56+
     if (tex.setFilter) tex.setFilter(Phaser.Textures.FilterMode.NEAREST) // 픽셀 또렷하게
 
+    // skip: 루프 첫 프레임 제외. run·back_run은 0번이 "정지 포즈"라 빼야
+    // 루프가 매번 서는 것처럼 안 보인다.
     const defs = {
       idle: { row: 0, frames: 4, fps: 6, loop: true },
-      run: { row: 1, frames: 6, fps: 12, loop: true },
-      back_run: { row: 2, frames: 8, fps: 12, loop: true },
+      run: { row: 1, frames: 6, fps: 12, loop: true, skip: 1 },
+      back_run: { row: 2, frames: 8, fps: 12, loop: true, skip: 1 },
       attack: { row: 3, frames: 4, fps: 14, loop: false },
       multishot: { row: 4, frames: 5, fps: 14, loop: false },
       hit: { row: 5, frames: 2, fps: 10, loop: false },
@@ -349,12 +351,12 @@ class GameScene extends Phaser.Scene {
     for (const key in defs) {
       if (this.anims.exists(key)) continue
       const d = defs[key]
-      const start = d.row * 8 // 프레임 = 행*8 + 열
+      const rowStart = d.row * 8 // 프레임 = 행*8 + 열
       this.anims.create({
         key,
         frames: this.anims.generateFrameNumbers('archer', {
-          start,
-          end: start + d.frames - 1,
+          start: rowStart + (d.skip || 0),
+          end: rowStart + d.frames - 1,
         }),
         frameRate: d.fps,
         repeat: d.loop ? -1 : 0,
