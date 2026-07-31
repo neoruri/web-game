@@ -3,31 +3,30 @@
 
 // 저장 키에 버전을 붙인다. 밸런스 기본값을 크게 바꿀 때 버전을 올리면
 // 브라우저에 남은 옛 저장값을 무시하고 새 기본값으로 시작한다.
-const KEY = 'survivor.config.v2'
+const KEY = 'survivor.config.v3'
 
 export const DEFAULTS = {
   player: {
-    speed: 80,
+    speed: 100,
     maxHp: 100,
-    invuln: 0.6,
+    invuln: 0.8,
     pickupRadius: 50,
-    radius: 9,
+    radius: 10,
   },
   weapon: {
-    damage: 5,
+    damage: 20,
     cooldown: 1.2,
     speed: 1200,
     pierce: 1,
     knockback: 70,
-    // 무한 월드에서는 사거리가 화면을 덮어야 한다. 화면 세로가 960이라
-    // 플레이어(중앙)에서 화면 끝까지 480 — 그보다 커야 화면 내 적을 항상 조준한다.
-    range: 620,
+    // 자동조준 사거리. 이 안에 든 적만 쏜다. (튜너 조정값)
+    range: 300,
   },
   enemy: {
-    hp: 10,
+    hp: 30,
     speed: 50,
     contactDamage: 8,
-    radius: 8,
+    radius: 10,
     hpRampPerMin: 1.1,
     sepStrength: 45, // 겹침 방지: 서로 밀어내는 힘 (0=겹침 허용)
     sepRadius: 20, // 이 거리 안의 적끼리만 밀어냄
@@ -37,40 +36,40 @@ export const DEFAULTS = {
     rusherHpMul: 0.55,
     rusherStartSec: 30, // 이 시간(초) 후부터 등장
     // 원거리형: 카이팅하며 탄 발사. 무기 사거리보다 안쪽에서 멈춰야 반격 가능
-    shooterChance: 0.16,
+    shooterChance: 0.06,
     shooterSpeedMul: 0.85,
     shooterHpMul: 0.9,
-    shooterStartSec: 75, // 이 시간(초) 후부터 등장
-    shooterRange: 300, // 이 거리에서 멈춰 쏨 (무기 사거리보다 짧게!)
+    shooterStartSec: 90, // 이 시간(초) 후부터 등장
+    shooterRange: 120, // 이 거리에서 멈춰 쏨
     shooterRetreat: 200, // 이보다 가까우면 후퇴
-    shooterInterval: 3.5, // 발사 주기(초) — 클수록 뜸하게
+    shooterInterval: 8, // 발사 주기(초) — 클수록 뜸하게
     shooterBoltSpeed: 190,
     shooterBoltDamage: 7,
-    wobble: 0.35, // 유기적 움직임: 추격 방향에 주는 좌우 흔들림(0=직선)
-    hitStunSec: 0.2, // 피격 시 경직(정지) 시간(초). 0=경직 없음
+    wobble: 0.3, // 유기적 움직임: 추격 방향에 주는 좌우 흔들림(0=직선)
+    hitStunSec: 0.3, // 피격 시 경직(정지) 시간(초). 0=경직 없음
   },
   spawn: {
-    baseInterval: 1,
-    rampPerMin: 1.35,
-    rampCap: 12,
-    maxEnemies: 500,
+    baseInterval: 0.7,
+    rampPerMin: 1.5,
+    rampCap: 17,
+    maxEnemies: 300,
   },
   boss: {
-    everySec: 60,
-    hp: 100,
-    hpRampPerMin: 1.2,
+    everySec: 90,
+    hp: 300,
+    hpRampPerMin: 1.1,
     speed: 42,
     contactDamage: 25,
     radius: 26,
     knockbackResist: 0.15,
     gems: 12,
     // 라인 부채꼴 탄막 (예고 → 실탄)
-    attackInterval: 3.5, // 공격 주기(초)
-    lineCount: 5, // 부채꼴 라인 수
+    attackInterval: 6, // 공격 주기(초)
+    lineCount: 3, // 부채꼴 라인 수
     lineSpread: 0.3, // 라인 사이 각도(라디안)
-    boltSpeed: 210, // 탄속(px/s)
+    boltSpeed: 130, // 탄속(px/s)
     boltDamage: 12, // 탄 하나의 피해
-    telegraphTime: 0.8, // 예고 표시 시간(초)
+    telegraphTime: 0.4, // 예고 표시 시간(초)
   },
   xp: {
     gemValue: 1,
@@ -79,8 +78,8 @@ export const DEFAULTS = {
     magnetSpeed: 500,
   },
   upgrade: {
-    damageAdd: 5,
-    cooldownMul: 0.9,
+    damageAdd: 10,
+    cooldownMul: 0.8,
     pierceAdd: 1,
     speedAdd: 10,
     maxHpAdd: 20,
@@ -113,14 +112,14 @@ export const DEFAULTS = {
   // 액티브 스킬 — 획득하면 쿨다운마다 자동 발동
   skill: {
     cooldown: 10,
-    damageMul: 0.5, // 무기 데미지의 몇 배로 나가는지
+    damageMul: 0.7, // 무기 데미지의 몇 배로 나가는지
     shotInterval: 0.08, // 연사 간격(초) — 다-다-다-다 느낌
-    barrageShots: 5, // 난사: 가까운 적 조준 연사
-    multishotShots: 5, // 다발사격: 타겟 방향
+    barrageShots: 7, // 난사: 가까운 적 조준 연사
+    multishotShots: 7, // 다발사격: 타겟 방향
     multishotSpread: 30, // 다발사격 확산 각도(도)
-    grenadeRadius: 10, // 폭발수류탄 폭발 반경(px)
-    shotsPerLevel: 1, // 레벨당 발수 증가 (난사·다발사격)
-    grenadeRadiusPerLevel: 4, // 레벨당 폭발 반경 증가
+    grenadeRadius: 30, // 폭발수류탄 폭발 반경(px)
+    shotsPerLevel: 2, // 레벨당 발수 증가 (난사·다발사격)
+    grenadeRadiusPerLevel: 5, // 레벨당 폭발 반경 증가
   },
 }
 

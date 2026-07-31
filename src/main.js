@@ -1679,14 +1679,22 @@ class GameScene extends Phaser.Scene {
     ge.clear()
     const es = this.enemies
 
-    // 1) 바닥 그림자 (전체) — 접지감
-    ge.fillStyle(0x000000, 0.32)
+    // 1) 바닥 그림자 (전체) — 더 아래·진하게(접지감)
+    ge.fillStyle(0x000000, 0.38)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
-      ge.fillEllipse(e.x, e.y + e.r * 0.72, e.r * 1.7, e.r * 0.85)
+      ge.fillEllipse(e.x, e.y + e.r * 0.9, e.r * 1.9, e.r * 0.9)
     }
 
-    // 2) 본체 (타입별 색을 몰아 그림) — 원형 블롭
+    // 2) 볼륨 어두운 베이스 (그림자 면) — 전체 원
+    ge.fillStyle(0x0c0c12, 1)
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (e.flash > 0) continue
+      ge.fillCircle(e.x, e.y, e.r)
+    }
+
+    // 3) 밝은 본체(타입색) — 살짝 작게 위로 오프셋 → 하단·우측에 어두운 면 = 돔 입체
     const typePasses = [
       ['basic', COLOR_ENEMY],
       ['rusher', COLOR_RUSHER],
@@ -1697,17 +1705,17 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < es.length; i++) {
         const e = es[i]
         if (e.boss || e.type !== typePasses[t][0] || e.flash > 0) continue
-        ge.fillCircle(e.x, e.y, e.r)
+        ge.fillCircle(e.x - e.r * 0.12, e.y - e.r * 0.14, e.r * 0.9)
       }
     }
     ge.fillStyle(COLOR_BOSS, 1)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       if (!e.boss || e.flash > 0) continue
-      ge.fillCircle(e.x, e.y, e.r)
+      ge.fillCircle(e.x - e.r * 0.12, e.y - e.r * 0.14, e.r * 0.9)
     }
 
-    // 3) 피격 플래시 (흰, 살짝 큼)
+    // 4) 피격 플래시 (흰, 살짝 큼)
     ge.fillStyle(COLOR_ENEMY_HIT, 1)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
@@ -1715,21 +1723,21 @@ class GameScene extends Phaser.Scene {
       ge.fillCircle(e.x, e.y, e.r * 1.12)
     }
 
-    // 4) 상단 하이라이트 (음영)
-    ge.fillStyle(0xffffff, 0.16)
+    // 5) 상단 하이라이트 (광원 좌상단)
+    ge.fillStyle(0xffffff, 0.18)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       if (e.flash > 0) continue
-      ge.fillCircle(e.x - e.r * 0.3, e.y - e.r * 0.32, e.r * 0.42)
+      ge.fillCircle(e.x - e.r * 0.34, e.y - e.r * 0.4, e.r * 0.32)
     }
 
-    // 5) 눈 2개 (몬스터 느낌 — 플레이어와 구분)
+    // 6) 눈 2개 (몬스터 느낌 — 플레이어와 구분)
     ge.fillStyle(0x101018, 0.92)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       if (e.flash > 0) continue
-      const eyY = e.y - e.r * 0.05
-      const eyX = e.r * 0.36
+      const eyY = e.y - e.r * 0.2
+      const eyX = e.r * 0.34
       const eyR = Math.max(1.2, e.r * 0.17)
       ge.fillCircle(e.x - eyX, eyY, eyR)
       ge.fillCircle(e.x + eyX, eyY, eyR)
