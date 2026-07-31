@@ -800,12 +800,16 @@ class GameScene extends Phaser.Scene {
   }
 
   // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지·관통이 달라서 화살마다 들고 있는다.
+  // 화살 발사·조준 기준 y (팔/활 높이). 스프라이트일 때만 위로 올림.
+  get bowY() {
+    return this.player.y - (this.playerSprite ? BOW_OFFSET_Y : 0)
+  }
+
   fireAngle(angle, dmg, pierce, skill) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
-    // 팔/활 높이에서 발사 (스프라이트일 때만 위로 올림)
-    a.y = this.player.y - (this.playerSprite ? BOW_OFFSET_Y : 0)
+    a.y = this.bowY // 팔/활 높이에서 발사
     a.vx = Math.cos(angle) * w.speed
     a.vy = Math.sin(angle) * w.speed
     a.angle = angle
@@ -817,7 +821,7 @@ class GameScene extends Phaser.Scene {
   }
 
   fireAt(target) {
-    const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x)
+    const angle = Math.atan2(target.y - this.bowY, target.x - this.player.x)
     const dmg = this.stats.weapon.damage
     this.fireAngle(angle, dmg)
     // 민첩30 추가 화살 — 살짝 벌려서 발사
@@ -864,7 +868,7 @@ class GameScene extends Phaser.Scene {
     const target = this.nearestEnemy()
     if (!target) return false
     const m = this.burst.multishot
-    m.base = Math.atan2(target.y - this.player.y, target.x - this.player.x)
+    m.base = Math.atan2(target.y - this.bowY, target.x - this.player.x)
     m.left = st.shots
     m.acc = this.cfg.skill.shotInterval
     this.flashSkill(0x89dceb)
@@ -930,7 +934,7 @@ class GameScene extends Phaser.Scene {
           break
         }
         this.fireAngle(
-          Math.atan2(t.y - this.player.y, t.x - this.player.x),
+          Math.atan2(t.y - this.bowY, t.x - this.player.x),
           st.dmg,
           st.pierce,
           true
