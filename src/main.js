@@ -37,6 +37,9 @@ const COLOR_CRIT = '#f9e2af'
 const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
 const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
 const PLAYER_SPRITE_SCALE = 0.55 // 캐릭터 스프라이트 배율 (튜닝 포인트)
+// 화살 시작점을 발끝 앵커에서 팔/활 높이만큼 위로 올린다 (다리에서 안 나가게).
+// 스프라이트 높이 116 × 배율 × 비율. 방향 무관하게 상체에서 발사되는 느낌.
+const BOW_OFFSET_Y = 116 * PLAYER_SPRITE_SCALE * 0.4
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
@@ -801,7 +804,8 @@ class GameScene extends Phaser.Scene {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
-    a.y = this.player.y
+    // 팔/활 높이에서 발사 (스프라이트일 때만 위로 올림)
+    a.y = this.player.y - (this.playerSprite ? BOW_OFFSET_Y : 0)
     a.vx = Math.cos(angle) * w.speed
     a.vy = Math.sin(angle) * w.speed
     a.angle = angle
