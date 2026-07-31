@@ -128,16 +128,19 @@ class GameScene extends Phaser.Scene {
     this.gfxEnemies = this.add.graphics()
     this.gfxArrows = this.add.graphics()
     this.gfxFx = this.add.graphics()
+    this.gfxChar = this.add.graphics() // 플레이어 음영 오브(iso 스타일)
 
+    // 플레이어 좌표 앵커 — 원은 숨기고 gfxChar 로 음영 오브를 그린다
     this.player = this.add
       .circle(W / 2, H / 2, this.stats.player.radius, COLOR_PLAYER)
-      .setStrokeStyle(3, 0xcdd6f4)
+      .setVisible(false)
 
     // 렌더 순서: 적 → 화살/이펙트 → 플레이어
     this.worldLayer.add([
       this.gfxEnemies,
       this.gfxArrows,
       this.gfxFx,
+      this.gfxChar,
       this.player,
     ])
 
@@ -212,59 +215,104 @@ class GameScene extends Phaser.Scene {
     this.refreshHpBar()
   }
 
-  // --- 배경 -------------------------------------------------------------
-  // TileSprite 2장이면 끝이다. 각각 드로우콜 1개라 성능에 영향이 거의 없다.
+  // --- 배경: 아이소 던전 바닥 (iso_topdown 스타일) --------------------------
+  // 스크린 캔버스 텍스처에 매 프레임 아이소 타일을 다시 그린다(플레이어 이동 시만).
+  // 게임 로직은 그대로 탑다운 월드 좌표 — 바닥만 아이소 스킨.
 
   buildBackground() {
-    if (!this.textures.exists('bg-grid')) {
-      const g = this.make.graphics({ add: false })
-      g.fillStyle(0x181825, 1)
-      g.fillRect(0, 0, 80, 80)
-      g.lineStyle(1, 0x272739, 1)
-      g.strokeRect(0.5, 0.5, 79, 79)
-      g.generateTexture('bg-grid', 80, 80)
-      g.destroy()
+    this._isoR = Math.ceil((W / 64 + H / 32) / 2) + 2
+    this._lastCamX = null
+    this._lastCamY = null
+
+    // 타일/데칼 이미지 (Phaser 로더 대신 순수 Image → ctx.drawImage)
+    this.floorSheet = new Image()
+    this.floorSheet.onload = () => { this._lastCamX = null } // 로드되면 강제 재그리기
+    this.floorSheet.src = '/sprites/dungeon/tileset_iso_stone.png'
+    this.floorDec = new Image()
+    this.floorDec.onload = () => { this._lastCamX = null }
+    this.floorDec.src = '/sprites/dungeon/decals_iso.png'
+
+    const tex = this.textures.exists('isofloor')
+      ? this.textures.get('isofloor')
+      : this.textures.createCanvas('isofloor', W, H)
+    this.floorCanvas = tex
+    this.floorCtx = tex.context
+    this.add.image(0, 0, 'isofloor').setOrigin(0).setDepth(-5)
+
+    // 던전 비네트(정적, 1회 굽기)
+    if (!this.textures.exists('isovig')) {
+      const vt = this.textures.createCanvas('isovig', W, H)
+      const vc = vt.context
+      const rg = vc.createRadialGradient(
+        W / 2, H / 2, Math.min(W, H) * 0.32,
+        W / 2, H / 2, Math.max(W, H) * 0.62
+      )
+      rg.addColorStop(0, 'rgba(0,0,0,0)')
+      rg.addColorStop(1, 'rgba(5,7,11,0.5)')
+      vc.fillStyle = rg
+      vc.fillRect(0, 0, W, H)
+      vt.refresh()
     }
-
-    if (!this.textures.exists('bg-dots')) {
-      const d = this.make.graphics({ add: false })
-      // 고정된 좌표 — 매번 다르면 재시작할 때 배경이 튄다
-      const dots = [
-        [30, 40],
-        [180, 90],
-        [90, 200],
-        [220, 30],
-        [140, 160],
-        [40, 230],
-        [200, 220],
-        [110, 110],
-      ]
-      for (const [x, y] of dots) {
-        d.fillStyle(0x313244, 1)
-        d.fillCircle(x, y, 2)
-      }
-      d.generateTexture('bg-dots', 256, 256)
-      d.destroy()
-    }
-
-    this.bgGrid = this.add
-      .tileSprite(0, 0, W, H, 'bg-grid')
-      .setOrigin(0)
-      .setDepth(-2)
-
-    this.bgDots = this.add
-      .tileSprite(0, 0, W, H, 'bg-dots')
-      .setOrigin(0)
-      .setDepth(-1)
-      .setAlpha(0.5)
+    this.add.image(0, 0, 'isovig').setOrigin(0).setDepth(5)
   }
 
   updateBackground() {
-    // 플레이어가 오른쪽으로 가면 배경은 왼쪽으로 흘러야 한다
-    this.bgGrid.tilePositionX = this.player.x * PARALLAX_GRID
-    this.bgGrid.tilePositionY = this.player.y * PARALLAX_GRID
-    this.bgDots.tilePositionX = this.player.x * PARALLAX_DOTS
-    this.bgDots.tilePositionY = this.player.y * PARALLAX_DOTS
+    const px = this.player.x
+    const py = this.player.y
+    // 플레이어가 안 움직였으면 바닥 재그리기/업로드 생략 (최적화)
+    if (px === this._lastCamX && py === this._lastCamY) return
+    this._lastCamX = px
+    this._lastCamY = py
+
+    const ctx = this.floorCtx
+    ctx.fillStyle = '#0b0e13' // 그루트(틈) 색
+    ctx.fillRect(0, 0, W, H)
+
+    const sheet = this.floorSheet
+    if (sheet.complete && sheet.naturalWidth) {
+      const dec = this.floorDec
+      const decOk = dec.complete && dec.naturalWidth
+      const TW = 128, TH = 64, N = 16, DS = 64, DN = 8
+      const ox = W / 2 - px
+      const oy = H / 2 - py
+      const cc = (px / (TW / 2) + py / (TH / 2)) / 2
+      const rr = (py / (TH / 2) - px / (TW / 2)) / 2
+      const R = this._isoR
+      for (let r = Math.floor(rr - R); r <= rr + R; r++) {
+        for (let c = Math.floor(cc - R); c <= cc + R; c++) {
+          const sx = ox + (c - r) * (TW / 2) - TW / 2
+          const sy = oy + (c + r) * (TH / 2) - TH / 2
+          if (sx < -TW || sx > W || sy < -TH || sy > H) continue
+          const hv = ((c * 73856093) ^ (r * 19349663)) >>> 0
+          const k = hv % N
+          if ((hv >> 8) & 1) {
+            ctx.save()
+            ctx.translate(sx + TW, sy)
+            ctx.scale(-1, 1)
+            ctx.drawImage(sheet, k * TW, 0, TW, TH, 0, 0, TW, TH)
+            ctx.restore()
+          } else {
+            ctx.drawImage(sheet, k * TW, 0, TW, TH, sx, sy, TW, TH)
+          }
+          if (hv % 5 === 0 && decOk) {
+            const dk = (hv >> 12) % DN
+            ctx.drawImage(dec, dk * DS, 0, DS, DS, sx + 32, sy, DS, DS)
+          }
+        }
+      }
+      // 위/아래 깊이 어두움
+      const gt = ctx.createLinearGradient(0, 0, 0, 150)
+      gt.addColorStop(0, 'rgba(6,8,12,0.55)')
+      gt.addColorStop(1, 'rgba(6,8,12,0)')
+      ctx.fillStyle = gt
+      ctx.fillRect(0, 0, W, 150)
+      const gb = ctx.createLinearGradient(0, H, 0, H - 150)
+      gb.addColorStop(0, 'rgba(6,8,12,0.55)')
+      gb.addColorStop(1, 'rgba(6,8,12,0)')
+      ctx.fillStyle = gb
+      ctx.fillRect(0, H - 150, W, 150)
+    }
+    this.floorCanvas.refresh()
   }
 
   // --- HUD ---------------------------------------------------------------
@@ -1629,8 +1677,16 @@ class GameScene extends Phaser.Scene {
   render() {
     const ge = this.gfxEnemies
     ge.clear()
+    const es = this.enemies
 
-    // 타입별로 색을 몰아 그려야 스타일 전환 비용이 줄어든다
+    // 1) 바닥 그림자 (전체) — 접지감
+    ge.fillStyle(0x000000, 0.32)
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      ge.fillEllipse(e.x, e.y + e.r * 0.72, e.r * 1.7, e.r * 0.85)
+    }
+
+    // 2) 본체 (타입별 색을 몰아 그림) — 원형 블롭
     const typePasses = [
       ['basic', COLOR_ENEMY],
       ['rusher', COLOR_RUSHER],
@@ -1638,29 +1694,45 @@ class GameScene extends Phaser.Scene {
     ]
     for (let t = 0; t < typePasses.length; t++) {
       ge.fillStyle(typePasses[t][1], 1)
-      for (let i = 0; i < this.enemies.length; i++) {
-        const e = this.enemies[i]
-        if (e.type !== typePasses[t][0] || e.flash > 0) continue
-        // 크기 고정 — 피격은 흰 플래시 + 데미지 숫자로 표현(크기 안 줄임)
-        const s = e.r * 2
-        ge.fillRect(e.x - s / 2, e.y - s / 2, s, s)
+      for (let i = 0; i < es.length; i++) {
+        const e = es[i]
+        if (e.boss || e.type !== typePasses[t][0] || e.flash > 0) continue
+        ge.fillCircle(e.x, e.y, e.r)
       }
     }
-
     ge.fillStyle(COLOR_BOSS, 1)
-    for (let i = 0; i < this.enemies.length; i++) {
-      const e = this.enemies[i]
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
       if (!e.boss || e.flash > 0) continue
-      ge.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2)
+      ge.fillCircle(e.x, e.y, e.r)
     }
 
+    // 3) 피격 플래시 (흰, 살짝 큼)
     ge.fillStyle(COLOR_ENEMY_HIT, 1)
-    for (let i = 0; i < this.enemies.length; i++) {
-      const e = this.enemies[i]
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
       if (e.flash <= 0) continue
-      // 피격 순간 살짝 커짐 → 펀치감
-      const hs = e.r * 2 * 1.18
-      ge.fillRect(e.x - hs / 2, e.y - hs / 2, hs, hs)
+      ge.fillCircle(e.x, e.y, e.r * 1.12)
+    }
+
+    // 4) 상단 하이라이트 (음영)
+    ge.fillStyle(0xffffff, 0.16)
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (e.flash > 0) continue
+      ge.fillCircle(e.x - e.r * 0.3, e.y - e.r * 0.32, e.r * 0.42)
+    }
+
+    // 5) 눈 2개 (몬스터 느낌 — 플레이어와 구분)
+    ge.fillStyle(0x101018, 0.92)
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (e.flash > 0) continue
+      const eyY = e.y - e.r * 0.05
+      const eyX = e.r * 0.36
+      const eyR = Math.max(1.2, e.r * 0.17)
+      ge.fillCircle(e.x - eyX, eyY, eyR)
+      ge.fillCircle(e.x + eyX, eyY, eyR)
     }
 
     // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다
@@ -1744,6 +1816,23 @@ class GameScene extends Phaser.Scene {
       gf.lineTo(p.x - p.nx * p.size, p.y - p.ny * p.size)
       gf.strokePath()
     }
+
+    // 플레이어 — 음영 오브 (iso_topdown 스타일: 글로우+그림자+본체+테두리+하이라이트)
+    const gp = this.gfxChar
+    gp.clear()
+    const px = this.player.x
+    const py = this.player.y
+    const pr = this.stats.player.radius
+    gp.fillStyle(COLOR_PLAYER, 0.16)
+    gp.fillCircle(px, py, pr * 1.9) // 글로우
+    gp.fillStyle(0x000000, 0.4)
+    gp.fillEllipse(px, py + pr * 0.95, pr * 2.1, pr * 1.0) // 그림자
+    gp.fillStyle(0x8fd0ff, 1)
+    gp.fillCircle(px, py, pr) // 본체
+    gp.lineStyle(2, 0xcdd6f4, 0.9)
+    gp.strokeCircle(px, py, pr) // 테두리
+    gp.fillStyle(0xeaf6ff, 1)
+    gp.fillCircle(px - pr * 0.32, py - pr * 0.32, pr * 0.34) // 하이라이트
   }
 }
 
