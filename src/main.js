@@ -780,7 +780,8 @@ class GameScene extends Phaser.Scene {
 
   // 연사/지속 진행 — 매 프레임 간격만큼 차면 발사한다
   updateBursts(dt) {
-    const iv = this.cfg.skill.shotInterval
+    // 간격이 0 이하면 난사 while 루프가 무한 반복 → 최소값으로 클램프(프리즈 방지)
+    const iv = Math.max(0.02, this.cfg.skill.shotInterval)
 
     // 다발사격 — 부채꼴
     const m = this.burst.multishot
@@ -1252,7 +1253,20 @@ class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.gameOver || this.userPaused || this.growthOpen) return
+    // 한 프레임에서 오류가 나도 게임 루프 전체가 멈추지 않게(프리즈 방지) +
+    // 원인을 콘솔에 한 번 남긴다(진단).
+    try {
+      this.step(delta)
+    } catch (err) {
+      if (!this._loggedErr) {
+        this._loggedErr = true
+        // eslint-disable-next-line no-console
+        console.error('[update 오류 — 이 메시지를 개발자에게 전달]', err)
+      }
+    }
+  }
 
+  step(delta) {
     const dt = Math.min(delta / 1000, MAX_DT)
 
     this.elapsed += dt
@@ -1270,7 +1284,8 @@ class GameScene extends Phaser.Scene {
     this.waveText.setText(`x${mult.toFixed(1)}  ·  적HP ${this.enemyHpNow}`)
 
     this.spawnAcc += dt
-    const interval = this.cfg.spawn.baseInterval / mult
+    // 간격이 0 이하/비정상이면 while 무한루프 → 최소값으로 클램프(프리즈 방지)
+    const interval = Math.max(0.02, this.cfg.spawn.baseInterval / mult)
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval
       this.spawnEnemy()

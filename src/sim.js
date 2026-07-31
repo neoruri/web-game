@@ -280,7 +280,7 @@ export function simulate(cfg, opts = {}) {
   }
 
   function updateBursts() {
-    const iv = cfg.skill.shotInterval
+    const iv = Math.max(0.02, cfg.skill.shotInterval) // 0 이하면 무한루프 → 클램프
 
     const m = burst.multishot
     if (m.left > 0) {
