@@ -36,6 +36,7 @@ const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 const COLOR_CRIT = '#f9e2af'
 const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
 const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
+const PLAYER_SPRITE_SCALE = 0.55 // 캐릭터 스프라이트 배율 (튜닝 포인트)
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
@@ -53,6 +54,15 @@ const DESPAWN_DIST = SPAWN_DIST + 280
 class GameScene extends Phaser.Scene {
   constructor() {
     super('Game')
+  }
+
+  preload() {
+    // 캐릭터 동작 스프라이트시트 (96×116 셀, 8열×7행)
+    this.load.spritesheet(
+      'archer',
+      '/sprites/dungeon/deliverables/player_spritesheet.png',
+      { frameWidth: 96, frameHeight: 116 }
+    )
   }
 
   create() {
@@ -143,6 +153,8 @@ class GameScene extends Phaser.Scene {
       this.gfxChar,
       this.player,
     ])
+
+    this.setupPlayerSprite()
 
     this.buildHud()
     this.setupInput()
@@ -313,6 +325,61 @@ class GameScene extends Phaser.Scene {
       ctx.fillRect(0, H - 150, W, 150)
     }
     this.floorCanvas.refresh()
+  }
+
+  // --- 캐릭터 스프라이트 (동작 애니) --------------------------------------
+
+  setupPlayerSprite() {
+    this.playerSprite = null
+    // 시트가 정상 로드되지 않았으면 폴백(음영 오브)으로 둔다
+    if (!this.textures.exists('archer')) return
+    const tex = this.textures.get('archer')
+    if (tex.frameTotal < 50) return // 로드 실패(플레이스홀더) 방어 — 정상은 56+
+    if (tex.setFilter) tex.setFilter(Phaser.Textures.FilterMode.NEAREST) // 픽셀 또렷하게
+
+    const defs = {
+      idle: { row: 0, frames: 4, fps: 6, loop: true },
+      run: { row: 1, frames: 6, fps: 12, loop: true },
+      back_run: { row: 2, frames: 8, fps: 12, loop: true },
+      attack: { row: 3, frames: 4, fps: 14, loop: false },
+      multishot: { row: 4, frames: 5, fps: 14, loop: false },
+      hit: { row: 5, frames: 2, fps: 10, loop: false },
+      death: { row: 6, frames: 5, fps: 10, loop: false },
+    }
+    for (const key in defs) {
+      if (this.anims.exists(key)) continue
+      const d = defs[key]
+      const start = d.row * 8 // 프레임 = 행*8 + 열
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers('archer', {
+          start,
+          end: start + d.frames - 1,
+        }),
+        frameRate: d.fps,
+        repeat: d.loop ? -1 : 0,
+      })
+    }
+
+    this.playerSprite = this.add
+      .sprite(this.player.x, this.player.y, 'archer', 0)
+      .setOrigin(0.5, 0.8) // 발끝 하단 정렬
+      .setScale(PLAYER_SPRITE_SCALE)
+    this.worldLayer.add(this.playerSprite)
+    this.animKey = 'idle'
+    this.playerSprite.play('idle')
+  }
+
+  updatePlayerAnim(vx, vy) {
+    const sp = this.playerSprite
+    if (!sp || this.animKey === 'death') return
+    const moving = Math.abs(vx) + Math.abs(vy) > 0.05
+    const key = !moving ? 'idle' : vy < -0.35 ? 'back_run' : 'run'
+    if (Math.abs(vx) > 0.05) sp.setFlipX(vx < 0) // 왼쪽 이동 시 미러
+    if (this.animKey !== key) {
+      this.animKey = key
+      sp.play(key, true)
+    }
   }
 
   // --- HUD ---------------------------------------------------------------
@@ -1194,13 +1261,14 @@ class GameScene extends Phaser.Scene {
     this.invulnLeft = this.stats.player.invuln
 
     this.cameras.main.shake(120, 0.006)
+    const blinkTarget = this.playerSprite || this.player
     this.tweens.add({
-      targets: this.player,
+      targets: blinkTarget,
       alpha: 0.3,
       duration: 80,
       yoyo: true,
       repeat: 1,
-      onComplete: () => this.player.setAlpha(1),
+      onComplete: () => blinkTarget.setAlpha(1),
     })
 
     if (this.hp === 0) {
@@ -1259,6 +1327,11 @@ class GameScene extends Phaser.Scene {
   endGame() {
     this.gameOver = true
     this.player.setVisible(false)
+    // 사망 애니 재생 (스프라이트)
+    if (this.playerSprite) {
+      this.animKey = 'death'
+      this.playerSprite.play('death')
+    }
     this.releaseStick()
 
     const f = { fontFamily: 'Arial, sans-serif' }
@@ -1358,6 +1431,11 @@ class GameScene extends Phaser.Scene {
     // 월드 레이어를 플레이어 반대로 옮겨 플레이어를 화면 중앙에 고정
     this.worldLayer.setPosition(W / 2 - this.player.x, H / 2 - this.player.y)
     this.updateBackground()
+
+    if (this.playerSprite) {
+      this.playerSprite.setPosition(this.player.x, this.player.y)
+      this.updatePlayerAnim(vx, vy)
+    }
 
     this.fireAcc += dt
     if (this.fireAcc >= this.stats.weapon.cooldown) {
@@ -1825,22 +1903,27 @@ class GameScene extends Phaser.Scene {
       gf.strokePath()
     }
 
-    // 플레이어 — 음영 오브 (iso_topdown 스타일: 글로우+그림자+본체+테두리+하이라이트)
+    // 플레이어 — 스프라이트면 발밑 그림자만, 아니면 폴백 음영 오브
     const gp = this.gfxChar
     gp.clear()
     const px = this.player.x
     const py = this.player.y
     const pr = this.stats.player.radius
-    gp.fillStyle(COLOR_PLAYER, 0.16)
-    gp.fillCircle(px, py, pr * 1.9) // 글로우
-    gp.fillStyle(0x000000, 0.4)
-    gp.fillEllipse(px, py + pr * 0.95, pr * 2.1, pr * 1.0) // 그림자
-    gp.fillStyle(0x8fd0ff, 1)
-    gp.fillCircle(px, py, pr) // 본체
-    gp.lineStyle(2, 0xcdd6f4, 0.9)
-    gp.strokeCircle(px, py, pr) // 테두리
-    gp.fillStyle(0xeaf6ff, 1)
-    gp.fillCircle(px - pr * 0.32, py - pr * 0.32, pr * 0.34) // 하이라이트
+    if (this.playerSprite) {
+      gp.fillStyle(0x000000, 0.4)
+      gp.fillEllipse(px, py + pr * 0.5, pr * 2.2, pr * 1.0) // 발밑 그림자
+    } else {
+      gp.fillStyle(COLOR_PLAYER, 0.16)
+      gp.fillCircle(px, py, pr * 1.9)
+      gp.fillStyle(0x000000, 0.4)
+      gp.fillEllipse(px, py + pr * 0.95, pr * 2.1, pr * 1.0)
+      gp.fillStyle(0x8fd0ff, 1)
+      gp.fillCircle(px, py, pr)
+      gp.lineStyle(2, 0xcdd6f4, 0.9)
+      gp.strokeCircle(px, py, pr)
+      gp.fillStyle(0xeaf6ff, 1)
+      gp.fillCircle(px - pr * 0.32, py - pr * 0.32, pr * 0.34)
+    }
   }
 }
 
