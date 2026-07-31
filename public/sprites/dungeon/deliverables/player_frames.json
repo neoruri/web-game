@@ -1,0 +1,52 @@
+{
+  "character": "Underworld Demon Hunter",
+  "cell": [
+    96,
+    116
+  ],
+  "sheet": "player_spritesheet.png",
+  "anims": {
+    "idle": {
+      "row": 0,
+      "frames": 4,
+      "fps": 6,
+      "loop": 1
+    },
+    "run": {
+      "row": 1,
+      "frames": 6,
+      "fps": 12,
+      "loop": 1
+    },
+    "back_run": {
+      "row": 2,
+      "frames": 8,
+      "fps": 12,
+      "loop": 1
+    },
+    "attack": {
+      "row": 3,
+      "frames": 4,
+      "fps": 14,
+      "loop": 0
+    },
+    "multishot": {
+      "row": 4,
+      "frames": 5,
+      "fps": 14,
+      "loop": 0
+    },
+    "hit": {
+      "row": 5,
+      "frames": 2,
+      "fps": 10,
+      "loop": 0
+    },
+    "death": {
+      "row": 6,
+      "frames": 5,
+      "fps": 10,
+      "loop": 0
+    }
+  }
+}
