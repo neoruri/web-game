@@ -43,7 +43,10 @@ export function simulate(cfg, opts = {}) {
   const specs = emptySpecs() // 특화 보류
   const CARD_STEP = { dmg: 0.1, move: 0.08, hp: 0.15, atkSpeed: 0.08 }
   const CARD_ACTIVES = ['multishot', 'rapidfire', 'barrage', 'grenade']
-  const MAX_ACTIVE = 3
+  const MAX_ACTIVE = 5
+  const GRENADE_MAX = 240 // 수류탄 최대 투척 거리
+  const GRENADE_DUR = 0.45 // 포물선 비행 시간
+  const grenades = [] // 날아가는 수류탄 {tx,ty,t,radius,dmg}
   const cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
   let cardCursor = 0
   const cardBonusObj = () => ({
@@ -256,9 +259,13 @@ export function simulate(cfg, opts = {}) {
       if (id === 'multishot') {
         const t = nearestEnemy()
         if (t) {
-          burst.multishot.base = Math.atan2(t.y - state.py, t.x - state.px)
-          burst.multishot.left = st.shots
-          burst.multishot.acc = cfg.skill.shotInterval
+          // 부채꼴 균등 팬 — 한 번에 발사 (game과 동일)
+          const base = Math.atan2(t.y - state.py, t.x - state.px)
+          const spread = ((cfg.skill.multishotSpread * Math.PI) / 180) * st.spreadMul
+          for (let s = 0; s < st.shots; s++) {
+            const frac = st.shots <= 1 ? 0.5 : s / (st.shots - 1)
+            fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce)
+          }
           fired = true
         }
       } else if (id === 'rapidfire') {
@@ -272,12 +279,20 @@ export function simulate(cfg, opts = {}) {
         burst.barrage.acc = cfg.skill.shotInterval
         fired = true
       } else if (id === 'grenade') {
-        if (state.enemies.length) {
+        const t = nearestEnemy()
+        if (t) {
           for (let i = 0; i < st.count; i++) {
-            // 앞선 폭발이 적을 다 죽였을 수 있으니 매번 재확인
-            if (!state.enemies.length) break
-            const t = state.enemies[(Math.random() * state.enemies.length) | 0]
-            explodeAt(t.x, t.y, st.radius, st.dmg)
+            const dx = t.x - state.px
+            const dy = t.y - state.py
+            const d = Math.hypot(dx, dy) || 1
+            const reach = Math.min(d, GRENADE_MAX)
+            const jx = (Math.random() - 0.5) * st.radius * 1.1
+            const jy = (Math.random() - 0.5) * st.radius * 1.1
+            grenades.push({
+              tx: state.px + (dx / d) * reach + jx,
+              ty: state.py + (dy / d) * reach + jy,
+              t: 0, radius: st.radius, dmg: st.dmg,
+            })
           }
           fired = true
         }
@@ -291,20 +306,21 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
-  function updateBursts() {
-    const iv = Math.max(0.02, cfg.skill.shotInterval) // 0 이하면 무한루프 → 클램프
-
-    const m = burst.multishot
-    if (m.left > 0) {
-      const st = stats.skillStats.multishot
-      const spread = ((cfg.skill.multishotSpread * Math.PI) / 180) * st.spreadMul
-      m.acc += dt
-      while (m.acc >= iv && m.left > 0) {
-        m.acc -= iv
-        fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce)
-        m.left--
+  function updateGrenades() {
+    for (let i = grenades.length - 1; i >= 0; i--) {
+      const g = grenades[i]
+      g.t += dt
+      if (g.t >= GRENADE_DUR) {
+        explodeAt(g.tx, g.ty, g.radius, g.dmg) // 착탄 시 폭발
+        grenades[i] = grenades[grenades.length - 1]
+        grenades.pop()
       }
     }
+  }
+
+  function updateBursts() {
+    const iv = Math.max(0.02, cfg.skill.shotInterval) // 0 이하면 무한루프 → 클램프
+    // (다발사격은 위 트리거에서 한 번에 부채꼴 발사)
 
     const r = burst.rapidfire
     if (r.left > 0) {
@@ -611,6 +627,7 @@ export function simulate(cfg, opts = {}) {
 
     updateSkills()
     updateBursts()
+    updateGrenades()
     updateArrows()
     updateEnemies()
     updateTelegraphs()

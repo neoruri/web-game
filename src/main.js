@@ -28,7 +28,10 @@ const CARD_PASSIVES = {
   hp: { icon: '❤️', name: '최대체력 +15%', desc: '생존력 증가', step: 0.15 },
   atkSpeed: { icon: '⏱️', name: '공격속도 +8%', desc: '기본·스킬 쿨타임 감소', step: 0.08 },
 }
-const MAX_ACTIVE = 3 // 동시 활성 스킬 수 (기본 사격 + 2)
+const MAX_ACTIVE = 5 // 동시 활성 스킬 수 (기본 사격 + 액티브 4종 전부)
+const GRENADE_MAX = 240 // 수류탄 최대 투척 거리(적정 사거리)
+const GRENADE_DUR = 0.45 // 수류탄 포물선 비행 시간(초)
+const GRENADE_ARC = 62 // 포물선 최대 높이(px)
 
 // 세로 모드 (모바일 우선). 9:16 비율.
 const W = 540
@@ -135,6 +138,8 @@ class GameScene extends Phaser.Scene {
     this.enemies = []
     this.arrows = []
     this.explosions = [] // 수류탄 폭발 이펙트
+    this.grenades = [] // 날아가는 수류탄(포물선)
+    this.grenadePool = []
     this.particles = [] // 타격/사망 파편
     this.partPool = []
     this.popups = [] // 데미지 숫자
@@ -1000,10 +1005,14 @@ class GameScene extends Phaser.Scene {
   triggerMultishot(st) {
     const target = this.nearestEnemy()
     if (!target) return false
-    const m = this.burst.multishot
-    m.base = Math.atan2(target.y - this.bowY, target.x - this.player.x)
-    m.left = st.shots
-    m.acc = this.cfg.skill.shotInterval
+    // 부채꼴 \||/ — 균등 각도로 한 번에 쫙 발사
+    const base = Math.atan2(target.y - this.bowY, target.x - this.player.x)
+    const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread) * st.spreadMul
+    const n = st.shots
+    for (let i = 0; i < n; i++) {
+      const frac = n <= 1 ? 0.5 : i / (n - 1) // 0..1
+      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, true)
+    }
     this.flashSkill(0x89dceb)
     return true
   }
@@ -1026,33 +1035,51 @@ class GameScene extends Phaser.Scene {
   }
 
   triggerGrenade(st) {
-    if (this.enemies.length === 0) return false
+    const target = this.nearestEnemy()
+    if (!target) return false
+    const bx = this.player.x
+    const by = this.bowY
     for (let i = 0; i < st.count; i++) {
-      // 앞선 폭발이 적을 다 죽였을 수 있으니 매번 재확인
-      if (this.enemies.length === 0) break
-      const t = this.enemies[(Math.random() * this.enemies.length) | 0]
-      this.explodeAt(t.x, t.y, st.radius, st.dmg)
+      // 대상 방향으로, 최대 사거리 안쪽(적정 거리)에 착탄. 여러 개면 살짝 흩뿌림.
+      const dx = target.x - bx
+      const dy = target.y - by
+      const d = Math.hypot(dx, dy) || 1
+      const reach = Math.min(d, GRENADE_MAX)
+      const jx = (Math.random() - 0.5) * st.radius * 1.1
+      const jy = (Math.random() - 0.5) * st.radius * 1.1
+      this.spawnGrenade(bx, by, bx + (dx / d) * reach + jx, by + (dy / d) * reach + jy, st.radius, st.dmg)
     }
+    this.flashSkill(0xf9e2af)
     return true
+  }
+
+  spawnGrenade(x, y, tx, ty, radius, dmg) {
+    const g = this.grenadePool.pop() || {}
+    g.sx = x; g.sy = y; g.x = x; g.y = y
+    g.tx = tx; g.ty = ty
+    g.t = 0; g.radius = radius; g.dmg = dmg
+    this.grenades.push(g)
+  }
+
+  updateGrenades(dt) {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i]
+      g.t += dt
+      const k = Math.min(1, g.t / GRENADE_DUR)
+      g.x = g.sx + (g.tx - g.sx) * k
+      g.y = g.sy + (g.ty - g.sy) * k
+      if (g.t >= GRENADE_DUR) {
+        this.explodeAt(g.tx, g.ty, g.radius, g.dmg) // 착탄 시 폭발
+        this.removeSwap(this.grenades, i, this.grenadePool)
+      }
+    }
   }
 
   // 연사/지속 진행 — 매 프레임 간격만큼 차면 발사한다
   updateBursts(dt) {
     // 간격이 0 이하면 난사 while 루프가 무한 반복 → 최소값으로 클램프(프리즈 방지)
     const iv = Math.max(0.02, this.cfg.skill.shotInterval)
-
-    // 다발사격 — 부채꼴
-    const m = this.burst.multishot
-    if (m.left > 0) {
-      const st = this.stats.skillStats.multishot
-      const spread = Phaser.Math.DegToRad(this.cfg.skill.multishotSpread) * st.spreadMul
-      m.acc += dt
-      while (m.acc >= iv && m.left > 0) {
-        m.acc -= iv
-        this.fireAngle(m.base + (Math.random() - 0.5) * spread, st.dmg, st.pierce, true)
-        m.left--
-      }
-    }
+    // (다발사격은 triggerMultishot에서 한 번에 부채꼴 발사)
 
     // 연발사격 — 가장 가까운 적 단일 연사
     const r = this.burst.rapidfire
@@ -1587,6 +1614,7 @@ class GameScene extends Phaser.Scene {
     this.updateSkills(dt)
     this.updateBursts(dt)
     this.updateExplosions(dt)
+    this.updateGrenades(dt)
     this.updatePopups(dt)
     this.updateParticles(dt)
 
@@ -2019,6 +2047,20 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < this.eProjectiles.length; i++) {
       const p = this.eProjectiles[i]
       gf.fillCircle(p.x, p.y, 6)
+    }
+
+    // 날아가는 수류탄 (포물선) — 바닥 그림자 + 솟았다 떨어지는 본체
+    gf.fillStyle(0x000000, 0.3)
+    for (let i = 0; i < this.grenades.length; i++) {
+      const g = this.grenades[i]
+      gf.fillEllipse(g.x, g.y, 9, 4.5) // 착탄 지점 따라오는 그림자
+    }
+    gf.fillStyle(0xf9e2af, 1)
+    for (let i = 0; i < this.grenades.length; i++) {
+      const g = this.grenades[i]
+      const k = g.t / GRENADE_DUR
+      const h = Math.sin(Math.PI * Math.min(1, k)) * GRENADE_ARC // 포물선 높이
+      gf.fillCircle(g.x, g.y - h, 5)
     }
 
     // 사망 파편 — 사각형, 남은 수명만큼 옅어짐
