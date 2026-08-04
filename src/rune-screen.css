@@ -1,0 +1,52 @@
+/* 룬 획득/장착 오버레이 */
+#rune-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 5, 11, 0.88);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+  color: #e6e0f0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#rune-modal.rn-hidden { display: none; }
+#rune-modal * { box-sizing: border-box; }
+
+.rn-panel {
+  width: min(94vw, 460px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 4px;
+}
+.rn-top { text-align: center; }
+.rn-kicker {
+  font-size: 13px; letter-spacing: 2px; font-weight: 800;
+  background: linear-gradient(#f0c66a, #c07adb);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.rn-sub { font-size: 13px; color: #9a8fb0; margin-top: 4px; }
+
+.rn-body { display: flex; flex-direction: column; gap: 11px; }
+
+.rn-card, .rn-skill {
+  position: relative; overflow: hidden;
+  background: linear-gradient(#211a2e, #171221);
+  border: 1px solid #3a2f4b; border-radius: 15px;
+  padding: 14px 15px; display: flex; gap: 13px; align-items: center;
+  cursor: pointer; transition: 0.12s;
+}
+.rn-card:active, .rn-skill:active { transform: scale(0.98); }
+.rn-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.rn-ic {
+  width: 52px; height: 52px; border-radius: 12px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; background: #120d1c; border: 1px solid #3a2f4b;
+}
+.rn-info { flex: 1; min-width: 0; }
+.rn-nm { font-size: 16px; font-weight: 700; }
+.rn-ds { font-size: 12.5px; color: #9a8fb0; margin-top: 3px; line-height: 1.4; }
+.rn-skill { border-color: #2b3a4b; background: linear-gradient(#1a2431, #141c27); }

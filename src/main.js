@@ -12,7 +12,18 @@ import {
 } from './skilltree.js'
 import { createGrowthScreen } from './growth-ui.js'
 import { createLevelupScreen } from './levelup-cards.js'
+import { createRuneScreen } from './rune-screen.js'
 import { Grid } from './grid.js'
+
+// --- 룬 (보스 처치 드랍, 스킬당 1슬롯) ---
+const RUNES = {
+  damage: { icon: '⚔️', name: '데미지', desc: '그 스킬 피해 +20%', color: '#e87850' },
+  pierce: { icon: '➹', name: '관통', desc: '그 스킬 관통 +1', color: '#5ab4eb' },
+  projectile: { icon: '🎯', name: '발사체', desc: '그 스킬 발사체 +1', color: '#5adccd' },
+  cooldown: { icon: '⏱️', name: '쿨감', desc: '그 스킬 쿨타임 -15%', color: '#78d2be' },
+  // burn(화상)은 단계 2b에서 추가
+}
+const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown']
 
 // --- 레벨업 카드(뱀서 표준 진행) ---
 // 스킬 카드(기존 액티브 재활용) + 패시브 4종. 성장 화면(스킬트리)은 보류.
@@ -101,10 +112,15 @@ class GameScene extends Phaser.Scene {
     this.cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
     this.levelupOpen = false
     this._pendingLevels = 0
+    // 룬 슬롯 (스킬 id → 룬 id). 보스 처치 시 장착.
+    this.runeSlots = { basic: null, multishot: null, rapidfire: null, barrage: null, grenade: null }
+    this.runeOpen = false
+    this._pendingRune = false
 
-    // 능력치·스킬·카드 → 최종 전투 stats (단일 재계산 지점)
+    // 능력치·스킬·카드·룬 → 최종 전투 stats (단일 재계산 지점)
     this.stats = deriveStats(
-      this.cfg, this.attributes, this.skillLevels, this.specs, this.cardBonusObj()
+      this.cfg, this.attributes, this.skillLevels, this.specs,
+      this.cardBonusObj(), this.runeSlots
     )
 
     this.elapsed = 0
@@ -191,6 +207,8 @@ class GameScene extends Phaser.Scene {
 
     // 레벨업 3택 카드 (뱀서 표준). 성장 화면은 보류.
     this.levelup = createLevelupScreen({ onPick: (c) => this.onCardPick(c) })
+    // 룬 획득/장착 (보스 처치)
+    this.runeScreen = createRuneScreen({ onEquip: (r, s) => this.onRuneEquip(r, s) })
     // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
     if (this.growthBtn) this.growthBtn.setVisible(false)
     if (this.growthBtnText) this.growthBtnText.setVisible(false)
@@ -246,26 +264,62 @@ class GameScene extends Phaser.Scene {
     this.recompute()
   }
 
-  showNextLevelup() {
-    if (this.gameOver) {
-      this._pendingLevels = 0
-      this.levelupOpen = false
+  // 대기 중인 모달을 순서대로 연다 (레벨업 카드 → 룬). 하나 닫힐 때마다 호출.
+  maybeOpenModal() {
+    if (this.gameOver || this.levelupOpen || this.runeOpen) return
+    if (this._pendingLevels > 0) {
+      this.levelupOpen = true
+      this.releaseStick()
+      this.levelup.show(this.level, this.buildCards())
       return
     }
-    if (this._pendingLevels <= 0) {
-      this.levelupOpen = false
-      return
+    if (this._pendingRune) {
+      this._pendingRune = false
+      this.openRuneDrop()
     }
-    this.levelupOpen = true
-    this.releaseStick()
-    this.levelup.show(this.level, this.buildCards())
   }
 
   onCardPick(card) {
     this.applyCard(card)
     this._pendingLevels--
-    if (this._pendingLevels > 0) this.showNextLevelup()
-    else this.levelupOpen = false
+    this.levelupOpen = false
+    this.maybeOpenModal() // 남은 레벨 or 대기 룬
+  }
+
+  // --- 룬 (보스 처치) ---
+  openRuneDrop() {
+    this.runeOpen = true
+    this.releaseStick()
+    const runes = this.buildRuneChoices().map((id) => ({ id, ...RUNES[id] }))
+    this.runeScreen.show(runes, this.buildRuneSkillList())
+  }
+
+  buildRuneChoices() {
+    const pool = [...RUNE_POOL]
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    }
+    return pool.slice(0, Math.min(3, pool.length))
+  }
+
+  buildRuneSkillList() {
+    const list = [{ id: 'basic', name: '기본 사격', icon: '🎯' }]
+    for (const id in CARD_SKILLS) {
+      if ((this.skillLevels[id] || 0) > 0)
+        list.push({ id, name: CARD_SKILLS[id].name, icon: CARD_SKILLS[id].icon })
+    }
+    return list.map((s) => ({
+      ...s,
+      curRune: this.runeSlots[s.id] ? RUNES[this.runeSlots[s.id]].name : '',
+    }))
+  }
+
+  onRuneEquip(runeId, skillId) {
+    this.runeSlots[skillId] = runeId
+    this.recompute()
+    this.runeOpen = false
+    this.maybeOpenModal()
   }
 
   // --- 성장 시스템 -------------------------------------------------------
@@ -325,7 +379,8 @@ class GameScene extends Phaser.Scene {
   recompute() {
     const prevMax = this.stats.player.maxHp
     this.stats = deriveStats(
-      this.cfg, this.attributes, this.skillLevels, this.specs, this.cardBonusObj()
+      this.cfg, this.attributes, this.skillLevels, this.specs,
+      this.cardBonusObj(), this.runeSlots
     )
     const gained = this.stats.player.maxHp - prevMax
     if (gained > 0) this.hp += gained
@@ -698,7 +753,7 @@ class GameScene extends Phaser.Scene {
       // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
       if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
       if (this.growthBtn.getBounds().contains(p.x, p.y)) return
-      if (this.userPaused || this.growthOpen || this.levelupOpen) return
+      if (this.userPaused || this.growthOpen || this.levelupOpen || this.runeOpen) return
 
       this.stick.active = true
       this.stick.ox = p.x
@@ -1275,10 +1330,17 @@ class GameScene extends Phaser.Scene {
     this.spawnParticles(ex, ey, e.boss ? 20 : 9, col, e.boss ? 240 : 170, e.boss ? 4 : 3, 0.45)
     if (e.boss) this.cameras.main.shake(160, 0.006)
     // 처치 즉시 경험치 (젬을 줍지 않는다). 보스는 e.gems 배수만큼.
+    const wasBoss = e.boss
     this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
     this.gainXp(e.gems * this.cfg.xp.gemValue)
+
+    // 보스 처치 → 룬 드랍 (레벨업 카드가 있으면 그 다음에 순서대로)
+    if (wasBoss) {
+      this._pendingRune = true
+      this.maybeOpenModal()
+    }
 
     // 힘40 처치 폭발 (연쇄 없음, 내부 쿨 0.2초)
     if (
@@ -1323,7 +1385,7 @@ class GameScene extends Phaser.Scene {
     // 뱀서 표준: 레벨업 → 정지 후 3택 카드. (능력치/스킬포인트 지급 보류)
     this.lvText.setText('Lv ' + this.level)
     this._pendingLevels = (this._pendingLevels || 0) + levels
-    if (!this.levelupOpen) this.showNextLevelup()
+    this.maybeOpenModal()
   }
 
   // 레벨이 스킬 해금 레벨을 통과하면 알림 (레벨을 건너뛰어도 처리)
@@ -1538,7 +1600,7 @@ class GameScene extends Phaser.Scene {
   // --- 루프 ---------------------------------------------------------------
 
   update(time, delta) {
-    if (this.gameOver || this.userPaused || this.growthOpen || this.levelupOpen) return
+    if (this.gameOver || this.userPaused || this.growthOpen || this.levelupOpen || this.runeOpen) return
     // 한 프레임에서 오류가 나도 게임 루프 전체가 멈추지 않게(프리즈 방지) +
     // 원인을 콘솔에 한 번 남긴다(진단).
     try {

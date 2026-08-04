@@ -66,9 +66,10 @@ function tierBonuses(attr, pass) {
   }
 }
 
-// 능력치·스킬·특화(+카드 패시브) → 최종 전투 stats.
+// 능력치·스킬·특화(+카드 패시브 + 룬) → 최종 전투 stats.
 // cardBonus: { dmg, move, hp, atkSpeed } — 레벨업 카드 패시브 누적 비율.
-export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}) {
+// runeSlots: { basic|multishot|... : 'damage'|'pierce'|'projectile'|'cooldown'|'burn' }
+export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeSlots = {}) {
   const A = cfg.attr
 
   // 카드 패시브 배율 (뱀서 표준 진행)
@@ -106,6 +107,15 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}) {
   s.weapon.speed = cfg.weapon.speed * (1 + p.projSpeedPct)
   s.weapon.pierce = cfg.weapon.pierce + p.pierce + tb.pierceAdd
   s.weapon.extraArrows = tb.extraArrows // 민첩30: 기본 활 추가 화살
+  s.weapon.burn = false
+
+  // 기본 활 룬
+  const br = runeSlots.basic
+  if (br === 'damage') s.weapon.damage *= 1.2
+  if (br === 'cooldown') s.weapon.cooldown = Math.max(0.1, s.weapon.cooldown * 0.85)
+  if (br === 'pierce') s.weapon.pierce += 1
+  if (br === 'projectile') s.weapon.extraArrows += 1
+  if (br === 'burn') s.weapon.burn = true
 
   // 이동/체력 — 능력치 + 카드 패시브
   s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove
@@ -174,6 +184,19 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}) {
       if (m.radiusMul && st.radius != null) st.radius *= m.radiusMul
       if (m.countAdd && st.count != null) st.count += m.countAdd
     }
+
+    // 룬 (스킬당 1개)
+    st.burn = false
+    const rn = runeSlots[id]
+    if (rn === 'damage') st.dmg *= 1.2
+    else if (rn === 'cooldown')
+      st.cooldown = Math.max(A.minSkillCooldown, st.cooldown * 0.85)
+    else if (rn === 'pierce') st.pierce += 1
+    else if (rn === 'projectile') {
+      if (st.shots != null) st.shots += 1
+      else if (st.count != null) st.count += 1
+      else if (st.duration != null) st.duration += 0.4
+    } else if (rn === 'burn') st.burn = true
 
     s.skillStats[id] = st
   }

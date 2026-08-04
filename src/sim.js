@@ -55,7 +55,10 @@ export function simulate(cfg, opts = {}) {
     hp: cardPassives.hp * CARD_STEP.hp,
     atkSpeed: cardPassives.atkSpeed * CARD_STEP.atkSpeed,
   })
-  let stats = deriveStats(cfg, attr, skills, specs, cardBonusObj())
+  // 룬 (보스 처치 시 봇 자동 장착)
+  const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown']
+  const runeSlots = { basic: null, multishot: null, rapidfire: null, barrage: null, grenade: null }
+  let stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
   let attrCursor = 0 // (미사용)
   let skillPoints = 0 // (미사용)
   let revived = false // 활력40 부활 사용
@@ -450,7 +453,10 @@ export function simulate(cfg, opts = {}) {
     const idx = state.enemies.indexOf(e)
     removeSwap(state.enemies, idx, enemyPool)
     state.kills++
-    if (e.boss) state.bossKills++
+    if (e.boss) {
+      state.bossKills++
+      botEquipRune() // 보스 처치 → 룬 장착 (game 미러링)
+    }
     gainXp(e.gems * cfg.xp.gemValue) // 처치 즉시 경험치
 
     // 힘40 처치 폭발
@@ -482,8 +488,17 @@ export function simulate(cfg, opts = {}) {
   function autoLevelUp() {
     const prevMax = stats.player.maxHp
     botPickCard()
-    stats = deriveStats(cfg, attr, skills, specs, cardBonusObj())
+    stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
     state.hp += stats.player.maxHp - prevMax
+  }
+
+  // 봇 룬 장착 — 무작위 룬을 가장 높은 레벨 액티브(없으면 기본)에
+  function botEquipRune() {
+    const rune = RUNE_POOL[(Math.random() * RUNE_POOL.length) | 0]
+    const owned = CARD_ACTIVES.filter((id) => (skills[id] || 0) > 0)
+    owned.sort((a, b) => (skills[b] || 0) - (skills[a] || 0))
+    runeSlots[owned[0] || 'basic'] = rune
+    stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
   }
 
   function botPickCard() {
