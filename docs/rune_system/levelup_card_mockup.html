@@ -1,0 +1,137 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>레벨업 카드 (MVP 목업)</title>
+<style>
+ *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+ body{margin:0;background:#05070b;color:#dbe6f0;font-family:system-ui,'Apple SD Gothic Neo',sans-serif;
+   display:flex;justify-content:center;gap:22px;flex-wrap:wrap;padding:16px}
+ .phone{width:390px;height:800px;background:radial-gradient(120% 80% at 50% 0%,#101825,#080b11);
+   border-radius:26px;border:1px solid #1c2530;box-shadow:0 20px 60px #000b;overflow:hidden;
+   display:flex;flex-direction:column;position:relative}
+ .top{padding:16px 16px 6px;text-align:center}
+ .lvl{font-size:13px;color:#8fa;letter-spacing:1px}
+ .up{font-size:26px;font-weight:800;letter-spacing:2px;margin-top:2px;
+   background:linear-gradient(#ffe38a,#e7a94a);-webkit-background-clip:text;background-clip:text;color:transparent}
+ .sub{font-size:12px;color:#7d8ea0;margin-top:2px}
+ .cards{flex:1;display:flex;flex-direction:column;gap:12px;justify-content:center;padding:6px 18px}
+ .card{background:linear-gradient(#1a2431,#141c27);border:1px solid #2b3a4b;border-radius:16px;
+   padding:14px;display:flex;gap:14px;align-items:center;cursor:pointer;transition:.12s;position:relative;overflow:hidden}
+ .card:active{transform:scale(.98)}
+ .card .ic{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+   font-size:30px;background:#0f151d;border:1px solid #2b3a4b;flex:0 0 auto}
+ .card .body{flex:1;min-width:0}
+ .card .nm{font-size:16px;font-weight:700}
+ .card .tag{font-size:11px;padding:1px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+ .t-new{background:#123a2a;color:#5bd08a;border:1px solid #2f7d55}
+ .t-up{background:#2a2410;color:#e7c15a;border:1px solid #6e5c1e}
+ .t-pas{background:#251636;color:#b58cf0;border:1px solid #5a3d8a}
+ .card .ds{font-size:12.5px;color:#93a4b6;margin-top:3px;line-height:1.4}
+ .rar{position:absolute;left:0;top:0;bottom:0;width:4px}
+ .foot{padding:10px 18px 16px;display:flex;gap:10px;align-items:center}
+ .reroll{flex:1;text-align:center;padding:11px;border-radius:12px;border:1px solid #2b3a4b;background:#141c27;
+   color:#9fb0c0;font-size:13px;cursor:pointer}
+ .build{border-top:1px solid #1c2733;background:#0c121a;padding:10px 16px}
+ .build h4{margin:0 0 6px;font-size:11px;color:#7d8ea0;letter-spacing:.5px}
+ .chips{display:flex;flex-wrap:wrap;gap:6px}
+ .bchip{font-size:11px;padding:3px 9px;border-radius:12px;background:#182230;border:1px solid #26advertise;color:#cfe}
+ .bchip{border:1px solid #26333f}
+ .legend{width:250px;color:#9fb0c0;font-size:12.5px;line-height:1.7}
+ .legend h3{color:#e7edf3;font-size:14px;margin:0 0 6px}
+ @media(max-width:720px){.legend{display:none}}
+</style></head><body>
+
+<div class="phone">
+  <div class="top">
+    <div class="lvl">LEVEL UP</div>
+    <div class="up" id="lvlNo">Lv 2</div>
+    <div class="sub">카드를 하나 선택하세요</div>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="foot"><div class="reroll" id="reroll">🔄 다시 뽑기 (남은 1회)</div></div>
+  <div class="build">
+    <h4>현재 빌드</h4>
+    <div class="chips" id="build"></div>
+  </div>
+</div>
+
+<div class="legend">
+  <h3>MVP 레벨업 카드</h3>
+  <p>• 매 레벨 <b>3장 중 1택</b>(뱀서류 표준).</p>
+  <p>• 풀 = <b>스킬 해금/레벨 + 패시브 4종</b>만(컴팩트).</p>
+  <p>• 스킬 동시 활성 <b>최대 3개</b>: 카드 선택이 계속 의미 있음.</p>
+  <p>• <b>NEW</b>=신규 해금, <b>Lv↑</b>=레벨업, <b>패시브</b>=전역 강화.</p>
+  <p>• 다시 뽑기(밴/리롤)는 단계 4 편의기능. 여기선 맛보기 1회.</p>
+  <p style="margin-top:8px;color:#7d8ea0">룬은 <b>보스 처치 시</b> 별도 화면에서 장착(카드와 분리).</p>
+</div>
+
+<script>
+const MAXSKILL=3;
+const SKILLS={
+ basic:{n:'기본 사격',ic:'🎯',ds:'가장 가까운 적 자동 발사'},
+ multishot:{n:'다중 사격',ic:'🏹',ds:'부채꼴로 여러 발 발사'},
+ pierce:{n:'관통 사격',ic:'➹',ds:'적을 관통하는 강한 화살'},
+ rain:{n:'화살비',ic:'☄️',ds:'지정 범위에 화살 낙하(광역)'},
+};
+const PASSIVES={
+ dmg:{n:'데미지 +10%',ic:'⚔️',ds:'모든 스킬 피해 증가'},
+ spd:{n:'이동속도 +8%',ic:'👟',ds:'캐릭터 이동속도 증가'},
+ hp:{n:'최대체력 +15%',ic:'❤️',ds:'생존력 증가'},
+ cdr:{n:'공격속도 +8%',ic:'⏱️',ds:'모든 스킬 쿨타임 감소'},
+};
+// state
+let level=1, rerolls=1;
+const owned={basic:1};              // skillId -> level
+const passives={};                  // passiveId -> stacks
+
+function poolCards(){
+ const opts=[];
+ // skill cards
+ for(const id in SKILLS){ if(id==='basic')continue;
+   if(owned[id]) opts.push({kind:'up',id});
+   else if(Object.keys(owned).length<MAXSKILL) opts.push({kind:'new',id});
+ }
+ // level basic
+ opts.push({kind:'up',id:'basic'});
+ // passives
+ for(const id in PASSIVES) opts.push({kind:'pas',id});
+ // shuffle pick 3 distinct
+ for(let i=opts.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[opts[i],opts[j]]=[opts[j],opts[i]];}
+ return opts.slice(0,3);
+}
+let current=poolCards();
+
+function cardHTML(c){
+ const rarCol=c.kind==='new'?'#5bd08a':c.kind==='up'?'#e7c15a':'#b58cf0';
+ const meta = c.kind==='pas'?PASSIVES[c.id]:SKILLS[c.id];
+ let tag,extra='';
+ if(c.kind==='new'){tag='<span class="tag t-new">NEW 해금</span>';}
+ else if(c.kind==='up'){const lv=owned[c.id]||0;tag=`<span class="tag t-up">Lv ${lv}→${lv+1}</span>`;}
+ else {const st=passives[c.id]||0; tag='<span class="tag t-pas">패시브</span>'; if(st)extra=` (현재 x${st})`;}
+ return `<div class="card" data-kind="${c.kind}" data-id="${c.id}">
+   <div class="rar" style="background:${rarCol}"></div>
+   <div class="ic">${meta.ic}</div>
+   <div class="body"><div class="nm">${meta.n}${tag}</div><div class="ds">${meta.ds}${extra}</div></div>
+ </div>`;
+}
+function render(){
+ document.getElementById('lvlNo').textContent='Lv '+level;
+ document.getElementById('cards').innerHTML=current.map(cardHTML).join('');
+ document.querySelectorAll('.card').forEach(el=>el.onclick=()=>pick(el.dataset.kind,el.dataset.id));
+ document.getElementById('reroll').textContent = rerolls>0?`🔄 다시 뽑기 (남은 ${rerolls}회)`:'다시 뽑기 소진';
+ document.getElementById('reroll').style.opacity = rerolls>0?1:.4;
+ // build panel
+ const chips=[];
+ for(const id in owned) chips.push(`<span class="bchip">${SKILLS[id].ic} ${SKILLS[id].n} Lv${owned[id]}</span>`);
+ for(const id in passives) chips.push(`<span class="bchip">${PASSIVES[id].ic} ${PASSIVES[id].n.split(' ')[0]} x${passives[id]}</span>`);
+ chips.push(`<span class="bchip" style="color:#7d8ea0">스킬 ${Object.keys(owned).length}/${MAXSKILL}</span>`);
+ document.getElementById('build').innerHTML=chips.join('');
+}
+function pick(kind,id){
+ if(kind==='new') owned[id]=1;
+ else if(kind==='up') owned[id]=(owned[id]||0)+1;
+ else passives[id]=(passives[id]||0)+1;
+ level++; current=poolCards(); render();
+}
+document.getElementById('reroll').onclick=()=>{ if(rerolls<=0)return; rerolls--; current=poolCards(); render(); };
+render();
+</script></body></html>
