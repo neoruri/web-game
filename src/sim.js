@@ -37,12 +37,24 @@ export function simulate(cfg, opts = {}) {
   const dt = opts.dt ?? 1 / 30
 
   // 능력치·스킬·특화 → 최종 stats (게임과 동일한 재계산 함수)
-  const attr = emptyAttributes()
+  // 카드+룬 피벗: 능력치/스킬트리 보류. 진행은 레벨업 카드로.
+  const attr = emptyAttributes() // 보류(전부 0)
   const skills = emptySkillTree()
-  const specs = emptySpecs()
-  let stats = deriveStats(cfg, attr, skills, specs)
-  let attrCursor = 0 // 봇 능력치 배분 순환 위치
-  let skillPoints = 0 // 봇 미사용 스킬 포인트
+  const specs = emptySpecs() // 특화 보류
+  const CARD_STEP = { dmg: 0.1, move: 0.08, hp: 0.15, atkSpeed: 0.08 }
+  const CARD_ACTIVES = ['multishot', 'rapidfire', 'barrage', 'grenade']
+  const MAX_ACTIVE = 3
+  const cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
+  let cardCursor = 0
+  const cardBonusObj = () => ({
+    dmg: cardPassives.dmg * CARD_STEP.dmg,
+    move: cardPassives.move * CARD_STEP.move,
+    hp: cardPassives.hp * CARD_STEP.hp,
+    atkSpeed: cardPassives.atkSpeed * CARD_STEP.atkSpeed,
+  })
+  let stats = deriveStats(cfg, attr, skills, specs, cardBonusObj())
+  let attrCursor = 0 // (미사용)
+  let skillPoints = 0 // (미사용)
   let revived = false // 활력40 부활 사용
   let lastKillExplode = 0 // 힘40 처치폭발 내부 쿨
   let chainGuard = false // 처치폭발 연쇄 방지
@@ -449,39 +461,36 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
-  // 봇의 자동 성장 — 능력치는 딜/생존/스킬쿨 순환, 스킬 포인트는 액티브 우선 투자.
-  // "평균적 플레이어" 근사다. 절대 수치보다 세팅 간 상대 비교에 쓴다.
-  const BOT_ATTR_ORDER = ['str', 'dex', 'int', 'vit']
+  // 봇 레벨업 — 게임과 동일한 카드 선택 미러링(액티브 해금·레벨업 + 패시브).
+  // "평균적 플레이어" 근사. 절대 수치보다 세팅 간 상대 비교에 쓴다.
   function autoLevelUp() {
     const prevMax = stats.player.maxHp
-    for (let i = 0; i < cfg.attr.pointsPerLevel; i++) {
-      attr[BOT_ATTR_ORDER[attrCursor % BOT_ATTR_ORDER.length]]++
-      attrCursor++
-    }
-    skillPoints += cfg.attr.skillPointsPerLevel
-    botSpendSkillPoints()
-    stats = deriveStats(cfg, attr, skills, specs)
-    state.hp += stats.player.maxHp - prevMax // 활력 증가분만큼 현재 HP도
+    botPickCard()
+    stats = deriveStats(cfg, attr, skills, specs, cardBonusObj())
+    state.hp += stats.player.maxHp - prevMax
   }
 
-  // 봇 스킬 투자: 배울 수 있는 스킬 중 액티브 먼저, 그중 레벨 낮은 것.
-  function botSpendSkillPoints() {
-    while (skillPoints > 0) {
-      const options = [...ACTIVE_IDS, ...PASSIVE_IDS].filter(
-        (id) => !investBlockReason(id, skills, state.level)
-      )
-      if (!options.length) break
-      options.sort((a, b) => {
-        const act = (ACTIVE_IDS.includes(b) ? 1 : 0) - (ACTIVE_IDS.includes(a) ? 1 : 0)
-        return act || (skills[a] || 0) - (skills[b] || 0)
-      })
-      skills[options[0]] = (skills[options[0]] || 0) + 1
-      skillPoints--
+  function botPickCard() {
+    const owned = CARD_ACTIVES.filter((id) => (skills[id] || 0) > 0)
+    // 1) 슬롯 남으면 새 액티브 해금
+    if (owned.length < MAX_ACTIVE - 1) {
+      const un = CARD_ACTIVES.find((id) => !(skills[id] > 0))
+      if (un) { skills[un] = 1; return }
     }
-    // 특화 도달 시 A 자동 선택 (봇은 첫 특화 고정)
-    for (const id of Object.keys(SPECIALIZATIONS)) {
-      if (!specs[id] && (skills[id] || 0) >= SPEC_LEVEL) specs[id] = 'A'
+    cardCursor++
+    // 2) 3번에 1번은 패시브 (데미지/공속/체력/이동 순환)
+    if (cardCursor % 3 === 0) {
+      const pas = ['dmg', 'atkSpeed', 'hp', 'move'][((cardCursor / 3) | 0) % 4]
+      cardPassives[pas]++
+      return
     }
+    // 3) 보유 액티브 중 레벨 낮은 것 레벨업 (max 10)
+    if (owned.length) {
+      owned.sort((a, b) => (skills[a] || 0) - (skills[b] || 0))
+      const id = owned[0]
+      if ((skills[id] || 0) < 10) { skills[id]++; return }
+    }
+    cardPassives.dmg++ // 폴백
   }
 
   function hitPlayer(amount) {

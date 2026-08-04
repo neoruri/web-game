@@ -11,7 +11,24 @@ import {
   SPEC_LEVEL,
 } from './skilltree.js'
 import { createGrowthScreen } from './growth-ui.js'
+import { createLevelupScreen } from './levelup-cards.js'
 import { Grid } from './grid.js'
+
+// --- 레벨업 카드(뱀서 표준 진행) ---
+// 스킬 카드(기존 액티브 재활용) + 패시브 4종. 성장 화면(스킬트리)은 보류.
+const CARD_SKILLS = {
+  multishot: { icon: '🏹', name: '다발 사격', desc: '가까운 적 방향으로 부채꼴 연사' },
+  rapidfire: { icon: '💥', name: '연발 사격', desc: '가까운 적을 단일 집중 연사' },
+  barrage: { icon: '🌪️', name: '난사', desc: '이동하며 주변 360° 난사' },
+  grenade: { icon: '💣', name: '수류탄', desc: '밀집 지점에 던져 범위 폭발' },
+}
+const CARD_PASSIVES = {
+  dmg: { icon: '⚔️', name: '데미지 +10%', desc: '모든 피해 증가', step: 0.1 },
+  move: { icon: '👟', name: '이동속도 +8%', desc: '캐릭터 이동속도 증가', step: 0.08 },
+  hp: { icon: '❤️', name: '최대체력 +15%', desc: '생존력 증가', step: 0.15 },
+  atkSpeed: { icon: '⏱️', name: '공격속도 +8%', desc: '기본·스킬 쿨타임 감소', step: 0.08 },
+}
+const MAX_ACTIVE = 3 // 동시 활성 스킬 수 (기본 사격 + 2)
 
 // 세로 모드 (모바일 우선). 9:16 비율.
 const W = 540
@@ -75,11 +92,17 @@ class GameScene extends Phaser.Scene {
     this.skillLevels = emptySkillTree() // 스킬 트리 보유 레벨
     this.specs = emptySpecs() // 5레벨 특화 선택 (id → 'A'|'B'|null)
     this.unlockedSkills = {} // 해금 알림을 이미 띄운 스킬
-    this.attrPoints = dbg.startAttrPoints // 미사용 능력치 포인트
-    this.skillPoints = dbg.startSkillPoints // 미사용 스킬 포인트
+    this.attrPoints = dbg.startAttrPoints // 미사용 능력치 포인트(보류)
+    this.skillPoints = dbg.startSkillPoints // 미사용 스킬 포인트(보류)
+    // 레벨업 카드 패시브 스택 {dmg,move,hp,atkSpeed}
+    this.cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
+    this.levelupOpen = false
+    this._pendingLevels = 0
 
-    // 능력치·스킬 → 최종 전투 stats (단일 재계산 지점)
-    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels, this.specs)
+    // 능력치·스킬·카드 → 최종 전투 stats (단일 재계산 지점)
+    this.stats = deriveStats(
+      this.cfg, this.attributes, this.skillLevels, this.specs, this.cardBonusObj()
+    )
 
     this.elapsed = 0
     this.kills = 0
@@ -160,6 +183,84 @@ class GameScene extends Phaser.Scene {
     this.buildHud()
     this.setupInput()
     this.setupGrowth()
+
+    // 레벨업 3택 카드 (뱀서 표준). 성장 화면은 보류.
+    this.levelup = createLevelupScreen({ onPick: (c) => this.onCardPick(c) })
+    // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
+    if (this.growthBtn) this.growthBtn.setVisible(false)
+    if (this.growthBtnText) this.growthBtnText.setVisible(false)
+  }
+
+  // 카드 패시브 스택 → 배율 보너스 객체 (deriveStats에 전달)
+  cardBonusObj() {
+    const cp = this.cardPassives || {}
+    return {
+      dmg: (cp.dmg || 0) * CARD_PASSIVES.dmg.step,
+      move: (cp.move || 0) * CARD_PASSIVES.move.step,
+      hp: (cp.hp || 0) * CARD_PASSIVES.hp.step,
+      atkSpeed: (cp.atkSpeed || 0) * CARD_PASSIVES.atkSpeed.step,
+    }
+  }
+
+  // 레벨업 카드 3장 생성 (스킬 신규/레벨업 + 패시브)
+  buildCards() {
+    const ids = Object.keys(CARD_SKILLS)
+    const ownedCount = ids.filter((id) => (this.skillLevels[id] || 0) > 0).length
+    const opts = []
+    for (const id of ids) {
+      const lv = this.skillLevels[id] || 0
+      const max = ACTIVE_SKILLS[id] ? ACTIVE_SKILLS[id].maxLevel : 10
+      const m = CARD_SKILLS[id]
+      if (lv > 0) {
+        if (lv < max)
+          opts.push({ kind: 'up', id, icon: m.icon, name: m.name, desc: m.desc, tag: `Lv ${lv}→${lv + 1}` })
+      } else if (ownedCount < MAX_ACTIVE - 1) {
+        opts.push({ kind: 'new', id, icon: m.icon, name: m.name, desc: m.desc })
+      }
+    }
+    for (const id in CARD_PASSIVES) {
+      const m = CARD_PASSIVES[id]
+      const st = this.cardPassives[id] || 0
+      const cur = st ? ` (현재 +${Math.round(st * m.step * 100)}%)` : ''
+      opts.push({ kind: 'pas', id, icon: m.icon, name: m.name, desc: m.desc + cur })
+    }
+    // 섞어서 3장
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0
+      ;[opts[i], opts[j]] = [opts[j], opts[i]]
+    }
+    return opts.slice(0, 3)
+  }
+
+  applyCard(card) {
+    if (card.kind === 'pas') {
+      this.cardPassives[card.id] = (this.cardPassives[card.id] || 0) + 1
+    } else {
+      this.skillLevels[card.id] = (this.skillLevels[card.id] || 0) + 1
+    }
+    this.recompute()
+  }
+
+  showNextLevelup() {
+    if (this.gameOver) {
+      this._pendingLevels = 0
+      this.levelupOpen = false
+      return
+    }
+    if (this._pendingLevels <= 0) {
+      this.levelupOpen = false
+      return
+    }
+    this.levelupOpen = true
+    this.releaseStick()
+    this.levelup.show(this.level, this.buildCards())
+  }
+
+  onCardPick(card) {
+    this.applyCard(card)
+    this._pendingLevels--
+    if (this._pendingLevels > 0) this.showNextLevelup()
+    else this.levelupOpen = false
   }
 
   // --- 성장 시스템 -------------------------------------------------------
@@ -191,10 +292,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openGrowth() {
-    if (this.gameOver) return
-    this.growthOpen = true
-    this.releaseStick()
-    this.growth.open()
+    // 성장(스킬트리) 화면 보류 — 진행은 레벨업 카드로. (코드는 남겨둠)
   }
 
   // 스킬 포인트로 스킬 1레벨 투자 (즉시 확정). 성공하면 true.
@@ -221,7 +319,9 @@ class GameScene extends Phaser.Scene {
   // 최대 HP 증가분만큼 현재 HP 도 함께 올린다 (활력 스펙).
   recompute() {
     const prevMax = this.stats.player.maxHp
-    this.stats = deriveStats(this.cfg, this.attributes, this.skillLevels, this.specs)
+    this.stats = deriveStats(
+      this.cfg, this.attributes, this.skillLevels, this.specs, this.cardBonusObj()
+    )
     const gained = this.stats.player.maxHp - prevMax
     if (gained > 0) this.hp += gained
     this.hp = Math.min(this.hp, this.stats.player.maxHp)
@@ -593,7 +693,7 @@ class GameScene extends Phaser.Scene {
       // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
       if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
       if (this.growthBtn.getBounds().contains(p.x, p.y)) return
-      if (this.userPaused || this.growthOpen) return
+      if (this.userPaused || this.growthOpen || this.levelupOpen) return
 
       this.stick.active = true
       this.stick.ox = p.x
@@ -1193,15 +1293,10 @@ class GameScene extends Phaser.Scene {
   // 레벨업 — 게임을 멈추지 않고 포인트만 지급하고 알림을 띄운다 (스펙).
   // 여러 레벨이 한 번에 올라도 알림은 한 번으로 합친다.
   onLevelUp(levels) {
-    const ap = levels * this.cfg.attr.pointsPerLevel
-    const sp = levels * this.cfg.attr.skillPointsPerLevel
-    this.attrPoints += ap
-    this.skillPoints += sp
-
+    // 뱀서 표준: 레벨업 → 정지 후 3택 카드. (능력치/스킬포인트 지급 보류)
     this.lvText.setText('Lv ' + this.level)
-    this.refreshGrowthHud()
-    this.showLevelToast(levels, ap, sp)
-    this.checkUnlocks()
+    this._pendingLevels = (this._pendingLevels || 0) + levels
+    if (!this.levelupOpen) this.showNextLevelup()
   }
 
   // 레벨이 스킬 해금 레벨을 통과하면 알림 (레벨을 건너뛰어도 처리)
@@ -1416,7 +1511,7 @@ class GameScene extends Phaser.Scene {
   // --- 루프 ---------------------------------------------------------------
 
   update(time, delta) {
-    if (this.gameOver || this.userPaused || this.growthOpen) return
+    if (this.gameOver || this.userPaused || this.growthOpen || this.levelupOpen) return
     // 한 프레임에서 오류가 나도 게임 루프 전체가 멈추지 않게(프리즈 방지) +
     // 원인을 콘솔에 한 번 남긴다(진단).
     try {

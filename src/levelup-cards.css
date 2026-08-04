@@ -1,0 +1,56 @@
+/* 레벨업 3택 카드 오버레이 */
+#levelup-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 11, 0.86);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+  color: #dbe6f0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#levelup-modal.lv-hidden { display: none; }
+#levelup-modal * { box-sizing: border-box; }
+
+.lv-panel {
+  width: min(94vw, 460px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 4px;
+}
+
+.lv-top { text-align: center; }
+.lv-kicker { font-size: 13px; color: #88ffb0; letter-spacing: 2px; }
+.lv-no {
+  font-size: 30px; font-weight: 800; letter-spacing: 2px; margin-top: 2px;
+  background: linear-gradient(#ffe38a, #e7a94a);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lv-sub { font-size: 12.5px; color: #7d8ea0; margin-top: 3px; }
+
+.lv-cards { display: flex; flex-direction: column; gap: 12px; }
+.lv-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(#1a2431, #141c27);
+  border: 1px solid #2b3a4b; border-radius: 16px;
+  padding: 15px 16px; display: flex; gap: 14px; align-items: center;
+  cursor: pointer; transition: 0.12s;
+}
+.lv-card:active { transform: scale(0.98); }
+.lv-rar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.lv-ic {
+  width: 56px; height: 56px; border-radius: 12px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; background: #0f151d; border: 1px solid #2b3a4b;
+}
+.lv-body { flex: 1; min-width: 0; }
+.lv-nm { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lv-tag { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 700; }
+.lv-tag.t-new { background: #123a2a; color: #5bd08a; border: 1px solid #2f7d55; }
+.lv-tag.t-up { background: #2a2410; color: #e7c15a; border: 1px solid #6e5c1e; }
+.lv-tag.t-pas { background: #251636; color: #b58cf0; border: 1px solid #5a3d8a; }
+.lv-ds { font-size: 12.5px; color: #93a4b6; margin-top: 4px; line-height: 1.4; }

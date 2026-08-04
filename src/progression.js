@@ -66,9 +66,16 @@ function tierBonuses(attr, pass) {
   }
 }
 
-// 능력치·스킬·특화 → 최종 전투 stats.
-export function deriveStats(cfg, attr, skills, specs = {}) {
+// 능력치·스킬·특화(+카드 패시브) → 최종 전투 stats.
+// cardBonus: { dmg, move, hp, atkSpeed } — 레벨업 카드 패시브 누적 비율.
+export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}) {
   const A = cfg.attr
+
+  // 카드 패시브 배율 (뱀서 표준 진행)
+  const cDmg = 1 + (cardBonus.dmg || 0)
+  const cMove = 1 + (cardBonus.move || 0)
+  const cHp = 1 + (cardBonus.hp || 0)
+  const cAtk = 1 + (cardBonus.atkSpeed || 0)
 
   // 능력치
   const dmgMul = 1 + attr.str * A.strDamagePerPoint
@@ -92,17 +99,17 @@ export function deriveStats(cfg, attr, skills, specs = {}) {
   })
   s.skills = skills
 
-  // 기본 활 — 힘(전체 피해) + 궁술숙련 + 힘20 모든피해
+  // 기본 활 — 힘(전체 피해) + 궁술숙련 + 힘20 모든피해 + 카드 데미지
   s.weapon.damage =
-    cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct) * (1 + tb.allDmgPct)
-  s.weapon.cooldown = cfg.weapon.cooldown / (1 + atkSpd)
+    cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct) * (1 + tb.allDmgPct) * cDmg
+  s.weapon.cooldown = cfg.weapon.cooldown / (1 + atkSpd) / cAtk
   s.weapon.speed = cfg.weapon.speed * (1 + p.projSpeedPct)
   s.weapon.pierce = cfg.weapon.pierce + p.pierce + tb.pierceAdd
   s.weapon.extraArrows = tb.extraArrows // 민첩30: 기본 활 추가 화살
 
-  // 이동 — 민첩 + 이동강화 패시브 + 민첩20
-  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct)
-  s.player.maxHp = cfg.player.maxHp + hpAdd
+  // 이동/체력 — 능력치 + 카드 패시브
+  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove
+  s.player.maxHp = (cfg.player.maxHp + hpAdd) * cHp
 
   // 확률/런타임 전투 수치 (game/sim 이 매 판정마다 참조)
   s.combat = {
@@ -119,8 +126,8 @@ export function deriveStats(cfg, attr, skills, specs = {}) {
   // 액티브 스킬별 최종 수치. 힘·모든피해·지능10 스킬피해 적용.
   const skillBaseDmg =
     cfg.weapon.damage * dmgMul * cfg.skill.damageMul *
-    (1 + tb.allDmgPct) * (1 + tb.skillDmgPct)
-  const skillCd = (base) => Math.max(A.minSkillCooldown, base * (1 - cdr))
+    (1 + tb.allDmgPct) * (1 + tb.skillDmgPct) * cDmg
+  const skillCd = (base) => Math.max(A.minSkillCooldown, (base * (1 - cdr)) / cAtk)
 
   s.skillStats = {}
   for (const id of Object.keys(ACTIVE_SKILLS)) {
