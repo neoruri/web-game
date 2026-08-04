@@ -12,6 +12,7 @@ export const DEFAULTS = {
     invuln: 0.8,
     pickupRadius: 50,
     radius: 10,
+    spriteScale: 0.55, // 캐릭터 스프라이트 배율(외형 크기). 히트박스는 radius 별도.
   },
   weapon: {
     damage: 20,
@@ -164,11 +165,19 @@ export const SCHEMA = [
       },
       {
         key: 'radius',
-        label: '크기(반지름)',
+        label: '크기(반지름·히트박스)',
         min: 6,
         max: 40,
         step: 1,
-        effect: '↑ 몸집이 커서 적에게 잘 닿음(불리)  ·  ↓ 작아서 회피 쉬움',
+        effect: '↑ 몸집이 커서 적에게 잘 닿음(불리)  ·  ↓ 작아서 회피 쉬움 (충돌 판정)',
+      },
+      {
+        key: 'spriteScale',
+        label: '캐릭터 외형 크기',
+        min: 0.3,
+        max: 1.2,
+        step: 0.05,
+        effect: '↑ 스프라이트가 크게 보임  ·  ↓ 작게 (외형만, 히트박스 무관)',
       },
     ],
   },

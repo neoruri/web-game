@@ -36,10 +36,8 @@ const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 const COLOR_CRIT = '#f9e2af'
 const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
 const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
-const PLAYER_SPRITE_SCALE = 0.55 // 캐릭터 스프라이트 배율 (튜닝 포인트)
-// 화살 시작점을 발끝 앵커에서 팔/활 높이만큼 위로 올린다 (다리에서 안 나가게).
-// 스프라이트 높이 116 × 배율 × 비율. 방향 무관하게 상체에서 발사되는 느낌.
-const BOW_OFFSET_Y = 116 * PLAYER_SPRITE_SCALE * 0.4
+const PLAYER_SPRITE_SCALE = 0.55 // 폴백 기본값 (실제 배율은 cfg.player.spriteScale)
+const SPRITE_H = 116 // 스프라이트 셀 높이. 화살 발사(활) 높이 = 배율×높이×0.4
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
@@ -366,10 +364,12 @@ class GameScene extends Phaser.Scene {
       })
     }
 
+    const scale = this.cfg.player.spriteScale || PLAYER_SPRITE_SCALE
+    this._bowOffsetY = SPRITE_H * scale * 0.4 // 화살 발사(활) 높이
     this.playerSprite = this.add
       .sprite(this.player.x, this.player.y, 'archer', 0)
       .setOrigin(0.5, 0.8) // 발끝 하단 정렬
-      .setScale(PLAYER_SPRITE_SCALE)
+      .setScale(scale)
     this.worldLayer.add(this.playerSprite)
     this.animKey = 'idle'
     this.playerSprite.play('idle')
@@ -802,7 +802,7 @@ class GameScene extends Phaser.Scene {
   // 화살 하나를 지정한 각도로 발사. 스킬 화살은 데미지·관통이 달라서 화살마다 들고 있는다.
   // 화살 발사·조준 기준 y (팔/활 높이). 스프라이트일 때만 위로 올림.
   get bowY() {
-    return this.player.y - (this.playerSprite ? BOW_OFFSET_Y : 0)
+    return this.player.y - (this.playerSprite ? this._bowOffsetY : 0)
   }
 
   fireAngle(angle, dmg, pierce, skill) {
