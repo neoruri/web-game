@@ -21,9 +21,9 @@ const RUNES = {
   pierce: { icon: '➹', name: '관통', desc: '그 스킬 관통 +1', color: '#5ab4eb' },
   projectile: { icon: '🎯', name: '발사체', desc: '그 스킬 발사체 +1', color: '#5adccd' },
   cooldown: { icon: '⏱️', name: '쿨감', desc: '그 스킬 쿨타임 -15%', color: '#78d2be' },
-  // burn(화상)은 단계 2b에서 추가
+  burn: { icon: '🔥', name: '화상', desc: '명중 시 3초간 도트 피해', color: '#f0963c' },
 }
-const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown']
+const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
 
 // --- 레벨업 카드(뱀서 표준 진행) ---
 // 스킬 카드(기존 액티브 재활용) + 패시브 4종. 성장 화면(스킬트리)은 보류.
@@ -43,6 +43,8 @@ const MAX_ACTIVE = 5 // 동시 활성 스킬 수 (기본 사격 + 액티브 4종
 const GRENADE_MAX = 240 // 수류탄 최대 투척 거리(적정 사거리)
 const GRENADE_DUR = 0.45 // 수류탄 포물선 비행 시간(초)
 const GRENADE_ARC = 62 // 포물선 최대 높이(px)
+const BURN_PCT = 0.3 // 화상 도트 = 명중 피해의 이 비율/초
+const BURN_DUR = 3 // 화상 지속(초)
 
 // 세로 모드 (모바일 우선). 9:16 비율.
 const W = 540
@@ -875,6 +877,7 @@ class GameScene extends Phaser.Scene {
     e.kbx = 0
     e.kby = 0
     e.stun = 0 // 피격 경직 남은 시간(초)
+    e.burn = null // 화상 도트 {dps,time}
     e.flash = 0
     e.wob = Math.random() * Math.PI * 2 // 유기적 흔들림 위상
     e.atk = spec.boss
@@ -998,7 +1001,7 @@ class GameScene extends Phaser.Scene {
     return this.player.y - (this.playerSprite ? this._bowOffsetY : 0)
   }
 
-  fireAngle(angle, dmg, pierce, skill) {
+  fireAngle(angle, dmg, pierce, skill, burn) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     a.x = this.player.x
@@ -1009,19 +1012,21 @@ class GameScene extends Phaser.Scene {
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
     a.skill = !!skill // 렌더 색 구분 (시각 전용)
+    a.burn = !!burn // 화상 룬
     a.hit.clear()
     this.arrows.push(a)
   }
 
   fireAt(target) {
     const angle = Math.atan2(target.y - this.bowY, target.x - this.player.x)
-    const dmg = this.stats.weapon.damage
-    this.fireAngle(angle, dmg)
+    const w = this.stats.weapon
+    const dmg = w.damage
+    this.fireAngle(angle, dmg, undefined, false, w.burn)
     // 민첩30 추가 화살 — 살짝 벌려서 발사
-    const extra = this.stats.weapon.extraArrows || 0
+    const extra = w.extraArrows || 0
     for (let i = 1; i <= extra; i++) {
       const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
-      this.fireAngle(angle + off, dmg)
+      this.fireAngle(angle + off, dmg, undefined, false, w.burn)
     }
   }
 
@@ -1066,7 +1071,7 @@ class GameScene extends Phaser.Scene {
     const n = st.shots
     for (let i = 0; i < n; i++) {
       const frac = n <= 1 ? 0.5 : i / (n - 1) // 0..1
-      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, true)
+      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, true, st.burn)
     }
     this.flashSkill(0x89dceb)
     return true
@@ -1102,17 +1107,17 @@ class GameScene extends Phaser.Scene {
       const reach = Math.min(d, GRENADE_MAX)
       const jx = (Math.random() - 0.5) * st.radius * 1.1
       const jy = (Math.random() - 0.5) * st.radius * 1.1
-      this.spawnGrenade(bx, by, bx + (dx / d) * reach + jx, by + (dy / d) * reach + jy, st.radius, st.dmg)
+      this.spawnGrenade(bx, by, bx + (dx / d) * reach + jx, by + (dy / d) * reach + jy, st.radius, st.dmg, st.burn)
     }
     this.flashSkill(0xf9e2af)
     return true
   }
 
-  spawnGrenade(x, y, tx, ty, radius, dmg) {
+  spawnGrenade(x, y, tx, ty, radius, dmg, burn) {
     const g = this.grenadePool.pop() || {}
     g.sx = x; g.sy = y; g.x = x; g.y = y
     g.tx = tx; g.ty = ty
-    g.t = 0; g.radius = radius; g.dmg = dmg
+    g.t = 0; g.radius = radius; g.dmg = dmg; g.burn = !!burn
     this.grenades.push(g)
   }
 
@@ -1124,7 +1129,7 @@ class GameScene extends Phaser.Scene {
       g.x = g.sx + (g.tx - g.sx) * k
       g.y = g.sy + (g.ty - g.sy) * k
       if (g.t >= GRENADE_DUR) {
-        this.explodeAt(g.tx, g.ty, g.radius, g.dmg) // 착탄 시 폭발
+        this.explodeAt(g.tx, g.ty, g.radius, g.dmg, g.burn) // 착탄 시 폭발
         this.removeSwap(this.grenades, i, this.grenadePool)
       }
     }
@@ -1152,7 +1157,8 @@ class GameScene extends Phaser.Scene {
           Math.atan2(t.y - this.bowY, t.x - this.player.x),
           st.dmg,
           st.pierce,
-          true
+          true,
+          st.burn
         )
         r.left--
       }
@@ -1166,12 +1172,12 @@ class GameScene extends Phaser.Scene {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, true)
+        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, true, st.burn)
       }
     }
   }
 
-  explodeAt(x, y, r, dmg) {
+  explodeAt(x, y, r, dmg, burn) {
     const maxEnemyR = Math.max(this.cfg.enemy.radius, this.cfg.boss.radius)
     // updateArrows 가 queryBuf 를 쓰므로 폭발은 별도 버퍼로 조회한다
     const near = this.grid.query(x, y, r + maxEnemyR, this.explodeBuf)
@@ -1185,7 +1191,7 @@ class GameScene extends Phaser.Scene {
       const d2 = dx * dx + dy * dy
       if (d2 > reach * reach) continue
       const d = Math.sqrt(d2) || 1
-      this.damageEnemy(e, dmg, dx / d, dy / d)
+      this.damageEnemy(e, dmg, dx / d, dy / d, burn)
     }
 
     this.explosions.push({ x, y, r, life: 0.3, max: 0.3 })
@@ -1288,7 +1294,7 @@ class GameScene extends Phaser.Scene {
     })
   }
 
-  damageEnemy(e, amount, dirX, dirY) {
+  damageEnemy(e, amount, dirX, dirY, burn) {
     const w = this.stats.weapon
     const c = this.stats.combat
 
@@ -1306,6 +1312,13 @@ class GameScene extends Phaser.Scene {
     // 피격 경직 — 잠깐 정지(보스 제외). config로 조절. SET이라 누적 없음.
     if (!e.boss) e.stun = this.cfg.enemy.hitStunSec
 
+    // 화상 룬 — 명중 시 도트 부여(더 센 도트면 갱신, 아니면 지속만 새로고침)
+    if (burn) {
+      const dps = amount * BURN_PCT
+      if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
+      else e.burn.time = BURN_DUR
+    }
+
     // 데미지 숫자 (머리 위). 크리는 크고 금색.
     this.spawnPopup(e.x, e.y - e.r - 6, Math.max(1, Math.round(amount)), crit)
     // 크리 시 살짝 흔들림 — 스웜에서 과하지 않게 쿨다운
@@ -1314,10 +1327,15 @@ class GameScene extends Phaser.Scene {
       this.cameras.main.shake(60, 0.0035)
     }
 
-    if (e.hp > 0) return
+    if (e.hp <= 0) this.killEnemy(e)
+  }
 
+  // 적 처치 처리 (직격/폭발/화상 도트 공용)
+  killEnemy(e) {
+    const c = this.stats.combat
     const ex = e.x
     const ey = e.y
+    const wasBoss = e.boss
 
     // 사망 파편 — 적 색으로 튀어나가며 사라짐
     const col = e.boss
@@ -1328,9 +1346,7 @@ class GameScene extends Phaser.Scene {
           ? COLOR_SHOOTER
           : COLOR_ENEMY
     this.spawnParticles(ex, ey, e.boss ? 20 : 9, col, e.boss ? 240 : 170, e.boss ? 4 : 3, 0.45)
-    if (e.boss) this.cameras.main.shake(160, 0.006)
-    // 처치 즉시 경험치 (젬을 줍지 않는다). 보스는 e.gems 배수만큼.
-    const wasBoss = e.boss
+    if (wasBoss) this.cameras.main.shake(160, 0.006)
     this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
@@ -1736,7 +1752,7 @@ class GameScene extends Phaser.Scene {
         const len = Math.hypot(a.vx, a.vy) || 1
         // 화살 타격 스파크 — 짧은 직선이 희미하게 퍼짐
         this.spawnSpark(a.x, a.y)
-        this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
+        this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
 
         if (--a.pierceLeft <= 0) {
           spent = true
@@ -1765,11 +1781,22 @@ class GameScene extends Phaser.Scene {
       const dx = px - e.x
       const dy = py - e.y
 
-      // 너무 멀어진 적은 제거 (화면 밖 거리 임계 — sort 없이)
-      if (dx * dx + dy * dy > despawn2) {
+      // 너무 멀어진 적은 제거 (보스는 예외 — 접근 전에 사라지지 않게)
+      if (!e.boss && dx * dx + dy * dy > despawn2) {
         this.removeSwap(this.enemies, i, this.enemyPool)
         i--
         continue
+      }
+
+      // 화상 도트 — 지속 동안 초당 피해, 도트로 죽으면 처치 처리
+      if (e.burn && e.burn.time > 0) {
+        e.burn.time -= dt
+        e.hp -= e.burn.dps * dt
+        if (e.hp <= 0) {
+          this.killEnemy(e)
+          i--
+          continue
+        }
       }
 
       // 피격 경직 — 이동/추격/분리/공격 전부 정지 (플래시·넉백만 감쇠)
@@ -2047,6 +2074,15 @@ class GameScene extends Phaser.Scene {
       const eyR = Math.max(1.2, e.r * 0.17)
       ge.fillCircle(e.x - eyX, eyY, eyR)
       ge.fillCircle(e.x + eyX, eyY, eyR)
+    }
+
+    // 화상 표시 — 불타는 적에 주황 오버레이(깜빡)
+    ge.fillStyle(0xf0963c, 0.35)
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (!e.burn || e.burn.time <= 0) continue
+      const flick = 0.7 + 0.3 * Math.sin(this.elapsed * 22 + e.x)
+      ge.fillCircle(e.x, e.y - e.r * 0.15, e.r * (0.95 + 0.15 * flick))
     }
 
     // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다

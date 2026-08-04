@@ -46,7 +46,9 @@ export function simulate(cfg, opts = {}) {
   const MAX_ACTIVE = 5
   const GRENADE_MAX = 240 // 수류탄 최대 투척 거리
   const GRENADE_DUR = 0.45 // 포물선 비행 시간
-  const grenades = [] // 날아가는 수류탄 {tx,ty,t,radius,dmg}
+  const grenades = [] // 날아가는 수류탄 {tx,ty,t,radius,dmg,burn}
+  const BURN_PCT = 0.3 // 화상 도트 비율/초
+  const BURN_DUR = 3 // 화상 지속(초)
   const cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
   let cardCursor = 0
   const cardBonusObj = () => ({
@@ -56,7 +58,7 @@ export function simulate(cfg, opts = {}) {
     atkSpeed: cardPassives.atkSpeed * CARD_STEP.atkSpeed,
   })
   // 룬 (보스 처치 시 봇 자동 장착)
-  const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown']
+  const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
   const runeSlots = { basic: null, multishot: null, rapidfire: null, barrage: null, grenade: null }
   let stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
   let attrCursor = 0 // (미사용)
@@ -138,6 +140,7 @@ export function simulate(cfg, opts = {}) {
     en.kbx = 0
     en.kby = 0
     en.stun = 0 // 피격 경직 남은 시간(초)
+    en.burn = null // 화상 도트
     en.wob = Math.random() * Math.PI * 2
     en.atk = spec.boss
       ? cfg.boss.attackInterval
@@ -225,7 +228,7 @@ export function simulate(cfg, opts = {}) {
     return best
   }
 
-  function fireAngle(ang, dmg, pierce) {
+  function fireAngle(ang, dmg, pierce, burn) {
     const w = stats.weapon
     const a = arrowPool.pop() || { hit: new Set() }
     a.x = state.px
@@ -234,18 +237,20 @@ export function simulate(cfg, opts = {}) {
     a.vy = Math.sin(ang) * w.speed
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
+    a.burn = !!burn
     a.hit.clear()
     state.arrows.push(a)
   }
 
   function fireAt(target) {
     const ang = Math.atan2(target.y - state.py, target.x - state.px)
-    const dmg = stats.weapon.damage
-    fireAngle(ang, dmg, stats.weapon.pierce)
-    const extra = stats.weapon.extraArrows || 0
+    const w = stats.weapon
+    const dmg = w.damage
+    fireAngle(ang, dmg, w.pierce, w.burn)
+    const extra = w.extraArrows || 0
     for (let i = 1; i <= extra; i++) {
       const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
-      fireAngle(ang + off, dmg, stats.weapon.pierce)
+      fireAngle(ang + off, dmg, w.pierce, w.burn)
     }
   }
 
@@ -267,7 +272,7 @@ export function simulate(cfg, opts = {}) {
           const spread = ((cfg.skill.multishotSpread * Math.PI) / 180) * st.spreadMul
           for (let s = 0; s < st.shots; s++) {
             const frac = st.shots <= 1 ? 0.5 : s / (st.shots - 1)
-            fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce)
+            fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, st.burn)
           }
           fired = true
         }
@@ -294,7 +299,7 @@ export function simulate(cfg, opts = {}) {
             grenades.push({
               tx: state.px + (dx / d) * reach + jx,
               ty: state.py + (dy / d) * reach + jy,
-              t: 0, radius: st.radius, dmg: st.dmg,
+              t: 0, radius: st.radius, dmg: st.dmg, burn: st.burn,
             })
           }
           fired = true
@@ -314,7 +319,7 @@ export function simulate(cfg, opts = {}) {
       const g = grenades[i]
       g.t += dt
       if (g.t >= GRENADE_DUR) {
-        explodeAt(g.tx, g.ty, g.radius, g.dmg) // 착탄 시 폭발
+        explodeAt(g.tx, g.ty, g.radius, g.dmg, g.burn) // 착탄 시 폭발
         grenades[i] = grenades[grenades.length - 1]
         grenades.pop()
       }
@@ -336,7 +341,7 @@ export function simulate(cfg, opts = {}) {
           r.left = 0
           break
         }
-        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), st.dmg, st.pierce)
+        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), st.dmg, st.pierce, st.burn)
         r.left--
       }
     }
@@ -348,7 +353,7 @@ export function simulate(cfg, opts = {}) {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce)
+        fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, st.burn)
       }
     }
   }
@@ -422,7 +427,7 @@ export function simulate(cfg, opts = {}) {
     if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
   }
 
-  function explodeAt(x, y, r, dmg) {
+  function explodeAt(x, y, r, dmg, burn) {
     const maxEnemyR = Math.max(cfg.enemy.radius, cfg.boss.radius)
     const near = grid.query(x, y, r + maxEnemyR, explodeBuf)
     for (let i = near.length - 1; i >= 0; i--) {
@@ -433,11 +438,11 @@ export function simulate(cfg, opts = {}) {
       const d2 = dx * dx + dy * dy
       if (d2 > reach * reach) continue
       const d = Math.sqrt(d2) || 1
-      damageEnemy(e, dmg, dx / d, dy / d)
+      damageEnemy(e, dmg, dx / d, dy / d, burn)
     }
   }
 
-  function damageEnemy(e, amount, dirX, dirY) {
+  function damageEnemy(e, amount, dirX, dirY, burn) {
     const w = stats.weapon
     const c = stats.combat
     if (c.critChance > 0 && Math.random() < c.critChance) amount *= c.critDmg
@@ -446,20 +451,25 @@ export function simulate(cfg, opts = {}) {
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
     if (!e.boss) e.stun = cfg.enemy.hitStunSec // 피격 경직 (main.js 동기화)
-    if (e.hp > 0) return
+    if (burn) {
+      const dps = amount * BURN_PCT
+      if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
+      else e.burn.time = BURN_DUR
+    }
+    if (e.hp <= 0) killEnemy(e)
+  }
 
+  function killEnemy(e) {
+    const c = stats.combat
     const ex = e.x
     const ey = e.y
-    const idx = state.enemies.indexOf(e)
-    removeSwap(state.enemies, idx, enemyPool)
+    removeSwap(state.enemies, state.enemies.indexOf(e), enemyPool)
     state.kills++
     if (e.boss) {
       state.bossKills++
-      botEquipRune() // 보스 처치 → 룬 장착 (game 미러링)
+      botEquipRune()
     }
-    gainXp(e.gems * cfg.xp.gemValue) // 처치 즉시 경험치
-
-    // 힘40 처치 폭발
+    gainXp(e.gems * cfg.xp.gemValue)
     if (
       !chainGuard &&
       c.killExplodeChance > 0 &&
@@ -673,7 +683,7 @@ export function simulate(cfg, opts = {}) {
         if (dx * dx + dy * dy >= hitR * hitR) continue
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        damageEnemy(e, a.dmg, a.vx / len, a.vy / len)
+        damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
         if (--a.pierceLeft <= 0) {
           spent = true
           break
@@ -696,11 +706,22 @@ export function simulate(cfg, opts = {}) {
       const dx = state.px - e.x
       const dy = state.py - e.y
 
-      // 너무 멀어진 적 제거
-      if (dx * dx + dy * dy > despawn2) {
+      // 너무 멀어진 적 제거 (보스는 예외)
+      if (!e.boss && dx * dx + dy * dy > despawn2) {
         removeSwap(state.enemies, i, enemyPool)
         i--
         continue
+      }
+
+      // 화상 도트 (main.js 동기화)
+      if (e.burn && e.burn.time > 0) {
+        e.burn.time -= dt
+        e.hp -= e.burn.dps * dt
+        if (e.hp <= 0) {
+          killEnemy(e)
+          i--
+          continue
+        }
       }
 
       // 피격 경직 — 이동/추격/분리/공격 정지 (main.js 동기화)
