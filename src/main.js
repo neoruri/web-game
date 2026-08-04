@@ -307,10 +307,43 @@ class GameScene extends Phaser.Scene {
           } else {
             ctx.drawImage(sheet, k * TW, 0, TW, TH, sx, sy, TW, TH)
           }
-          if (hv % 5 === 0 && decOk) {
-            const dk = (hv >> 12) % DN
-            ctx.drawImage(dec, dk * DS, 0, DS, DS, sx + 32, sy, DS, DS)
+          if (decOk) {
+            // 데칼 뭉치기 — 구역마다 밀도 차이(어수선/보통/깨끗)
+            const rh = (((c >> 2) * 92837111) ^ ((r >> 2) * 689287499)) >>> 0
+            const gate = rh % 4 === 0 ? 3 : rh % 4 === 1 ? 7 : 13
+            if (hv % gate === 0) {
+              const dk = (hv >> 12) % DN
+              ctx.drawImage(dec, dk * DS, 0, DS, DS, sx + 32, sy, DS, DS)
+            }
           }
+        }
+      }
+
+      // 넓은 구역 명암 (단조로움 완화) — 좌표 해시 기반, 스크롤해도 일관
+      const REG = 360
+      const gx0 = Math.floor((px - W) / REG)
+      const gx1 = Math.floor((px + W) / REG)
+      const gy0 = Math.floor((py - H) / REG)
+      const gy1 = Math.floor((py + H) / REG)
+      for (let gy = gy0; gy <= gy1; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) {
+          const h = ((gx * 374761393) ^ (gy * 668265263)) >>> 0
+          if (h % 3 === 0) continue // 일부 구역은 변화 없음
+          const cxw = gx * REG + ((h >> 3) % REG)
+          const cyw = gy * REG + ((h >> 13) % REG)
+          const bx = cxw - px + W / 2
+          const by = cyw - py + H / 2
+          const rad = REG * (0.55 + ((h >> 5) % 35) / 100)
+          if (bx + rad < 0 || bx - rad > W || by + rad < 0 || by - rad > H) continue
+          const rg = ctx.createRadialGradient(bx, by, 0, bx, by, rad)
+          if (h & 1) {
+            rg.addColorStop(0, `rgba(4,6,10,${0.1 + ((h >> 7) % 13) / 100})`) // 그늘
+          } else {
+            rg.addColorStop(0, `rgba(150,162,205,${0.05 + ((h >> 7) % 8) / 100})`) // 은은한 빛
+          }
+          rg.addColorStop(1, 'rgba(0,0,0,0)')
+          ctx.fillStyle = rg
+          ctx.fillRect(bx - rad, by - rad, rad * 2, rad * 2)
         }
       }
       // 위/아래 깊이 어두움
