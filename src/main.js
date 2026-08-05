@@ -81,6 +81,10 @@ const PARALLAX_DOTS = 1.15
 // 너무 멀어지면(반대편으로 밀려나거나) 제거한다.
 const SPAWN_DIST = Math.hypot(W, H) / 2 + 40
 const DESPAWN_DIST = SPAWN_DIST + 280
+// 보스가 이 거리보다 멀면(사실상 화면 밖) 플레이어보다 빠르게 접근시켜
+// 반드시 화면에 들어오게 한다. 화면 안에서는 원래 느린 속도로 복귀.
+const BOSS_LEASH = Math.hypot(W, H) / 2 // 화면 반대각선 ≈ 화면 경계
+const BOSS_CATCHUP = 1.25 // 화면 밖일 때 플레이어 속도의 이 배율로 추격
 
 // 적/화살/젬은 GameObject 가 아니라 평범한 객체다.
 //  - 생성/파괴 비용 없음 (풀에서 재사용)
@@ -97,6 +101,10 @@ class GameScene extends Phaser.Scene {
       '/sprites/dungeon/deliverables/player_spritesheet.png',
       { frameWidth: 96, frameHeight: 116 }
     )
+    // 바닥 타일/데칼 — 로딩 화면에서 미리 디코딩해 둔다. new Image() 로 플레이
+    // 시작 후 디코딩하면 첫 몇 초 캔버스 그리기에서 메인스레드가 튄다(초기 버벅).
+    this.load.image('isotileset', '/sprites/dungeon/tileset_iso_stone.png')
+    this.load.image('isodecals', '/sprites/dungeon/decals_iso.png')
   }
 
   create() {
@@ -170,6 +178,7 @@ class GameScene extends Phaser.Scene {
     this.eProjPool = []
     this.telePool = []
     this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
+    this._visBuf = [] // 렌더용 화면 내 적 목록(매 프레임 재사용, GC 회피)
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
     this.grid = new Grid(W, H, 56)
@@ -399,13 +408,14 @@ class GameScene extends Phaser.Scene {
     this._lastCamX = null
     this._lastCamY = null
 
-    // 타일/데칼 이미지 (Phaser 로더 대신 순수 Image → ctx.drawImage)
-    this.floorSheet = new Image()
-    this.floorSheet.onload = () => { this._lastCamX = null } // 로드되면 강제 재그리기
-    this.floorSheet.src = '/sprites/dungeon/tileset_iso_stone.png'
-    this.floorDec = new Image()
-    this.floorDec.onload = () => { this._lastCamX = null }
-    this.floorDec.src = '/sprites/dungeon/decals_iso.png'
+    // 타일/데칼 이미지 — preload 에서 이미 디코딩됨. 텍스처 매니저의
+    // HTMLImageElement 를 꺼내 ctx.drawImage 에 쓴다(플레이 중 디코딩 튐 없음).
+    this.floorSheet = this.textures.exists('isotileset')
+      ? this.textures.get('isotileset').getSourceImage()
+      : new Image()
+    this.floorDec = this.textures.exists('isodecals')
+      ? this.textures.get('isodecals').getSourceImage()
+      : new Image()
 
     const tex = this.textures.exists('isofloor')
       ? this.textures.get('isofloor')
@@ -1332,6 +1342,11 @@ class GameScene extends Phaser.Scene {
 
   // 적 처치 처리 (직격/폭발/화상 도트 공용)
   killEnemy(e) {
+    // 같은 프레임에 두 번 처치되는 경우 방어(화살 2발·관통·폭발·화상 겹침).
+    // indexOf 가 -1 이면 removeSwap 이 살아있는 마지막 적을 잘못 빼내 배열이
+    // 깨지고 킬/룬이 중복된다 — 이미 제거됐으면 바로 반환.
+    const idx = this.enemies.indexOf(e)
+    if (idx < 0) return
     const c = this.stats.combat
     const ex = e.x
     const ey = e.y
@@ -1347,7 +1362,7 @@ class GameScene extends Phaser.Scene {
           : COLOR_ENEMY
     this.spawnParticles(ex, ey, e.boss ? 20 : 9, col, e.boss ? 240 : 170, e.boss ? 4 : 3, 0.45)
     if (wasBoss) this.cameras.main.shake(160, 0.006)
-    this.removeSwap(this.enemies, this.enemies.indexOf(e), this.enemyPool)
+    this.removeSwap(this.enemies, idx, this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
     this.gainXp(e.gems * this.cfg.xp.gemValue)
@@ -1849,8 +1864,15 @@ class GameScene extends Phaser.Scene {
         mvy = dy / len + (dx / len) * wob
       }
 
-      e.x += mvx * e.speed * dt + sx * sepStr * dt + e.kbx * dt
-      e.y += mvy * e.speed * dt + sy * sepStr * dt + e.kby * dt
+      // 보스 러버밴딩 — 화면 밖으로 벗어나면 플레이어보다 빠르게 좁혀 접근시킨다
+      // (보스는 despawn 예외라, 느리면 영영 못 따라와 "메세지만 뜨고 안 보임"이 됨)
+      let espeed = e.speed
+      if (e.boss && dx * dx + dy * dy > BOSS_LEASH * BOSS_LEASH) {
+        espeed = Math.max(e.speed, this.stats.player.speed * BOSS_CATCHUP)
+      }
+
+      e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
       if (e.flash > 0) e.flash -= dt
@@ -2010,7 +2032,20 @@ class GameScene extends Phaser.Scene {
   render() {
     const ge = this.gfxEnemies
     ge.clear()
-    const es = this.enemies
+
+    // 화면 밖 적은 그리지 않는다(컬링) — 최대 300마리를 8패스로 다 그리면
+    // 수가 늘 때 급격히 무거워진다. 화면 안 + 여유(보스 반경)만 남긴다.
+    const px = this.player.x
+    const py = this.player.y
+    const cullX = W / 2 + 40
+    const cullY = H / 2 + 40
+    const es = this._visBuf
+    es.length = 0
+    const all = this.enemies
+    for (let i = 0; i < all.length; i++) {
+      const e = all[i]
+      if (Math.abs(e.x - px) <= cullX && Math.abs(e.y - py) <= cullY) es.push(e)
+    }
 
     // 1) 바닥 그림자 (전체) — 더 아래·진하게(접지감)
     ge.fillStyle(0x000000, 0.38)
@@ -2086,8 +2121,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다
-    for (let i = 0; i < this.enemies.length; i++) {
-      const e = this.enemies[i]
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
       if (!e.boss) continue
       const bw = e.r * 2.4
       const bx = e.x - bw / 2
@@ -2184,8 +2219,6 @@ class GameScene extends Phaser.Scene {
     // 플레이어 — 스프라이트면 발밑 그림자만, 아니면 폴백 음영 오브
     const gp = this.gfxChar
     gp.clear()
-    const px = this.player.x
-    const py = this.player.y
     const pr = this.stats.player.radius
     if (this.playerSprite) {
       gp.fillStyle(0x000000, 0.4)

@@ -26,6 +26,9 @@ const H = 960
 const KNOCKBACK_FRICTION = 8
 const SPAWN_DIST = Math.hypot(W, H) / 2 + 40
 const DESPAWN_DIST = SPAWN_DIST + 280
+// 보스 러버밴딩 (main.js 동기화) — 화면 밖이면 플레이어보다 빠르게 접근
+const BOSS_LEASH = Math.hypot(W, H) / 2
+const BOSS_CATCHUP = 1.25
 
 function clone(o) {
   return JSON.parse(JSON.stringify(o))
@@ -460,10 +463,14 @@ export function simulate(cfg, opts = {}) {
   }
 
   function killEnemy(e) {
+    // 같은 프레임 중복 처치 방어 (main.js 동기화). indexOf -1 이면 살아있는
+    // 마지막 적을 잘못 빼내 배열이 깨지고 킬/룬이 중복된다.
+    const idx = state.enemies.indexOf(e)
+    if (idx < 0) return
     const c = stats.combat
     const ex = e.x
     const ey = e.y
-    removeSwap(state.enemies, state.enemies.indexOf(e), enemyPool)
+    removeSwap(state.enemies, idx, enemyPool)
     state.kills++
     if (e.boss) {
       state.bossKills++
@@ -770,8 +777,14 @@ export function simulate(cfg, opts = {}) {
         mvy = dy / len + (dx / len) * wob
       }
 
-      e.x += mvx * e.speed * dt + sx * sepStr * dt + e.kbx * dt
-      e.y += mvy * e.speed * dt + sy * sepStr * dt + e.kby * dt
+      // 보스 러버밴딩 (main.js 동기화) — 화면 밖이면 플레이어보다 빠르게 접근
+      let espeed = e.speed
+      if (e.boss && dx * dx + dy * dy > BOSS_LEASH * BOSS_LEASH) {
+        espeed = Math.max(e.speed, stats.player.speed * BOSS_CATCHUP)
+      }
+
+      e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
+      e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt
       e.kbx *= decay
       e.kby *= decay
 
