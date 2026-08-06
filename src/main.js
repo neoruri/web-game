@@ -596,6 +596,11 @@ class GameScene extends Phaser.Scene {
       .sprite(this.player.x, this.player.y, 'archer', 0)
       .setOrigin(0.5, 0.8) // 발끝 하단 정렬
       .setScale(scale)
+    // 림라이트(외곽 발광) — 어두운 바닥에 캐릭터가 묻히지 않게 실루엣을 띄운다.
+    // Phaser 내장 GPU FX 라 실루엣을 정확히 따라가고 값이 싸다. (WebGL 전용, 폴백 가드)
+    if (this.playerSprite.postFX) {
+      this.playerSprite.postFX.addGlow(0xbfe4ff, 4, 0, false, 0.1, 10)
+    }
     this.worldLayer.add(this.playerSprite)
     this.animKey = 'idle'
     this.playerSprite.play('idle')
