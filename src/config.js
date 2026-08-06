@@ -3,7 +3,7 @@
 
 // 저장 키에 버전을 붙인다. 밸런스 기본값을 크게 바꿀 때 버전을 올리면
 // 브라우저에 남은 옛 저장값을 무시하고 새 기본값으로 시작한다.
-const KEY = 'survivor.config.v3'
+const KEY = 'survivor.config.v4'
 
 export const DEFAULTS = {
   player: {
@@ -18,7 +18,9 @@ export const DEFAULTS = {
     damage: 20,
     cooldown: 1.2,
     speed: 1200,
-    pierce: 1,
+    // 관통 2 — 뱀서류는 군집 처리가 핵심. 단일 타겟(1)은 물량에 무력.
+    // sim: 스폰0.8 과 합쳐 보스 도달률 21%→50% (밸런스 리포트 반영)
+    pierce: 2,
     knockback: 70,
     // 자동조준 사거리. 이 안에 든 적만 쏜다. (튜너 조정값)
     range: 300,
@@ -50,13 +52,14 @@ export const DEFAULTS = {
     hitStunSec: 0.3, // 피격 시 경직(정지) 시간(초). 0=경직 없음
   },
   spawn: {
-    baseInterval: 0.7,
+    baseInterval: 0.8, // 0.7→0.8 초반 물량 압박 완화 (밸런스 리포트 반영)
     rampPerMin: 1.5,
     rampCap: 17,
     maxEnemies: 300,
   },
   boss: {
     everySec: 90,
+    firstBossSec: 55, // 첫 보스만 앞당겨 룬을 일찍 경험하게. 이후는 everySec 간격.
     hp: 300,
     hpRampPerMin: 1.1,
     speed: 42,
@@ -433,6 +436,14 @@ export const SCHEMA = [
         max: 300,
         step: 5,
         effect: '↑ 보스가 드물게 등장  ·  ↓ 자주 등장(압박↑)',
+      },
+      {
+        key: 'firstBossSec',
+        label: '첫 보스 등장(초)',
+        min: 10,
+        max: 200,
+        step: 5,
+        effect: '첫 보스만 이 시간에 등장(룬 조기 경험)  ·  이후는 등장 간격 적용',
       },
       {
         key: 'hp',

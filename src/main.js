@@ -1671,7 +1671,9 @@ class GameScene extends Phaser.Scene {
     }
 
     this.bossAcc += dt
-    const bossEvery = this.cfg.boss.everySec
+    // 첫 보스만 firstBossSec 로 앞당김(룬 조기 경험). 이후는 everySec 간격.
+    const bossEvery =
+      this.bossCount === 0 ? this.cfg.boss.firstBossSec : this.cfg.boss.everySec
     if (this.bossAcc >= bossEvery) {
       this.bossAcc -= bossEvery
       this.spawnBoss()

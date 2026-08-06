@@ -84,6 +84,7 @@ export function simulate(cfg, opts = {}) {
     firstCrisis: null,
     spawnAcc: 0,
     bossAcc: 0,
+    bossSpawns: 0,
     fireAcc: 0,
     enemies: [],
     arrows: [],
@@ -194,6 +195,7 @@ export function simulate(cfg, opts = {}) {
   }
 
   function spawnBoss() {
+    state.bossSpawns++
     const p = edge(60)
     makeEnemy(p.x, p.y, {
       hp: bossHpNow(),
@@ -631,8 +633,11 @@ export function simulate(cfg, opts = {}) {
 
     // 보스
     state.bossAcc += dt
-    if (state.bossAcc >= cfg.boss.everySec) {
-      state.bossAcc -= cfg.boss.everySec
+    // 첫 보스만 firstBossSec (main.js 동기화)
+    const bossEvery =
+      state.bossSpawns === 0 ? cfg.boss.firstBossSec : cfg.boss.everySec
+    if (state.bossAcc >= bossEvery) {
+      state.bossAcc -= bossEvery
       spawnBoss()
     }
 
