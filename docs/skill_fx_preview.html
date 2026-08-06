@@ -1,0 +1,165 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스킬별 발사 이펙트 프리뷰</title>
+<style>
+ body{margin:0;background:#0a0d12;color:#dbe6f0;font-family:system-ui,'Apple SD Gothic Neo',sans-serif;padding:18px}
+ h1{font-size:17px;margin:0 0 4px}
+ .sub{font-size:12.5px;color:#7d8ea0;margin-bottom:14px;line-height:1.6}
+ .wrap{max-width:900px;margin:0 auto}
+ canvas{width:100%;border-radius:12px;background:#0d1117;box-shadow:0 8px 30px #0008;display:block}
+ .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 6px;align-items:center}
+ button{background:#1a222d;color:#cfe;border:1px solid #2b3846;border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer}
+ button.on{background:#6d5ef0;border-color:#6d5ef0;color:#fff}
+ .lab{font-size:12px;color:#7d8ea0;margin-right:4px}
+ table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+ th,td{border:1px solid #232e3a;padding:7px 9px;text-align:left}
+ th{background:#141b24;color:#9fb0c0;font-weight:600}
+ code{background:#141b24;padding:1px 5px;border-radius:4px;font-size:12px}
+ .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:middle}
+</style></head><body><div class="wrap">
+<h1>스킬별 발사 이펙트 — 비교 프리뷰</h1>
+<div class="sub"><b>✅ 이 값은 실제 게임(main.js SKILL_FX)에 반영 완료.</b> 각 줄이 한 스킬입니다. <b>색·굵기·길이·트레일·명중 이펙트</b>만 바꿔 구분했습니다(새 스프라이트 불필요).<br>
+ 아래 <b>룬 오버레이</b>를 켜면 "스킬 형태 + 룬 색"이 겹쳐지는 방식을 볼 수 있습니다.</div>
+
+<canvas id="c" width="880" height="470"></canvas>
+
+<div class="row">
+  <span class="lab">룬 오버레이:</span>
+  <button id="rNone" class="on">없음</button>
+  <button id="rBurn">🔥 화상</button>
+  <button id="rPierce">➹ 관통</button>
+  <button id="rProj">🎯 발사체+</button>
+  <span class="lab" style="margin-left:12px">속도:</span>
+  <button id="slow">0.4x</button>
+  <button id="norm" class="on">1x</button>
+</div>
+
+<table>
+ <tr><th>스킬</th><th>색</th><th>화살 형태</th><th>트레일</th><th>명중</th><th>의도</th></tr>
+ <tr><td><b>기본 사격</b></td><td><span class="sw" style="background:#fab387"></span>주황</td><td>굵기2·길이10</td><td>없음</td><td>스파크</td><td>기준점</td></tr>
+ <tr><td><b>다발 사격</b></td><td><span class="sw" style="background:#89dceb"></span>하늘</td><td>얇고 짧게</td><td>얇은 선</td><td>작은 스파크</td><td>가볍고 빠른 다발</td></tr>
+ <tr><td><b>연발 사격</b></td><td><span class="sw" style="background:#f9e2af"></span>노랑</td><td>아주 짧게(탄환형)</td><td>점선</td><td>섬광</td><td>따다닥 점사</td></tr>
+ <tr><td><b>난사</b></td><td><span class="sw" style="background:#a6e3a1"></span>민트</td><td>길게 뻗음</td><td>페이드 잔상</td><td>스파크</td><td>사방으로 길게</td></tr>
+ <tr><td><b>수류탄</b></td><td><span class="sw" style="background:#fab387"></span>주황</td><td>포물선 투척체</td><td>아크 궤적</td><td>폭발+링</td><td>무겁고 광역</td></tr>
+</table>
+<div class="sub" style="margin-top:12px">
+ <b>핵심:</b> 스킬은 <b>형태</b>로 구분, 룬은 <b>색/부가효과</b>로 덧입힘 → 조합이 늘어도 규칙이 안 무너집니다.
+ 구현은 <code>SKILL_FX</code> 테이블 하나 + 룬 modifier 함수로 끝납니다.
+</div>
+</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+const W=c.width,H=c.height;
+// ⚠ 아래 값은 src/main.js 의 SKILL_FX 와 동일하게 유지할 것 (문서-코드 일치)
+const LANES=[
+ {name:'기본 사격', id:'basic',     tint:'#fab387', w:2,   len:10, trail:'none', impact:'spark', cd:52},
+ {name:'다발 사격', id:'multishot', tint:'#89dceb', w:2,   len:8,  trail:'thin', impact:'spark', cd:64, fan:5},
+ {name:'연발 사격', id:'rapidfire', tint:'#f9e2af', w:3,   len:6,  trail:'dots', impact:'flash', cd:12, burst:5},
+ {name:'난사',      id:'barrage',   tint:'#a6e3a1', w:2.5, len:15, trail:'fade', impact:'spark', cd:70, fan:3},
+ {name:'수류탄',    id:'grenade',   tint:'#fab387', w:3,   len:10, trail:'arc',  impact:'boom',  cd:95},
+];
+const RUNE={none:null,burn:{tint:'#ff8a4a',glow:1},pierce:{lenMul:1.9,wMul:1.15},proj:{extra:2}};
+let rune='none', speed=1, t=0;
+const shots=[],fx=[];
+const laneH=H/LANES.length;
+function laneY(i){return laneH*i+laneH/2}
+const SX=110, TX=W-120;   // 발사 지점 / 표적
+
+function fire(L,i){
+  const y=laneY(i), n=(L.fan||1)+(RUNE[rune]?.extra||0);
+  const spread=L.fan?0.30:0.10;
+  for(let k=0;k<n;k++){
+    const a=(n>1)?(-spread/2+spread*(k/(n-1))):0;
+    if(L.id==='grenade'){ shots.push({L,i,x:SX,y,arc:0,ty:y,grenade:1}); }
+    else shots.push({L,i,x:SX,y,vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,hist:[]});
+  }
+  if(L.burst){ // 연발: 짧은 간격 연사
+    for(let b=1;b<L.burst;b++) setTimeout(()=>{
+      shots.push({L,i,x:SX,y:y+(Math.random()*4-2),vx:8,vy:0,hist:[]})},b*55/speed);
+  }
+}
+const timers=LANES.map(()=>0);
+
+function impact(L,px,py){
+  if(L.impact==='boom'){ fx.push({k:'boom',x:px,y:py,r:6,life:26,tint:L.tint}); }
+  else if(L.impact==='flash'){ fx.push({k:'flash',x:px,y:py,life:9,tint:L.tint}); }
+  else { for(let i=0;i<7;i++){const a=Math.random()*6.28,s=1.5+Math.random()*2.5;
+    fx.push({k:'p',x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:16,tint:L.tint});} }
+  if(rune==='burn') for(let i=0;i<5;i++){const a=Math.random()*6.28;
+    fx.push({k:'p',x:px,y:py,vx:Math.cos(a)*1.6,vy:Math.sin(a)*1.6-0.8,life:24,tint:'#ff8a4a'});}
+}
+
+function draw(){
+  t+=speed;
+  x.clearRect(0,0,W,H);
+  // 레인 배경 + 라벨 + 표적
+  LANES.forEach((L,i)=>{
+    const y=laneY(i);
+    x.fillStyle=i%2?'#0f1620':'#0c121a'; x.fillRect(0,laneH*i,W,laneH);
+    x.strokeStyle='#1b2531'; x.beginPath(); x.moveTo(0,laneH*i); x.lineTo(W,laneH*i); x.stroke();
+    x.fillStyle='#8395a6'; x.font='600 13px system-ui'; x.textAlign='left';
+    x.fillText(L.name,14,y-laneH/2+22);
+    // 발사자
+    x.fillStyle='#5f7f9f'; x.beginPath(); x.arc(SX,y,9,0,6.28); x.fill();
+    x.fillStyle='#cfe2f2'; x.beginPath(); x.arc(SX-3,y-3,3,0,6.28); x.fill();
+    // 표적(적)
+    x.fillStyle='#3d5a48'; x.fillRect(TX-13,y-13,26,26);
+    x.strokeStyle='#c4d6c8'; x.lineWidth=1.5; x.strokeRect(TX-13,y-13,26,26);
+    // 발사 타이머
+    timers[i]-=speed;
+    if(timers[i]<=0){ fire(L,i); timers[i]=L.cd; }
+  });
+  // 투사체
+  for(let s=shots.length-1;s>=0;s--){
+    const o=shots[s], L=o.L, R=RUNE[rune];
+    const tint = (rune==='burn')? RUNE.burn.tint : L.tint;
+    if(o.grenade){
+      o.arc+=0.022*speed; const px=SX+(TX-SX)*o.arc, py=o.ty-Math.sin(o.arc*Math.PI)*46;
+      // 아크 궤적
+      x.strokeStyle='rgba(255,154,90,0.25)'; x.lineWidth=2; x.beginPath();
+      for(let q=0;q<=20;q++){const p=o.arc*q/20; x.lineTo(SX+(TX-SX)*p, o.ty-Math.sin(p*Math.PI)*46);} x.stroke();
+      x.fillStyle=tint; x.beginPath(); x.arc(px,py,5,0,6.28); x.fill();
+      if(o.arc>=1){ impact(L,TX,o.ty); shots.splice(s,1); }
+      continue;
+    }
+    o.hist.push({x:o.x,y:o.y}); if(o.hist.length>10)o.hist.shift();
+    o.x+=o.vx*speed; o.y+=o.vy*speed;
+    const len=L.len*(R?.lenMul||1), wid=L.w*(R?.wMul||1);
+    // 트레일
+    if(L.trail==='fade'){ o.hist.forEach((h,k)=>{ x.globalAlpha=k/o.hist.length*0.35;
+      x.strokeStyle=tint; x.lineWidth=wid; x.beginPath(); x.moveTo(h.x,h.y); x.lineTo(h.x-o.vx*1.2,h.y-o.vy*1.2); x.stroke(); }); x.globalAlpha=1; }
+    if(L.trail==='thin'){ x.globalAlpha=.3; x.strokeStyle=tint; x.lineWidth=1;
+      x.beginPath(); x.moveTo(o.x-o.vx*4,o.y-o.vy*4); x.lineTo(o.x,o.y); x.stroke(); x.globalAlpha=1; }
+    if(L.trail==='dots'){ x.fillStyle=tint; x.globalAlpha=.4;
+      for(let k=1;k<4;k++){x.beginPath();x.arc(o.x-o.vx*k*2.4,o.y-o.vy*k*2.4,1.4,0,6.28);x.fill();} x.globalAlpha=1; }
+    // 화상 룬: 불꽃 잔상
+    if(rune==='burn'&&Math.random()<0.5) fx.push({k:'p',x:o.x,y:o.y,vx:(Math.random()-.5)*.6,vy:-0.5,life:14,tint:'#ff8a4a'});
+    // 화살 본체
+    x.strokeStyle=tint; x.lineWidth=wid; x.lineCap='round';
+    x.beginPath(); x.moveTo(o.x,o.y); x.lineTo(o.x-o.vx/7.5*len,o.y-o.vy/7.5*len); x.stroke();
+    if(rune==='burn'){ x.globalAlpha=.5; x.lineWidth=wid+3; x.stroke(); x.globalAlpha=1; }
+    if(o.x>TX-13){ impact(L,TX-13,o.y);
+      if(rune==='pierce'&&!o.pierced){o.pierced=1;} else shots.splice(s,1); }
+    if(o.x>W+40) shots.splice(s,1);
+  }
+  // 명중 이펙트
+  for(let i=fx.length-1;i>=0;i--){const e=fx[i]; e.life-=speed;
+    if(e.k==='p'){ e.x+=e.vx*speed; e.y+=e.vy*speed; x.globalAlpha=Math.max(0,e.life/18);
+      x.fillStyle=e.tint; x.fillRect(e.x-1.5,e.y-1.5,3,3); x.globalAlpha=1; }
+    if(e.k==='flash'){ x.globalAlpha=Math.max(0,e.life/9); x.fillStyle='#fff';
+      x.beginPath(); x.arc(e.x,e.y,7,0,6.28); x.fill(); x.globalAlpha=1; }
+    if(e.k==='boom'){ e.r+=1.8*speed; const a=Math.max(0,e.life/26);
+      x.globalAlpha=a*.5; x.fillStyle=e.tint; x.beginPath(); x.arc(e.x,e.y,e.r,0,6.28); x.fill();
+      x.globalAlpha=a; x.strokeStyle='#ffd9a0'; x.lineWidth=2.5;
+      x.beginPath(); x.arc(e.x,e.y,e.r,0,6.28); x.stroke(); x.globalAlpha=1; }
+    if(e.life<=0) fx.splice(i,1);
+  }
+  requestAnimationFrame(draw);
+}
+const setR=(k,btn)=>{rune=k;['rNone','rBurn','rPierce','rProj'].forEach(id=>document.getElementById(id).classList.remove('on'));btn.classList.add('on');};
+rNone.onclick=e=>setR('none',e.target); rBurn.onclick=e=>setR('burn',e.target);
+rPierce.onclick=e=>setR('pierce',e.target); rProj.onclick=e=>setR('proj',e.target);
+slow.onclick=e=>{speed=.4;e.target.classList.add('on');norm.classList.remove('on')};
+norm.onclick=e=>{speed=1;e.target.classList.add('on');slow.classList.remove('on')};
+draw();
+</script></body></html>

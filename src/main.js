@@ -58,7 +58,21 @@ const COLOR_SHOOTER = 0x94e2d5 // 원거리형(카이팅)
 const COLOR_ENEMY_HIT = 0xffffff
 const COLOR_BOSS = 0xcba6f7
 const COLOR_ARROW = 0xfab387 // 기본 활 (주황)
-const COLOR_SKILL_ARROW = 0x89dceb // 스킬 발사체 (하늘색 — 기본과 구분)
+const COLOR_SKILL_ARROW = 0x89dceb // 스킬 발사체 (하늘색 — 기본과 구분) *구버전 폴백용
+
+// 스킬별 발사체 이펙트 — 색/굵기/길이로 구분한다. (룬 오버레이는 아직 미적용)
+//  tint: 색 · w: 선 굵기 · len: 화살 길이(반길이 px)
+//  키는 fireAngle(..., skill) 에 넘기는 스킬 id. 'basic' = 기본 활.
+//  trail: 'none' 없음 | 'thin' 얇은 선 | 'dots' 점선 | 'fade' 페이드 잔상
+//  impact: 'spark' 기본 스파크 | 'flash' 섬광 | 'boom' 폭발(수류탄은 기존 링 사용)
+const SKILL_FX = {
+  basic: { tint: 0xfab387, w: 2, len: 10, trail: 'none', impact: 'spark' }, // 주황 · 기준
+  multishot: { tint: 0x89dceb, w: 2, len: 8, trail: 'thin', impact: 'spark' }, // 하늘 · 가벼운 다발
+  rapidfire: { tint: 0xf9e2af, w: 3, len: 6, trail: 'dots', impact: 'flash' }, // 노랑 · 따다닥
+  barrage: { tint: 0xa6e3a1, w: 2.5, len: 15, trail: 'fade', impact: 'spark' }, // 민트 · 길게
+  grenade: { tint: 0xfab387, w: 3, len: 10, trail: 'none', impact: 'boom' }, // 주황 · 투척체
+}
+const SKILL_FX_KEYS = Object.keys(SKILL_FX)
 const COLOR_GEM = 0x94e2d5
 
 const KNOCKBACK_FRICTION = 8
@@ -1055,7 +1069,15 @@ class GameScene extends Phaser.Scene {
     a.angle = angle
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
-    a.skill = !!skill // 렌더 색 구분 (시각 전용)
+    // 스킬 id 기록 → 스킬별 이펙트(SKILL_FX)에 사용.
+    // skill 인자는 스킬 id 문자열('multishot' 등) 또는 기본 활이면 'basic'/false.
+    a.fx = typeof skill === 'string' && SKILL_FX[skill] ? skill : skill ? 'multishot' : 'basic'
+    a.skill = a.fx !== 'basic' // 스킬 화살 여부 (시각 전용)
+    // 트레일용 직전 위치 기록(fade/dots에서 사용). 재사용 화살이므로 매번 초기화.
+    a.px1 = a.x
+    a.py1 = a.y
+    a.px2 = a.x
+    a.py2 = a.y
     a.burn = !!burn // 화상 룬
     a.hit.clear()
     this.arrows.push(a)
@@ -1065,12 +1087,12 @@ class GameScene extends Phaser.Scene {
     const angle = Math.atan2(target.y - this.bowY, target.x - this.player.x)
     const w = this.stats.weapon
     const dmg = w.damage
-    this.fireAngle(angle, dmg, undefined, false, w.burn)
+    this.fireAngle(angle, dmg, undefined, 'basic', w.burn)
     // 민첩30 추가 화살 — 살짝 벌려서 발사
     const extra = w.extraArrows || 0
     for (let i = 1; i <= extra; i++) {
       const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
-      this.fireAngle(angle + off, dmg, undefined, false, w.burn)
+      this.fireAngle(angle + off, dmg, undefined, 'basic', w.burn)
     }
   }
 
@@ -1115,7 +1137,7 @@ class GameScene extends Phaser.Scene {
     const n = st.shots
     for (let i = 0; i < n; i++) {
       const frac = n <= 1 ? 0.5 : i / (n - 1) // 0..1
-      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, true, st.burn)
+      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, 'multishot', st.burn)
     }
     this.flashSkill(0x89dceb)
     return true
@@ -1201,7 +1223,7 @@ class GameScene extends Phaser.Scene {
           Math.atan2(t.y - this.bowY, t.x - this.player.x),
           st.dmg,
           st.pierce,
-          true,
+          'rapidfire',
           st.burn
         )
         r.left--
@@ -1216,7 +1238,7 @@ class GameScene extends Phaser.Scene {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, true, st.burn)
+        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, 'barrage', st.burn)
       }
     }
   }
@@ -1776,6 +1798,11 @@ class GameScene extends Phaser.Scene {
 
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const a = this.arrows[i]
+      // 트레일용 궤적 기록(2단계) — 이동 전 위치를 밀어 넣는다
+      a.px2 = a.px1
+      a.py2 = a.py1
+      a.px1 = a.x
+      a.py1 = a.y
       a.x += a.vx * dt
       a.y += a.vy * dt
 
@@ -1803,8 +1830,10 @@ class GameScene extends Phaser.Scene {
 
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        // 화살 타격 스파크 — 짧은 직선이 희미하게 퍼짐
-        this.spawnSpark(a.x, a.y)
+        // 스킬별 명중 이펙트 — 색은 그 스킬 색, 연발은 흰 섬광으로 구분
+        const hfx = SKILL_FX[a.fx] || SKILL_FX.basic
+        if (hfx.impact === 'flash') this.spawnSpark(a.x, a.y, 0xffffff, 'flash')
+        else this.spawnSpark(a.x, a.y, hfx.tint, 'spark')
         this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
 
         if (--a.pierceLeft <= 0) {
@@ -2028,12 +2057,15 @@ class GameScene extends Phaser.Scene {
   }
 
   // 타격 스파크 — 타격 지점에서 짧은 직선이 희미하게 퍼짐(사망 원퍼짐과 구분).
-  spawnSpark(x, y) {
-    const n = 5
+  // color/kind를 지정하면 스킬별 명중 이펙트로 쓸 수 있다.
+  //  'spark' = 짧은 직선이 퍼짐(기본) · 'flash' = 짧고 굵은 흰 섬광(연발)
+  spawnSpark(x, y, color = 0xffffff, style = 'spark') {
+    const flash = style === 'flash'
+    const n = flash ? 3 : 5
     for (let k = 0; k < n; k++) {
       if (this.particles.length >= MAX_PARTICLES) return
       const a = Math.random() * Math.PI * 2
-      const s = 130 + Math.random() * 150
+      const s = flash ? 60 + Math.random() * 70 : 130 + Math.random() * 150
       const p = this.partPool.pop() || {}
       p.x = x
       p.y = y
@@ -2041,10 +2073,10 @@ class GameScene extends Phaser.Scene {
       p.vy = Math.sin(a) * s
       p.nx = Math.cos(a) // 선 방향(꼬리는 반대쪽으로)
       p.ny = Math.sin(a)
-      p.life = 0.1 + Math.random() * 0.08
+      p.life = flash ? 0.06 + Math.random() * 0.05 : 0.1 + Math.random() * 0.08
       p.max = p.life
-      p.color = 0xffffff
-      p.size = 7 + Math.random() * 5 // 선 길이
+      p.color = color
+      p.size = flash ? 11 + Math.random() * 5 : 7 + Math.random() * 5 // 선 길이
       p.kind = 'line'
       this.particles.push(p)
     }
@@ -2167,20 +2199,61 @@ class GameScene extends Phaser.Scene {
 
     const ga = this.gfxArrows
     ga.clear()
-    // 기본 활(주황)과 스킬 발사체(하늘색)를 색으로 구분 — 각각 한 번에 스트로크
-    for (let pass = 0; pass < 2; pass++) {
-      const skillPass = pass === 1
-      ga.lineStyle(skillPass ? 2.5 : 2, skillPass ? COLOR_SKILL_ARROW : COLOR_ARROW, 1)
-      ga.beginPath()
+    // 스킬별 이펙트 — SKILL_FX의 색/굵기/길이로 구분. 같은 스킬끼리 묶어 한 번에 스트로크.
+    for (let k = 0; k < SKILL_FX_KEYS.length; k++) {
+      const key = SKILL_FX_KEYS[k]
+      const fx = SKILL_FX[key]
+
+      // (1) 트레일 먼저 — 화살 본체 아래에 깔린다
+      if (fx.trail === 'fade' || fx.trail === 'thin') {
+        // 잔상: 직전 위치들로 이어진 반투명 선 (fade는 2단계로 더 길게)
+        const steps = fx.trail === 'fade' ? 2 : 1
+        for (let s = steps; s >= 1; s--) {
+          const alpha = fx.trail === 'fade' ? 0.13 * s : 0.22
+          let started = false
+          for (let i = 0; i < this.arrows.length; i++) {
+            const a = this.arrows[i]
+            if ((a.fx || 'basic') !== key) continue
+            if (!started) {
+              ga.lineStyle(fx.w * (fx.trail === 'fade' ? 1 : 0.7), fx.tint, alpha)
+              ga.beginPath()
+              started = true
+            }
+            ga.moveTo(s === 2 ? a.px2 : a.px1, s === 2 ? a.py2 : a.py1)
+            ga.lineTo(a.x, a.y)
+          }
+          if (started) ga.strokePath()
+        }
+      } else if (fx.trail === 'dots') {
+        // 점선: 뒤쪽으로 작은 점 3개
+        ga.fillStyle(fx.tint, 0.35)
+        for (let i = 0; i < this.arrows.length; i++) {
+          const a = this.arrows[i]
+          if ((a.fx || 'basic') !== key) continue
+          const ux = Math.cos(a.angle)
+          const uy = Math.sin(a.angle)
+          for (let d = 1; d <= 3; d++) {
+            ga.fillCircle(a.x - ux * (fx.len + d * 7), a.y - uy * (fx.len + d * 7), 1.6)
+          }
+        }
+      }
+
+      // (2) 화살 본체 — 같은 스킬끼리 한 번에 스트로크
+      let started = false
       for (let i = 0; i < this.arrows.length; i++) {
         const a = this.arrows[i]
-        if (!!a.skill !== skillPass) continue
-        const cx = Math.cos(a.angle) * 10
-        const cy = Math.sin(a.angle) * 10
+        if ((a.fx || 'basic') !== key) continue
+        if (!started) {
+          ga.lineStyle(fx.w, fx.tint, 1)
+          ga.beginPath()
+          started = true
+        }
+        const cx = Math.cos(a.angle) * fx.len
+        const cy = Math.sin(a.angle) * fx.len
         ga.moveTo(a.x - cx, a.y - cy)
         ga.lineTo(a.x + cx, a.y + cy)
       }
-      ga.strokePath()
+      if (started) ga.strokePath()
     }
 
     // 수류탄 폭발 — 커지면서 사라지는 링
