@@ -86,6 +86,12 @@ const DESPAWN_DIST = SPAWN_DIST + 280
 const BOSS_LEASH = Math.hypot(W, H) / 2 // 화면 반대각선 ≈ 화면 경계
 const BOSS_CATCHUP = 1.25 // 화면 밖일 때 플레이어 속도의 이 배율로 추격
 
+// 개발용 HUD(fps·속도·능력치 수치)는 기본 숨김. URL 에 ?dev 를 붙이면 표시.
+// (플레이어에겐 안 보이고, 개발 중엔 ...?dev 로 켜서 확인)
+const DEV_HUD =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).has('dev')
+
 // 적/화살/젬은 GameObject 가 아니라 평범한 객체다.
 //  - 생성/파괴 비용 없음 (풀에서 재사용)
 //  - 렌더는 Graphics 하나에 몰아서 → 수백 개여도 드로우콜 몇 개
@@ -105,6 +111,11 @@ class GameScene extends Phaser.Scene {
     // 시작 후 디코딩하면 첫 몇 초 캔버스 그리기에서 메인스레드가 튄다(초기 버벅).
     this.load.image('isotileset', '/sprites/dungeon/tileset_iso_stone.png')
     this.load.image('isodecals', '/sprites/dungeon/decals_iso.png')
+    // 적 스프라이트 (32×32, 3행[고블린/사냥개/궁수]×4프레임)
+    this.load.spritesheet('enemies', '/sprites/dungeon/enemies_sheet.png', {
+      frameWidth: 32,
+      frameHeight: 32,
+    })
   }
 
   create() {
@@ -191,7 +202,15 @@ class GameScene extends Phaser.Scene {
     // 그대로 두면 된다(카메라 무관). 게임 로직 좌표는 전부 월드 좌표.
     this.worldLayer = this.add.container(0, 0).setDepth(1)
 
-    this.gfxEnemies = this.add.graphics()
+    this.gfxEnemies = this.add.graphics() // 바닥 그림자 + 보스 돔 + 체력바
+    // 일반 적은 Blitter(스프라이트 배치 렌더) 로 한 번에 그린다 — 300마리도
+    // GameObject 하나(Blitter)만 관리, 개별 Bob 은 화면 내 적 수만큼만 재사용.
+    this.enemyBlitter = this.add.blitter(0, 0, 'enemies')
+    this.enemyBobs = [] // Bob 풀(재사용, GC 회피)
+    if (this.textures.exists('enemies') && this.textures.get('enemies').setFilter) {
+      this.textures.get('enemies').setFilter(Phaser.Textures.FilterMode.NEAREST)
+    }
+    this.gfxEnemyTop = this.add.graphics() // 스프라이트 위 오버레이(피격 플래시·화상)
     this.gfxArrows = this.add.graphics()
     this.gfxFx = this.add.graphics()
     this.gfxChar = this.add.graphics() // 플레이어 음영 오브(iso 스타일)
@@ -201,9 +220,11 @@ class GameScene extends Phaser.Scene {
       .circle(W / 2, H / 2, this.stats.player.radius, COLOR_PLAYER)
       .setVisible(false)
 
-    // 렌더 순서: 적 → 화살/이펙트 → 플레이어
+    // 렌더 순서: 그림자/보스 → 적 스프라이트 → 플래시·화상 → 화살/이펙트 → 플레이어
     this.worldLayer.add([
       this.gfxEnemies,
+      this.enemyBlitter,
+      this.gfxEnemyTop,
       this.gfxArrows,
       this.gfxFx,
       this.gfxChar,
@@ -643,22 +664,27 @@ class GameScene extends Phaser.Scene {
 
     this.buildPauseButton()
 
-    this.perfText = this.add
-      .text(W - 20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
-      .setOrigin(1, 1)
-      .setDepth(d)
+    // 개발용 수치 3종(fps·속도/DMG·능력치)은 ?dev 일 때만 만든다.
+    // 플레이어 화면에선 숨기고(혼동 방지), 개발 중엔 URL 로 켠다.
+    if (DEV_HUD) {
+      this.perfText = this.add
+        .text(W - 20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
+        .setOrigin(1, 1)
+        .setDepth(d)
 
-    // 두 기기가 같은 값을 쓰는지 눈으로 비교하기 위한 표시.
-    // (PC/모바일에서 이 숫자가 같으면 스탯은 동일한 것)
-    this.statText = this.add
-      .text(20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
-      .setOrigin(0, 1)
-      .setDepth(d)
+      // 두 기기가 같은 값을 쓰는지 눈으로 비교하기 위한 표시.
+      this.statText = this.add
+        .text(20, H - 20, '', { ...font, fontSize: '13px', color: '#6c7086' })
+        .setOrigin(0, 1)
+        .setDepth(d)
 
-    // 능력치 요약 (좌상단, 레벨 아래)
-    this.attrHudText = this.add
-      .text(20, 74, '', { ...font, fontSize: '13px', color: '#94e2d5' })
-      .setDepth(d)
+      // 능력치 요약 (좌상단, 레벨 아래) — 룬 피벗으로 보류(전부 0)라 기본 숨김
+      this.attrHudText = this.add
+        .text(20, 74, '', { ...font, fontSize: '13px', color: '#94e2d5' })
+        .setDepth(d)
+    } else {
+      this.perfText = this.statText = this.attrHudText = null
+    }
 
     // 성장 버튼 (하단 중앙). 미사용 포인트가 있으면 금색으로 강조된다.
     this.growthBtn = this.add
@@ -675,10 +701,12 @@ class GameScene extends Phaser.Scene {
   }
 
   refreshGrowthHud() {
-    const a = this.attributes
-    this.attrHudText.setText(
-      `힘 ${a.str}  민 ${a.dex}  지 ${a.int}  활 ${a.vit}`
-    )
+    if (this.attrHudText) {
+      const a = this.attributes
+      this.attrHudText.setText(
+        `힘 ${a.str}  민 ${a.dex}  지 ${a.int}  활 ${a.vit}`
+      )
+    }
 
     const has = this.attrPoints > 0 || this.skillPoints > 0
     this.growthBtnText.setText(
@@ -890,6 +918,7 @@ class GameScene extends Phaser.Scene {
     e.burn = null // 화상 도트 {dps,time}
     e.flash = 0
     e.wob = Math.random() * Math.PI * 2 // 유기적 흔들림 위상
+    e.animOff = (Math.random() * 4) | 0 // 걷기 프레임 위상(개체별 어긋나게)
     e.atk = spec.boss
       ? this.cfg.boss.attackInterval
       : spec.ranged
@@ -1726,12 +1755,14 @@ class GameScene extends Phaser.Scene {
     this.updateEnemyProjectiles(dt)
     this.render()
 
-    this.perfText.setText(
-      `${Math.round(this.game.loop.actualFps)} fps  ·  적 ${this.enemies.length}`
-    )
-    this.statText.setText(
-      `내속도 ${Math.round(this.stats.player.speed)}  ·  적속도 ${this.cfg.enemy.speed}  ·  DMG ${this.stats.weapon.damage}`
-    )
+    if (this.perfText) {
+      this.perfText.setText(
+        `${Math.round(this.game.loop.actualFps)} fps  ·  적 ${this.enemies.length}`
+      )
+      this.statText.setText(
+        `내속도 ${Math.round(this.stats.player.speed)}  ·  적속도 ${this.cfg.enemy.speed}  ·  DMG ${this.stats.weapon.damage}`
+      )
+    }
   }
 
   updateArrows(dt) {
@@ -2049,90 +2080,84 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(e.x - px) <= cullX && Math.abs(e.y - py) <= cullY) es.push(e)
     }
 
-    // 1) 바닥 그림자 (전체) — 더 아래·진하게(접지감)
+    // 1) 바닥 그림자 (전체·보스 포함) — 접지감
     ge.fillStyle(0x000000, 0.38)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       ge.fillEllipse(e.x, e.y + e.r * 0.9, e.r * 1.9, e.r * 0.9)
     }
 
-    // 2) 볼륨 어두운 베이스 (그림자 면) — 전체 원
-    ge.fillStyle(0x0c0c12, 1)
+    // 2) 일반 적 — Blitter 스프라이트(타입=행[고블린/사냥개/궁수], 걷기=열).
+    //    Bob 은 화면 내 적 수만큼만 재사용하고 나머지는 숨긴다(GC·드로우콜 최소).
+    const bobs = this.enemyBobs
+    const walk = Math.floor(this.elapsed * 8)
+    let bi = 0
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
-      if (e.flash > 0) continue
-      ge.fillCircle(e.x, e.y, e.r)
-    }
-
-    // 3) 밝은 본체(타입색) — 살짝 작게 위로 오프셋 → 하단·우측에 어두운 면 = 돔 입체
-    const typePasses = [
-      ['basic', COLOR_ENEMY],
-      ['rusher', COLOR_RUSHER],
-      ['shooter', COLOR_SHOOTER],
-    ]
-    for (let t = 0; t < typePasses.length; t++) {
-      ge.fillStyle(typePasses[t][1], 1)
-      for (let i = 0; i < es.length; i++) {
-        const e = es[i]
-        if (e.boss || e.type !== typePasses[t][0] || e.flash > 0) continue
-        ge.fillCircle(e.x - e.r * 0.12, e.y - e.r * 0.14, e.r * 0.9)
+      if (e.boss) continue
+      let bob = bobs[bi]
+      if (!bob) {
+        bob = this.enemyBlitter.create(0, 0, 0)
+        bobs[bi] = bob
       }
+      const row = e.type === 'rusher' ? 1 : e.type === 'shooter' ? 2 : 0
+      bob.setFrame(row * 4 + ((walk + e.animOff) & 3))
+      bob.x = e.x - 16
+      bob.y = e.y - 24
+      bob.setFlipX(px < e.x) // 플레이어를 바라보게
+      bob.visible = true
+      bi++
     }
-    ge.fillStyle(COLOR_BOSS, 1)
-    for (let i = 0; i < es.length; i++) {
-      const e = es[i]
-      if (!e.boss || e.flash > 0) continue
-      ge.fillCircle(e.x - e.r * 0.12, e.y - e.r * 0.14, e.r * 0.9)
-    }
+    for (let k = bi; k < bobs.length; k++) bobs[k].visible = false
 
-    // 4) 피격 플래시 (흰, 살짝 큼)
-    ge.fillStyle(COLOR_ENEMY_HIT, 1)
+    // 3) 스프라이트 위 오버레이 — 일반 적 피격 플래시(흰) + 화상(주황), 그리고 보스(돔)
+    const gt = this.gfxEnemyTop
+    gt.clear()
+    gt.fillStyle(COLOR_ENEMY_HIT, 0.55)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
-      if (e.flash <= 0) continue
-      ge.fillCircle(e.x, e.y, e.r * 1.12)
+      if (e.boss || e.flash <= 0) continue
+      gt.fillCircle(e.x, e.y - e.r * 0.4, e.r * 1.15)
     }
-
-    // 5) 상단 하이라이트 (광원 좌상단)
-    ge.fillStyle(0xffffff, 0.18)
+    gt.fillStyle(0xf0963c, 0.35)
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
-      if (e.flash > 0) continue
-      ge.fillCircle(e.x - e.r * 0.34, e.y - e.r * 0.4, e.r * 0.32)
-    }
-
-    // 6) 눈 2개 (몬스터 느낌 — 플레이어와 구분)
-    ge.fillStyle(0x101018, 0.92)
-    for (let i = 0; i < es.length; i++) {
-      const e = es[i]
-      if (e.flash > 0) continue
-      const eyY = e.y - e.r * 0.2
-      const eyX = e.r * 0.34
-      const eyR = Math.max(1.2, e.r * 0.17)
-      ge.fillCircle(e.x - eyX, eyY, eyR)
-      ge.fillCircle(e.x + eyX, eyY, eyR)
-    }
-
-    // 화상 표시 — 불타는 적에 주황 오버레이(깜빡)
-    ge.fillStyle(0xf0963c, 0.35)
-    for (let i = 0; i < es.length; i++) {
-      const e = es[i]
-      if (!e.burn || e.burn.time <= 0) continue
+      if (e.boss || !e.burn || e.burn.time <= 0) continue
       const flick = 0.7 + 0.3 * Math.sin(this.elapsed * 22 + e.x)
-      ge.fillCircle(e.x, e.y - e.r * 0.15, e.r * (0.95 + 0.15 * flick))
+      gt.fillCircle(e.x, e.y - e.r * 0.3, e.r * (1.0 + 0.15 * flick))
     }
 
-    // 보스는 머리 위에 체력바 — 몇 대 더 때려야 하는지 보여야 긴장감이 산다
+    // 4) 보스 — 스프라이트와 구분되게 보라 돔(입체+눈)으로 따로, 스프라이트 위에 그려
+    //    존재감을 준다. 체력바도 여기(위층)라 다른 적에 가리지 않는다.
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       if (!e.boss) continue
+      gt.fillStyle(0x0c0c12, 1)
+      gt.fillCircle(e.x, e.y, e.r)
+      gt.fillStyle(e.flash > 0 ? COLOR_ENEMY_HIT : COLOR_BOSS, 1)
+      gt.fillCircle(e.x - e.r * 0.12, e.y - e.r * 0.14, e.r * (e.flash > 0 ? 1.05 : 0.9))
+      if (e.flash <= 0) {
+        gt.fillStyle(0xffffff, 0.18)
+        gt.fillCircle(e.x - e.r * 0.34, e.y - e.r * 0.4, e.r * 0.32)
+        gt.fillStyle(0x101018, 0.92)
+        const eyY = e.y - e.r * 0.2
+        const eyX = e.r * 0.34
+        const eyR = Math.max(1.2, e.r * 0.17)
+        gt.fillCircle(e.x - eyX, eyY, eyR)
+        gt.fillCircle(e.x + eyX, eyY, eyR)
+      }
+      if (e.burn && e.burn.time > 0) {
+        const flick = 0.7 + 0.3 * Math.sin(this.elapsed * 22 + e.x)
+        gt.fillStyle(0xf0963c, 0.35)
+        gt.fillCircle(e.x, e.y - e.r * 0.15, e.r * (0.95 + 0.15 * flick))
+      }
       const bw = e.r * 2.4
       const bx = e.x - bw / 2
       const by = e.y - e.r - 12
-      ge.fillStyle(0x313244, 1)
-      ge.fillRect(bx, by, bw, 5)
-      ge.fillStyle(0xf38ba8, 1)
-      ge.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 5)
+      gt.fillStyle(0x313244, 1)
+      gt.fillRect(bx, by, bw, 5)
+      gt.fillStyle(0xf38ba8, 1)
+      gt.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 5)
     }
 
     const ga = this.gfxArrows
