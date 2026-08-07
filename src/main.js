@@ -137,6 +137,9 @@ class GameScene extends Phaser.Scene {
     // 시작 후 디코딩하면 첫 몇 초 캔버스 그리기에서 메인스레드가 튄다(초기 버벅).
     this.load.image('isotileset', '/sprites/dungeon/tileset_iso_stone.png')
     this.load.image('isodecals', '/sprites/dungeon/decals_iso.png')
+    // 맵 다양화(테스트) — 깨진타일 6 + 구멍 4 / 이끼 대역 16
+    this.load.image('isospecial', '/sprites/dungeon/tileset_iso_special.png')
+    this.load.image('isomoss', '/sprites/dungeon/tileset_iso_moss.png')
     // 적 스프라이트 (32×32, 3행[고블린/사냥개/궁수]×4프레임)
     this.load.spritesheet('enemies', '/sprites/dungeon/enemies_sheet.png', {
       frameWidth: 32,
@@ -464,6 +467,13 @@ class GameScene extends Phaser.Scene {
     this.floorDec = this.textures.exists('isodecals')
       ? this.textures.get('isodecals').getSourceImage()
       : new Image()
+    // 맵 다양화용 추가 시트 (없으면 자동으로 기본 타일만 사용)
+    this.floorSpecial = this.textures.exists('isospecial')
+      ? this.textures.get('isospecial').getSourceImage()
+      : new Image()
+    this.floorMoss = this.textures.exists('isomoss')
+      ? this.textures.get('isomoss').getSourceImage()
+      : new Image()
 
     const tex = this.textures.exists('isofloor')
       ? this.textures.get('isofloor')
@@ -505,6 +515,10 @@ class GameScene extends Phaser.Scene {
     if (sheet.complete && sheet.naturalWidth) {
       const dec = this.floorDec
       const decOk = dec.complete && dec.naturalWidth
+      const sp = this.floorSpecial
+      const spOk = sp && sp.complete && sp.naturalWidth
+      const moss = this.floorMoss
+      const mossOk = moss && moss.complete && moss.naturalWidth
       const TW = 128, TH = 64, N = 16, DS = 64, DN = 8
       const ox = W / 2 - px
       const oy = H / 2 - py
@@ -517,15 +531,29 @@ class GameScene extends Phaser.Scene {
           const sy = oy + (c + r) * (TH / 2) - TH / 2
           if (sx < -TW || sx > W || sy < -TH || sy > H) continue
           const hv = ((c * 73856093) ^ (r * 19349663)) >>> 0
-          const k = hv % N
+
+          // --- 타일 선택: 가중치(일반 85% / 깨짐 12% / 구멍 3%) + 이끼 대역 ---
+          let src = sheet
+          let k = hv % N
+          const roll = hv % 100
+          if (roll >= 97 && spOk) {
+            src = sp
+            k = 6 + (hv % 4) // 구멍(void) 4종
+          } else if (roll >= 85 && spOk) {
+            src = sp
+            k = hv % 6 // 깨진 타일 6종
+          } else if (mossOk && this.isMossBiome(c, r, hv)) {
+            src = moss // 이끼 대역 — 저주파 노이즈로 큰 덩어리
+          }
+
           if ((hv >> 8) & 1) {
             ctx.save()
             ctx.translate(sx + TW, sy)
             ctx.scale(-1, 1)
-            ctx.drawImage(sheet, k * TW, 0, TW, TH, 0, 0, TW, TH)
+            ctx.drawImage(src, k * TW, 0, TW, TH, 0, 0, TW, TH)
             ctx.restore()
           } else {
-            ctx.drawImage(sheet, k * TW, 0, TW, TH, sx, sy, TW, TH)
+            ctx.drawImage(src, k * TW, 0, TW, TH, sx, sy, TW, TH)
           }
           if (decOk) {
             // 데칼 뭉치기 — 구역마다 밀도 차이(어수선/보통/깨끗)
@@ -2121,6 +2149,36 @@ class GameScene extends Phaser.Scene {
       p.kind = 'line'
       this.particles.push(p)
     }
+  }
+
+  // --- 대역(biome) 판정 -------------------------------------------------
+  // 저주파 value noise(바이리니어 보간)로 화면을 큰 덩어리로 나눈다.
+  // 좌표 해시 기반이라 스크롤해도 같은 자리는 항상 같은 대역 → 깜빡임 없음.
+  // 경계에서는 디더링(확률 혼합)으로 직선 경계를 없앤다.
+  _bhash(a, b) {
+    return (((a * 73856093) ^ (b * 19349663)) >>> 0) % 1000
+  }
+
+  isMossBiome(c, r, hv) {
+    const CELL = 7 // 대역 크기(타일 수). 크면 덩어리가 커진다
+    const gx = c / CELL
+    const gy = r / CELL
+    const x0 = Math.floor(gx)
+    const y0 = Math.floor(gy)
+    let tx = gx - x0
+    let ty = gy - y0
+    tx = tx * tx * (3 - 2 * tx) // smoothstep
+    ty = ty * ty * (3 - 2 * ty)
+    const v00 = this._bhash(x0 + 7919, y0 + 104729) / 1000
+    const v10 = this._bhash(x0 + 7920, y0 + 104729) / 1000
+    const v01 = this._bhash(x0 + 7919, y0 + 104730) / 1000
+    const v11 = this._bhash(x0 + 7920, y0 + 104730) / 1000
+    const nv =
+      (v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty
+    const band = (nv - 0.55) / 0.1 // 경계까지의 거리(-1..1 부근)
+    if (band > 1) return true
+    if (band < -1) return false
+    return ((hv >> 20) % 100) / 100 < (band + 1) / 2 // 경계 디더링
   }
 
   // 머즐 플래시 수명 감소
