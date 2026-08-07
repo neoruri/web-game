@@ -56,8 +56,14 @@ export const DEFAULTS = {
     rampCap: 17,
     maxEnemies: 300,
   },
+  // 룬 드랍 — 보스는 항상 1개(모달), 일반몹은 낮은 확률로 자동 장착.
+  // ⚠️ 일반 킬은 한 판 수백 마리라 확률이 조금만 커도 폭주한다.
+  //    0.01(1%) ≈ 한 판 3개 정도. 10%면 30개 → 절대 금지.
+  rune: {
+    normalDropChance: 0.01,
+  },
   boss: {
-    everySec: 90,
+    everySec: 60,
     firstBossSec: 55, // 첫 보스만 앞당겨 룬을 일찍 경험하게. 이후는 everySec 간격.
     hp: 300,
     hpRampPerMin: 1.1,

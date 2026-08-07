@@ -54,3 +54,97 @@
 .lv-tag.t-up { background: #2a2410; color: #e7c15a; border: 1px solid #6e5c1e; }
 .lv-tag.t-pas { background: #251636; color: #b58cf0; border: 1px solid #5a3d8a; }
 .lv-ds { font-size: 12.5px; color: #93a4b6; margin-top: 4px; line-height: 1.4; }
+
+/* ===== 통합 화면 (성장 카드 + 룬 가방 + 스킬 슬롯) ===== */
+.lv-panel { max-height: 92vh; }
+.lv-scroll {
+  flex: 1; overflow-y: auto; min-height: 0;
+  padding: 2px 2px 8px; -webkit-overflow-scrolling: touch;
+}
+.lv-foot {
+  flex: 0 0 auto; display: flex; gap: 9px; align-items: center;
+  border-top: 1px solid #2a3746; background: #0f151d;
+  padding: 10px 12px; border-radius: 12px; min-height: 58px;
+}
+.lv-info { flex: 1; font-size: 12px; color: #8395a6; line-height: 1.45; }
+.lv-info b { color: #d7e3ee; }
+.lv-newtx { color: #e0564f; }
+.lv-btn {
+  padding: 10px 16px; border-radius: 10px; border: 1px solid #2a3746;
+  background: #141b24; color: #d7e3ee; font-size: 13.5px; cursor: pointer;
+  font-family: inherit; flex: 0 0 auto;
+}
+.lv-btn.p { background: #e7c15a; border-color: #e7c15a; color: #1a130a; font-weight: 700; }
+.lv-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* 구획 헤더 (탭 대신) */
+.lv-sechd {
+  display: flex; align-items: center; gap: 7px;
+  margin: 12px 0 7px; font-size: 11px; color: #8395a6; letter-spacing: 0.5px;
+}
+.lv-sechd b { color: #d7e3ee; }
+.lv-ln { flex: 1; height: 1px; background: #2a3746; }
+.lv-hint { font-size: 10px; }
+.lv-nb {
+  background: #e0564f; color: #fff; font-size: 9.5px; font-weight: 700;
+  padding: 1px 6px; border-radius: 8px;
+}
+
+/* 카드 — 가로 3장 */
+.lv-cards { display: flex; gap: 8px; }
+.lv-card {
+  flex: 1; background: linear-gradient(#1a2431, #141c27);
+  border: 1px solid #2b3a4b; border-radius: 13px;
+  padding: 12px 7px 10px; text-align: center; cursor: pointer;
+  transition: 0.12s; position: relative; overflow: hidden;
+}
+.lv-card:active { transform: scale(0.97); }
+.lv-card.sel { border-color: #e7c15a; box-shadow: 0 0 0 1px #e7c15a inset, 0 0 14px #e7c15a33; }
+.lv-card .lv-tag { position: absolute; top: 5px; right: 6px; font-size: 8.5px; font-weight: 700; }
+.lv-card .lv-ic { font-size: 26px; }
+.lv-card .lv-nm { font-size: 12px; font-weight: 700; margin-top: 4px; line-height: 1.25; }
+.lv-card .lv-ds { font-size: 9.5px; color: #8395a6; margin-top: 3px; line-height: 1.3; }
+
+/* 룬 가방 */
+.lv-bag { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.lv-item {
+  aspect-ratio: 1; border-radius: 12px; background: #141b24; border: 2px solid #2a3746;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; cursor: pointer; position: relative; transition: 0.12s;
+}
+.lv-item:active { transform: scale(0.95); }
+.lv-item.sel { box-shadow: 0 0 0 2px #e7c15a, 0 0 14px #e7c15a44; }
+.lv-iic { font-size: 22px; line-height: 1.1; }
+.lv-v { font-size: 9.5px; font-weight: 600; }
+.lv-tn { font-size: 8px; margin-top: -1px; }
+.lv-new {
+  position: absolute; top: -5px; left: -4px; background: #e0564f; color: #fff;
+  font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 6px;
+  box-shadow: 0 0 0 2px #0c1016;
+}
+.lv-cmp { position: absolute; bottom: 2px; right: 4px; font-size: 11px; font-weight: 800; }
+.lv-cmp.up { color: #5bd08a; }
+.lv-cmp.dn { color: #e06a6a; }
+
+/* 스킬 슬롯 */
+.lv-srow {
+  background: #141b24; border: 1px solid #2a3746; border-radius: 12px;
+  padding: 8px 10px; display: flex; align-items: center; gap: 10px; margin-bottom: 7px;
+}
+.lv-sic {
+  width: 34px; height: 34px; border-radius: 9px; background: #0f151d;
+  border: 1px solid #2a3746; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex: 0 0 auto;
+}
+.lv-sbody { flex: 1; min-width: 0; }
+.lv-snm { font-size: 13px; font-weight: 600; }
+.lv-sds { font-size: 10px; color: #8395a6; margin-top: 2px; }
+.lv-slots { display: flex; gap: 5px; flex: 0 0 auto; }
+.lv-slot {
+  width: 33px; height: 33px; border-radius: 9px; background: #0e141b;
+  border: 2px dashed #3b4a5c; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; cursor: pointer;
+}
+.lv-slot.filled { border-style: solid; }
+.lv-plus { font-size: 14px; color: #3b4a5c; }
+.lv-slot.target { border-color: #5bd08a; box-shadow: 0 0 8px #5bd08a55; }

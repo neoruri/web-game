@@ -68,7 +68,33 @@ function tierBonuses(attr, pass) {
 
 // 능력치·스킬·특화(+카드 패시브 + 룬) → 최종 전투 stats.
 // cardBonus: { dmg, move, hp, atkSpeed } — 레벨업 카드 패시브 누적 비율.
-// runeSlots: { basic|multishot|... : 'damage'|'pierce'|'projectile'|'cooldown'|'burn' }
+// --- 룬 합산 ----------------------------------------------------------------
+// 슬롯 배열 → 종류별 합계. 룬 인스턴스는 { id, tier, v }.
+// 스택 규칙:
+//   damage / cooldown / pierce / projectile → 합산 (cooldown은 캡 적용)
+//   burn(도트 %/초)                          → 최댓값만 (도트 중첩은 과해짐)
+// 하위 호환: 문자열('damage')이나 단일 객체가 와도 동작한다.
+export const RUNE_CDR_CAP = 45 // 룬만으로 줄일 수 있는 쿨타임 상한(%)
+const LEGACY_V = { damage: 20, cooldown: 15, pierce: 1, projectile: 1, burn: 30 }
+
+export function aggregateRunes(slots) {
+  const out = { damage: 0, cooldown: 0, pierce: 0, projectile: 0, burn: 0 }
+  if (!slots) return out
+  const arr = Array.isArray(slots) ? slots : [slots]
+  for (let i = 0; i < arr.length; i++) {
+    const r = arr[i]
+    if (!r) continue
+    const id = typeof r === 'string' ? r : r.id
+    if (!id || out[id] === undefined) continue
+    const v = typeof r === 'string' ? LEGACY_V[id] : (r.v ?? LEGACY_V[id])
+    if (id === 'burn') out.burn = Math.max(out.burn, v)
+    else out[id] += v
+  }
+  if (out.cooldown > RUNE_CDR_CAP) out.cooldown = RUNE_CDR_CAP
+  return out
+}
+
+// runeSlots: { basic|multishot|... : [ {id,tier,v} | null, ... ] }  (스킬당 N슬롯)
 export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeSlots = {}) {
   const A = cfg.attr
 
@@ -109,13 +135,14 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
   s.weapon.extraArrows = tb.extraArrows // 민첩30: 기본 활 추가 화살
   s.weapon.burn = false
 
-  // 기본 활 룬
-  const br = runeSlots.basic
-  if (br === 'damage') s.weapon.damage *= 1.2
-  if (br === 'cooldown') s.weapon.cooldown = Math.max(0.1, s.weapon.cooldown * 0.85)
-  if (br === 'pierce') s.weapon.pierce += 1
-  if (br === 'projectile') s.weapon.extraArrows += 1
-  if (br === 'burn') s.weapon.burn = true
+  // 기본 활 룬 (슬롯 여러 개 = 배열)
+  const bagg = aggregateRunes(runeSlots.basic)
+  if (bagg.damage) s.weapon.damage *= 1 + bagg.damage / 100
+  if (bagg.cooldown)
+    s.weapon.cooldown = Math.max(0.1, s.weapon.cooldown * (1 - bagg.cooldown / 100))
+  if (bagg.pierce) s.weapon.pierce += bagg.pierce
+  if (bagg.projectile) s.weapon.extraArrows += bagg.projectile
+  if (bagg.burn) s.weapon.burn = bagg.burn // 도트 %/초 (0이면 없음)
 
   // 이동/체력 — 능력치 + 카드 패시브
   s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove
@@ -185,18 +212,19 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
       if (m.countAdd && st.count != null) st.count += m.countAdd
     }
 
-    // 룬 (스킬당 1개)
+    // 룬 (스킬당 슬롯 여러 개 = 배열). 등급·랜덤롤 수치를 합산해 적용.
     st.burn = false
-    const rn = runeSlots[id]
-    if (rn === 'damage') st.dmg *= 1.2
-    else if (rn === 'cooldown')
-      st.cooldown = Math.max(A.minSkillCooldown, st.cooldown * 0.85)
-    else if (rn === 'pierce') st.pierce += 1
-    else if (rn === 'projectile') {
-      if (st.shots != null) st.shots += 1
-      else if (st.count != null) st.count += 1
-      else if (st.duration != null) st.duration += 0.4
-    } else if (rn === 'burn') st.burn = true
+    const agg = aggregateRunes(runeSlots[id])
+    if (agg.damage) st.dmg *= 1 + agg.damage / 100
+    if (agg.cooldown)
+      st.cooldown = Math.max(A.minSkillCooldown, st.cooldown * (1 - agg.cooldown / 100))
+    if (agg.pierce) st.pierce += agg.pierce
+    if (agg.projectile) {
+      if (st.shots != null) st.shots += agg.projectile
+      else if (st.count != null) st.count += agg.projectile
+      else if (st.duration != null) st.duration += 0.4 * agg.projectile
+    }
+    if (agg.burn) st.burn = agg.burn // 도트 %/초
 
     s.skillStats[id] = st
   }

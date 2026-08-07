@@ -15,15 +15,80 @@ import { createLevelupScreen } from './levelup-cards.js'
 import { createRuneScreen } from './rune-screen.js'
 import { Grid } from './grid.js'
 
-// --- 룬 (보스 처치 드랍, 스킬당 1슬롯) ---
+// --- 룬 (드랍 → 스킬 슬롯에 장착) -------------------------------------------
+// 디아블로식 파밍감을 위해 ① 등급(일반/레어/에픽) ② 수치 랜덤 롤을 가진다.
+// 장착 단위는 "룬 인스턴스": { id, tier, v }  (v = 굴려서 정해진 실제 수치)
+//   range[tier] = [최소, 최대] — v는 이 구간에서 랜덤. 정수형(관통/발사체)은 정수로.
+const RUNE_TIERS = {
+  1: { name: '일반', color: '#9aa8b4', border: '#6b7783', chance: 0.62 },
+  2: { name: '레어', color: '#5ab4eb', border: '#3d86b8', chance: 0.29 },
+  3: { name: '에픽', color: '#c58af0', border: '#8d55b8', chance: 0.09 },
+}
 const RUNES = {
-  damage: { icon: '⚔️', name: '데미지', desc: '그 스킬 피해 +20%', color: '#e87850' },
-  pierce: { icon: '➹', name: '관통', desc: '그 스킬 관통 +1', color: '#5ab4eb' },
-  projectile: { icon: '🎯', name: '발사체', desc: '그 스킬 발사체 +1', color: '#5adccd' },
-  cooldown: { icon: '⏱️', name: '쿨감', desc: '그 스킬 쿨타임 -15%', color: '#78d2be' },
-  burn: { icon: '🔥', name: '화상', desc: '명중 시 3초간 도트 피해', color: '#f0963c' },
+  damage: {
+    icon: '⚔️', name: '데미지', color: '#e87850', unit: '%', int: false,
+    range: { 1: [10, 18], 2: [20, 30], 3: [32, 45] },
+    fmt: (v) => `피해 +${v}%`,
+    shortFmt: (v) => `+${v}%`,
+  },
+  pierce: {
+    icon: '➹', name: '관통', color: '#5ab4eb', unit: '', int: true,
+    range: { 1: [1, 1], 2: [1, 2], 3: [2, 3] },
+    fmt: (v) => `관통 +${v}`,
+    shortFmt: (v) => `+${v}`,
+  },
+  projectile: {
+    icon: '🎯', name: '발사체', color: '#5adccd', unit: '', int: true,
+    range: { 1: [1, 1], 2: [1, 2], 3: [2, 2] },
+    fmt: (v) => `발사체 +${v}`,
+    shortFmt: (v) => `+${v}`,
+  },
+  cooldown: {
+    icon: '⏱️', name: '쿨감', color: '#78d2be', unit: '%', int: false,
+    range: { 1: [8, 14], 2: [16, 22], 3: [24, 30] },
+    fmt: (v) => `쿨타임 -${v}%`,
+    shortFmt: (v) => `-${v}%`,
+  },
+  burn: {
+    icon: '🔥', name: '화상', color: '#f0963c', unit: '%', int: false,
+    range: { 1: [18, 28], 2: [30, 42], 3: [45, 60] },
+    fmt: (v) => `화상 ${v}%/초 (3초)`,
+    shortFmt: (v) => `${v}%/s`,
+  },
 }
 const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
+
+// 스킬당 룬 슬롯 수. 늘리면 파워가 곱해지니 밸런스 확인 후 조정할 것.
+const RUNE_SLOTS = 3
+
+// 등급 추첨 — elapsed(초)가 길어지면 상위 등급 확률이 완만히 오른다(후반 보상감).
+function rollRuneTier(elapsed = 0) {
+  const boost = Math.min(0.18, elapsed / 600) // 최대 +18%p 만큼 상위로 이동
+  const r = Math.random()
+  const pEpic = RUNE_TIERS[3].chance + boost * 0.5
+  const pRare = RUNE_TIERS[2].chance + boost * 0.5
+  if (r < pEpic) return 3
+  if (r < pEpic + pRare) return 2
+  return 1
+}
+
+// 룬 인스턴스 생성 (수치 랜덤 롤)
+function rollRune(id, elapsed = 0, tier = null) {
+  const def = RUNES[id]
+  const t = tier || rollRuneTier(elapsed)
+  const [lo, hi] = def.range[t]
+  let v = lo + Math.random() * (hi - lo)
+  v = def.int ? Math.round(v) : Math.round(v * 10) / 10
+  return { id, tier: t, v }
+}
+
+// 표시용 헬퍼
+function runeLabel(r) {
+  return `${RUNES[r.id].name}${r.tier > 1 ? ' · ' + RUNE_TIERS[r.tier].name : ''}`
+}
+function runeDesc(r) {
+  return RUNES[r.id].fmt(r.v)
+}
 
 // --- 레벨업 카드(뱀서 표준 진행) ---
 // 스킬 카드(기존 액티브 재활용) + 패시브 4종. 성장 화면(스킬트리)은 보류.
@@ -69,19 +134,38 @@ const COLOR_SKILL_ARROW = 0x89dceb // 스킬 발사체 (하늘색 — 기본과 
 //  trail: 'none' | 'thin' 얇은 선 | 'dots' 점선 | 'fade' 페이드 잔상(스트릭 뒤로 더 길게)
 //  impact: 'spark' 스파크 | 'flash' 섬광 | 'boom' 폭발(수류탄은 기존 링 사용)
 //  muzzle: 발사 지점 플래시 크기(px). 빠른 투사체는 "발사 순간"이 가장 잘 읽힌다.
+//  spawn: 발사 지점을 몸 중심에서 발사 방향으로 밀어내는 거리(px) = 활/팔 위치.
+//         0이면 한 점에서 다 나와 뭉쳐 보인다. 난사(360°)는 크게 줘서 링처럼 퍼지게.
 const SKILL_FX = {
   // 주황 · 기준
-  basic: { tint: 0xfab387, w: 2.5, streak: 0.032, trail: 'none', impact: 'spark', muzzle: 7 },
+  basic: {
+    tint: 0xfab387, w: 2.5, streak: 0.032, trail: 'none', impact: 'spark', muzzle: 7, spawn: 15,
+  },
   // 하늘 · 가벼운 다발(짧고 얇게, 여러 발이 겹쳐 부채꼴이 보이도록)
-  multishot: { tint: 0x89dceb, w: 2, streak: 0.026, trail: 'thin', impact: 'spark', muzzle: 11 },
+  multishot: {
+    tint: 0x89dceb, w: 2, streak: 0.026, trail: 'thin', impact: 'spark', muzzle: 10, spawn: 17,
+  },
   // 노랑 · 따다닥(짧은 탄환 + 점선)
-  rapidfire: { tint: 0xf9e2af, w: 3, streak: 0.022, trail: 'dots', impact: 'flash', muzzle: 8 },
-  // 민트 · 길게 뻗는 궤적
-  barrage: { tint: 0xa6e3a1, w: 2.5, streak: 0.055, trail: 'fade', impact: 'spark', muzzle: 9 },
+  rapidfire: {
+    tint: 0xf9e2af, w: 3, streak: 0.022, trail: 'dots', impact: 'flash', muzzle: 8, spawn: 16,
+  },
+  // 민트 · 길게 뻗는 궤적. 360° 난사라 발사점을 가장 크게 밀어 링처럼 보이게 한다.
+  barrage: {
+    tint: 0xa6e3a1, w: 2.5, streak: 0.055, trail: 'fade', impact: 'spark', muzzle: 6, spawn: 26,
+  },
   // 주황 · 투척체(별도 렌더)
-  grenade: { tint: 0xfab387, w: 3, streak: 0.03, trail: 'none', impact: 'boom', muzzle: 12 },
+  grenade: {
+    tint: 0xfab387, w: 3, streak: 0.03, trail: 'none', impact: 'boom', muzzle: 12, spawn: 14,
+  },
 }
 const SKILL_FX_KEYS = Object.keys(SKILL_FX)
+
+// 프롭(오브젝트) 배치 격자 — 이 타일 수마다 한 칸. 크면 오브젝트가 드물어진다.
+const PROP_CELL = 3
+
+// 난사 각도 흩뿌림(라디안). 크면 사방으로 퍼지고(명중↓), 작으면 조준에 가깝다(명중↑).
+// 0.45rad ≈ ±26° — "난사" 느낌은 남기면서 대부분 적에게 향한다.
+const BARRAGE_JITTER = 0.45
 const COLOR_GEM = 0x94e2d5
 
 const KNOCKBACK_FRICTION = 8
@@ -140,6 +224,11 @@ class GameScene extends Phaser.Scene {
     // 맵 다양화(테스트) — 깨진타일 6 + 구멍 4 / 이끼 대역 16
     this.load.image('isospecial', '/sprites/dungeon/tileset_iso_special.png')
     this.load.image('isomoss', '/sprites/dungeon/tileset_iso_moss.png')
+    // 오브젝트 레이어 — 무덤/기둥/부서진벽/횃불 등 8종 (셀 96×112)
+    this.load.spritesheet('isoprops', '/sprites/dungeon/props_iso.png', {
+      frameWidth: 96,
+      frameHeight: 112,
+    })
     // 적 스프라이트 (32×32, 3행[고블린/사냥개/궁수]×4프레임)
     this.load.spritesheet('enemies', '/sprites/dungeon/enemies_sheet.png', {
       frameWidth: 32,
@@ -163,9 +252,13 @@ class GameScene extends Phaser.Scene {
     this.levelupOpen = false
     this._pendingLevels = 0
     // 룬 슬롯 (스킬 id → 룬 id). 보스 처치 시 장착.
-    this.runeSlots = { basic: null, multishot: null, rapidfire: null, barrage: null, grenade: null }
+    // 스킬당 룬 슬롯 N개(배열). 각 원소는 룬 인스턴스 {id,tier,v} 또는 null.
+    this.runeSlots = {}
+    for (const k of ['basic', 'multishot', 'rapidfire', 'barrage', 'grenade'])
+      this.runeSlots[k] = new Array(RUNE_SLOTS).fill(null)
+    this._pendingRunes = [] // 보스 룬: 즉시 모달로 처리할 큐
+    this.runeBag = [] // 일반몹 룬: 가방에 모아 레벨업 화면에서 장착
     this.runeOpen = false
-    this._pendingRune = false
 
     // 능력치·스킬·카드·룬 → 최종 전투 stats (단일 재계산 지점)
     this.stats = deriveStats(
@@ -268,9 +361,16 @@ class GameScene extends Phaser.Scene {
     this.setupGrowth()
 
     // 레벨업 3택 카드 (뱀서 표준). 성장 화면은 보류.
-    this.levelup = createLevelupScreen({ onPick: (c) => this.onCardPick(c) })
+    // 레벨업 화면 = 성장 카드 + 룬 가방 + 스킬 슬롯 통합(탭 없음)
+    this.levelup = createLevelupScreen({
+      onPick: (c) => this.onCardPick(c),
+      getRuneState: () => this.getRuneState(),
+      onEquipFromBag: (bagIdx, skillId, slotIdx) =>
+        this.equipFromBag(bagIdx, skillId, slotIdx),
+    })
     // 룬 획득/장착 (보스 처치)
-    this.runeScreen = createRuneScreen({ onEquip: (r, s) => this.onRuneEquip(r, s) })
+    // onEquip(skillId, slotIdx) — 랜덤 획득 방식이라 룬은 이미 큐에 있다
+    this.runeScreen = createRuneScreen({ onEquip: (sid, idx) => this.onRuneEquip(sid, idx) })
     // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
     if (this.growthBtn) this.growthBtn.setVisible(false)
     if (this.growthBtnText) this.growthBtnText.setVisible(false)
@@ -335,8 +435,7 @@ class GameScene extends Phaser.Scene {
       this.levelup.show(this.level, this.buildCards())
       return
     }
-    if (this._pendingRune) {
-      this._pendingRune = false
+    if (this._pendingRunes.length > 0) {
       this.openRuneDrop()
     }
   }
@@ -348,21 +447,30 @@ class GameScene extends Phaser.Scene {
     this.maybeOpenModal() // 남은 레벨 or 대기 룬
   }
 
-  // --- 룬 (보스 처치) ---
-  openRuneDrop() {
-    this.runeOpen = true
-    this.releaseStick()
-    const runes = this.buildRuneChoices().map((id) => ({ id, ...RUNES[id] }))
-    this.runeScreen.show(runes, this.buildRuneSkillList())
+  // --- 룬 획득 (시안 B: 랜덤 1개 → 스킬 1탭, 스마트 기본값) ---
+  // 랜덤으로 굴린 룬 인스턴스를 큐에 넣는다. boss=true면 등급 보정을 살짝 준다.
+  grantRune(boss = false) {
+    const id = RUNE_POOL[(Math.random() * RUNE_POOL.length) | 0]
+    this._pendingRunes.push(rollRune(id, this.elapsed + (boss ? 120 : 0)))
   }
 
-  buildRuneChoices() {
-    const pool = [...RUNE_POOL]
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0
-      ;[pool[i], pool[j]] = [pool[j], pool[i]]
-    }
-    return pool.slice(0, Math.min(3, pool.length))
+  openRuneDrop() {
+    const rune = this._pendingRunes[0]
+    if (!rune) return
+    this.runeOpen = true
+    this.releaseStick()
+    this.runeScreen.show(
+      {
+        ...rune,
+        icon: RUNES[rune.id].icon,
+        color: RUNES[rune.id].color,
+        tierName: RUNE_TIERS[rune.tier].name,
+        tierColor: RUNE_TIERS[rune.tier].color,
+        label: runeLabel(rune),
+        desc: runeDesc(rune),
+      },
+      this.buildRuneSkillList()
+    )
   }
 
   buildRuneSkillList() {
@@ -371,15 +479,95 @@ class GameScene extends Phaser.Scene {
       if ((this.skillLevels[id] || 0) > 0)
         list.push({ id, name: CARD_SKILLS[id].name, icon: CARD_SKILLS[id].icon })
     }
-    return list.map((s) => ({
-      ...s,
-      curRune: this.runeSlots[s.id] ? RUNES[this.runeSlots[s.id]].name : '',
-    }))
+    return list.map((s) => {
+      const slots = this.runeSlots[s.id]
+      return {
+        ...s,
+        // 슬롯 상태 배열 — UI가 RUNE_SLOTS 칸을 그린다
+        slots: slots.map((r) =>
+          r
+            ? {
+                // id/v는 레벨업 화면의 비교 화살표(▲▼)가 쓴다. 빼면 비교가 안 된다.
+                id: r.id,
+                v: r.v,
+                icon: RUNES[r.id].icon,
+                tier: r.tier,
+                tierColor: RUNE_TIERS[r.tier].color,
+                label: runeLabel(r),
+                desc: runeDesc(r),
+              }
+            : null
+        ),
+        freeIdx: slots.findIndex((r) => !r), // -1이면 꽉 참(교체 필요)
+      }
+    })
   }
 
-  onRuneEquip(runeId, skillId) {
-    this.runeSlots[skillId] = runeId
+  // 일반몹 드랍 — 자동 장착하지 않고 **가방으로** 보낸다(NEW 표시).
+  // 장착은 다음 레벨업 화면에서 플레이어가 직접 한다 → 선택의 재미 유지 + 전투 안 끊김.
+  bagGrantRune() {
+    const id = RUNE_POOL[(Math.random() * RUNE_POOL.length) | 0]
+    const rune = rollRune(id, this.elapsed)
+    rune.isNew = true
+    this.runeBag.push(rune)
+    this.spawnRuneToast(rune)
+    return true
+  }
+
+  // 레벨업 화면에 넘길 룬 상태 (가방 + 스킬 슬롯)
+  getRuneState() {
+    const bag = this.runeBag.map((r) => ({
+      id: r.id,
+      v: r.v,
+      tier: r.tier,
+      isNew: !!r.isNew,
+      icon: RUNES[r.id].icon,
+      tierName: RUNE_TIERS[r.tier].name,
+      tierColor: RUNE_TIERS[r.tier].color,
+      label: runeLabel(r),
+      desc: runeDesc(r),
+      short: RUNES[r.id].shortFmt(r.v),
+    }))
+    return { bag, skills: this.buildRuneSkillList() }
+  }
+
+  // 가방 룬 → 스킬 슬롯. 기존 룬이 있으면 교체하고 그 룬은 가방으로 돌아온다.
+  equipFromBag(bagIdx, skillId, slotIdx) {
+    const rune = this.runeBag[bagIdx]
+    if (!rune || !this.runeSlots[skillId]) return
+    const slots = this.runeSlots[skillId]
+    let i = slotIdx
+    if (i < 0 || i >= slots.length) {
+      i = slots.findIndex((r) => !r)
+      if (i < 0) i = 0
+    }
+    const old = slots[i]
+    slots[i] = rune
+    delete rune.isNew
+    this.runeBag.splice(bagIdx, 1)
+    if (old) this.runeBag.push(old) // 빠진 룬은 가방으로
     this.recompute()
+  }
+
+  // 획득 알림 — 데미지 숫자 팝업을 재사용해 플레이어 위에 표시
+  spawnRuneToast(rune) {
+    const txt = `${RUNES[rune.id].icon} ${runeLabel(rune)}`
+    this.spawnPopup(this.player.x, this.player.y - 46, txt, false, RUNE_TIERS[rune.tier].color)
+  }
+
+  // 스킬에 장착. slotIdx가 없으면 빈 슬롯 우선, 없으면 첫 슬롯 교체.
+  onRuneEquip(skillId, slotIdx = -1) {
+    const rune = this._pendingRunes.shift()
+    if (rune) {
+      const slots = this.runeSlots[skillId]
+      let i = slotIdx
+      if (i < 0 || i >= slots.length) {
+        i = slots.findIndex((r) => !r)
+        if (i < 0) i = 0
+      }
+      slots[i] = rune
+      this.recompute()
+    }
     this.runeOpen = false
     this.maybeOpenModal()
   }
@@ -482,6 +670,25 @@ class GameScene extends Phaser.Scene {
     this.floorCtx = tex.context
     this.add.image(0, 0, 'isofloor').setOrigin(0).setDepth(-5)
 
+    // 프롭 전경 레이어 — 플레이어보다 "앞"(아래쪽)에 있는 오브젝트를 엔티티 위에 덮는다.
+    // worldLayer=depth 1, 비네트=depth 5 사이에 둔다.
+    const pf = this.textures.exists('isopropfront')
+      ? this.textures.get('isopropfront')
+      : this.textures.createCanvas('isopropfront', W, H)
+    this.propFrontCanvas = pf
+    this.propFrontCtx = pf.context
+    this.add.image(0, 0, 'isopropfront').setOrigin(0).setDepth(3)
+
+    // 횃불 불꽃 전용 레이어 — 전경 프롭(depth 3)보다 위, 비네트(depth 5)보다 아래.
+    // worldLayer 밖이므로 여기서는 **화면 좌표**로 그린다(월드좌표는 매 프레임 변환).
+    this.gfxFlames = this.add.graphics().setDepth(4)
+
+    // 프롭 소스 이미지(캔버스 drawImage용) + 화면 내 횃불 위치(불꽃 애니메이션용)
+    this.propSheet = this.textures.exists('isoprops')
+      ? this.textures.get('isoprops').getSourceImage()
+      : new Image()
+    this.torchLights = []
+
     // 던전 비네트(정적, 1회 굽기)
     if (!this.textures.exists('isovig')) {
       const vt = this.textures.createCanvas('isovig', W, H)
@@ -566,6 +773,10 @@ class GameScene extends Phaser.Scene {
           }
         }
       }
+
+      // 오브젝트(프롭) 레이어 + 횃불 조명 — 타일 위, 구역명암 아래에 그린다.
+      // 플레이어보다 아래쪽(앞) 프롭은 전경 캔버스로 분리되어 엔티티를 덮는다.
+      this.drawProps(ctx, px, py, ox, oy, cc, rr, R)
 
       // 넓은 구역 명암 (단조로움 완화) — 좌표 해시 기반, 스크롤해도 일관
       const REG = 360
@@ -1104,10 +1315,17 @@ class GameScene extends Phaser.Scene {
   fireAngle(angle, dmg, pierce, skill, burn) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
-    a.x = this.player.x
-    a.y = this.bowY // 팔/활 높이에서 발사
-    a.vx = Math.cos(angle) * w.speed
-    a.vy = Math.sin(angle) * w.speed
+    const ux = Math.cos(angle)
+    const uy = Math.sin(angle)
+    // 발사 지점을 몸 중심이 아니라 "활/팔 위치"로 밀어낸다.
+    // 한 점에서 다 나오면(특히 난사 360°) 중앙에 뭉쳐 번쩍이기만 하고 날아가는 게 안 보인다.
+    const spawnKey =
+      typeof skill === 'string' && SKILL_FX[skill] ? skill : skill ? 'multishot' : 'basic'
+    const off = SKILL_FX[spawnKey].spawn || 0
+    a.x = this.player.x + ux * off
+    a.y = this.bowY + uy * off * 0.55 // 아이소 뷰라 세로는 눌러서(2:1) 적용
+    a.vx = ux * w.speed
+    a.vy = uy * w.speed
     a.angle = angle
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
@@ -1115,6 +1333,9 @@ class GameScene extends Phaser.Scene {
     // skill 인자는 스킬 id 문자열('multishot' 등) 또는 기본 활이면 'basic'/false.
     a.fx = typeof skill === 'string' && SKILL_FX[skill] ? skill : skill ? 'multishot' : 'basic'
     a.skill = a.fx !== 'basic' // 스킬 화살 여부 (시각 전용)
+    // 발사 후 경과 시간(초). 스트릭/꼬리를 "실제로 이동한 만큼"으로 제한해
+    // 꼬리가 발사점 뒤(=캐릭터 반대편)로 뻗는 것을 막는다.
+    a.age = 0
     // 직전 위치 기록 — 스윕 충돌 판정(updateArrows)에서 사용.
     // 화살 풀 재사용이므로 반드시 초기화해야 첫 프레임에 엉뚱한 선분이 생기지 않는다.
     a.px1 = a.x
@@ -1128,8 +1349,9 @@ class GameScene extends Phaser.Scene {
     const mfx = SKILL_FX[a.fx]
     if (mfx && mfx.muzzle) {
       this.muzzles.push({
-        x: a.x + Math.cos(angle) * 12,
-        y: a.y + Math.sin(angle) * 12,
+        // 화살이 이미 활 위치(spawn 오프셋)에서 시작하므로 그 지점을 그대로 쓴다
+        x: a.x,
+        y: a.y,
         angle,
         r: mfx.muzzle,
         tint: mfx.tint,
@@ -1137,6 +1359,36 @@ class GameScene extends Phaser.Scene {
         max: 0.09,
       })
     }
+  }
+
+  // 난사 발사 각도 — "적 방향 가중"
+  // 완전 무작위 360°는 대부분 허공으로 날아가 화려하지만 안 맞는다.
+  // 근처 적 하나를 무작위로 골라 그 방향 ±BARRAGE_JITTER 로 흩뿌린다.
+  // → "사방으로 난사"하는 느낌은 유지하되 명중률이 크게 오른다.
+  // 적이 없을 때만 완전 무작위(빈 화면에서도 발사 연출은 유지).
+  barrageAngle() {
+    const list = this.enemies
+    const n = list.length
+    if (!n) return Math.random() * Math.PI * 2
+
+    // 사거리 안(넉넉히 1.5배) 후보 중 무작위 1체 — 가까운 적만 노리면 한 방향에 뭉친다
+    const maxD = this.stats.weapon.range * 1.5
+    const maxD2 = maxD * maxD
+    let pick = null
+    let seen = 0
+    for (let i = 0; i < n; i++) {
+      const e = list[i]
+      const dx = e.x - this.player.x
+      const dy = e.y - this.bowY
+      if (dx * dx + dy * dy > maxD2) continue
+      seen++
+      // 리저버 샘플링 — 배열을 따로 만들지 않고 균등 무작위 1개 선택
+      if (Math.random() < 1 / seen) pick = e
+    }
+    if (!pick) return Math.random() * Math.PI * 2
+
+    const base = Math.atan2(pick.y - this.bowY, pick.x - this.player.x)
+    return base + (Math.random() * 2 - 1) * BARRAGE_JITTER
   }
 
   fireAt(target) {
@@ -1294,7 +1546,7 @@ class GameScene extends Phaser.Scene {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        this.fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, 'barrage', st.burn)
+        this.fireAngle(this.barrageAngle(), st.dmg, st.pierce, 'barrage', st.burn)
       }
     }
   }
@@ -1435,8 +1687,10 @@ class GameScene extends Phaser.Scene {
     if (!e.boss) e.stun = this.cfg.enemy.hitStunSec
 
     // 화상 룬 — 명중 시 도트 부여(더 센 도트면 갱신, 아니면 지속만 새로고침)
+    // burn 은 이제 불린이 아니라 **도트 %/초 수치**(룬 등급·랜덤롤 결과). true면 기본값.
     if (burn) {
-      const dps = amount * BURN_PCT
+      const pct = burn === true ? BURN_PCT * 100 : burn
+      const dps = amount * (pct / 100)
       if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
       else e.burn.time = BURN_DUR
     }
@@ -1481,8 +1735,11 @@ class GameScene extends Phaser.Scene {
 
     // 보스 처치 → 룬 드랍 (레벨업 카드가 있으면 그 다음에 순서대로)
     if (wasBoss) {
-      this._pendingRune = true
+      this.grantRune(true)
       this.maybeOpenModal()
+    } else if (Math.random() < (this.cfg.rune?.normalDropChance ?? 0)) {
+      // 일반몹 드랍 — 가방에 보관(NEW). 장착은 다음 레벨업 화면에서.
+      this.bagGrantRune()
     }
 
     // 힘40 처치 폭발 (연쇄 없음, 내부 쿨 0.2초)
@@ -1855,6 +2112,7 @@ class GameScene extends Phaser.Scene {
 
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const a = this.arrows[i]
+      a.age += dt // 스트릭/꼬리 길이 제한용
       // 이동 전 위치 기록 → 아래 스윕 충돌 판정에서 "직전→현재" 선분으로 사용
       a.px1 = a.x
       a.py1 = a.y
@@ -2062,7 +2320,8 @@ class GameScene extends Phaser.Scene {
   // --- 타격감 이펙트 (시각 전용) -----------------------------------------
 
   // 데미지 숫자 (풀 재사용, 월드 좌표). 크리는 크고 금색.
-  spawnPopup(x, y, amount, crit) {
+  // amount는 숫자 또는 문자열. color를 주면 그 색으로 표시(룬 획득 알림 등).
+  spawnPopup(x, y, amount, crit, color) {
     if (this.popups.length >= MAX_POPUPS) {
       const old = this.popups.shift() // 가장 오래된 것 재활용
       old.t.setVisible(false)
@@ -2079,8 +2338,8 @@ class GameScene extends Phaser.Scene {
       this.worldLayer.add(t)
     }
     t.setText('' + amount)
-    t.setFontSize(crit ? 28 : 18)
-    t.setColor(crit ? COLOR_CRIT : '#ffffff')
+    t.setFontSize(color ? 15 : crit ? 28 : 18)
+    t.setColor(color || (crit ? COLOR_CRIT : '#ffffff'))
     t.setPosition(x + (Math.random() * 16 - 8), y)
     t.setAlpha(1)
     t.setVisible(true)
@@ -2149,6 +2408,114 @@ class GameScene extends Phaser.Scene {
       p.kind = 'line'
       this.particles.push(p)
     }
+  }
+
+  // --- 오브젝트(프롭) 레이어 --------------------------------------------
+  // 좌표 해시로 "굵은 격자(PROP_CELL 타일마다)"에 드물게 배치한다.
+  // 결정론적이라 스크롤해도 같은 자리에 그대로 있고, 저장할 데이터가 없다.
+  //  프레임: 0 무덤 1 기울어진무덤 2 석관 3 기둥 4 부러진기둥 5 부서진벽 6 횃불 7 잔해
+  propAt(bc, br) {
+    const h = ((bc * 374761393 + br * 668265263) ^ 0x5bf03635) >>> 0
+    if (h % 100 >= 30) return null // 30% 칸에만 배치 (화면당 약 4개)
+    // 종류 가중치 — 무덤/잔해가 흔하고, 석관·부서진벽은 드물다
+    const r = (h >> 7) % 100
+    let frame
+    if (r < 15) frame = 0 // 무덤
+    else if (r < 25) frame = 1 // 기울어진 무덤
+    else if (r < 33) frame = 7 // 잔해
+    else if (r < 43) frame = 3 // 기둥
+    else if (r < 51) frame = 4 // 부러진 기둥
+    else if (r < 83) frame = 6 // 횃불 32% — 조명이 화면에 거의 항상 보이도록
+    else if (r < 93) frame = 5 // 부서진 벽
+    else frame = 2 // 석관 (가장 드물게)
+    // 칸 안에서 위치를 흩뿌린다(격자 티 방지)
+    const jc = bc * PROP_CELL + (((h >> 14) % 1000) / 1000) * (PROP_CELL - 1)
+    const jr = br * PROP_CELL + (((h >> 24) % 1000) / 1000) * (PROP_CELL - 1)
+    return { frame, c: jc, r: jr }
+  }
+
+  // 프롭 + 횃불 조명을 바닥/전경 캔버스에 그린다. (updateBackground에서 호출)
+  drawProps(fctx, px, py, ox, oy, cc, rr, R) {
+    const img = this.propSheet
+    if (!img || !img.complete || !img.naturalWidth) return
+    const fr = this.propFrontCtx
+    fr.clearRect(0, 0, W, H)
+    this.torchLights.length = 0
+
+    const CW2 = 96
+    const CH2 = 112
+    const ANCHOR = CH2 - 10 // 스프라이트 내 접지선(gen_props.py의 BASE_Y와 일치)
+    const TW = 128
+    const TH = 64
+
+    // 화면에 걸리는 굵은 격자 범위
+    const b0c = Math.floor((cc - R) / PROP_CELL) - 1
+    const b1c = Math.floor((cc + R) / PROP_CELL) + 1
+    const b0r = Math.floor((rr - R) / PROP_CELL) - 1
+    const b1r = Math.floor((rr + R) / PROP_CELL) + 1
+
+    const list = []
+    for (let br = b0r; br <= b1r; br++) {
+      for (let bc = b0c; bc <= b1c; bc++) {
+        const p = this.propAt(bc, br)
+        if (!p) continue
+        // 아이소 좌표 → 화면 좌표(접지점)
+        const sx = ox + (p.c - p.r) * (TW / 2)
+        const sy = oy + (p.c + p.r) * (TH / 2)
+        if (sx < -CW2 || sx > W + CW2 || sy < -CH2 || sy > H + CH2) continue
+        list.push({ f: p.frame, sx, sy })
+      }
+    }
+    // 같은 레이어 안에서도 위쪽이 먼저(뒤) 그려지도록 접지 y 정렬
+    list.sort((a, b) => a.sy - b.sy)
+
+    // 플레이어 화면 y — 항상 중앙. 이보다 위(작은 y)면 뒤, 아래면 앞.
+    const playerScreenY = H / 2
+
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i]
+      const dx = it.sx - CW2 / 2
+      const dy = it.sy - ANCHOR
+
+      // 횃불: 바닥에 따뜻한 빛 고임(가산 합성) + 불꽃 애니메이션용 좌표 기록
+      if (it.f === 6) {
+        const lx = it.sx
+        const ly = it.sy - 76 // 화로 높이
+        fctx.save()
+        fctx.globalCompositeOperation = 'lighter'
+        const g = fctx.createRadialGradient(lx, it.sy - 10, 6, lx, it.sy - 10, 118)
+        g.addColorStop(0, 'rgba(255,176,92,0.30)')
+        g.addColorStop(0.45, 'rgba(226,140,70,0.13)')
+        g.addColorStop(1, 'rgba(180,110,60,0)')
+        fctx.fillStyle = g
+        fctx.fillRect(lx - 130, it.sy - 140, 260, 260)
+        fctx.restore()
+        // ⚠️ 불꽃은 worldLayer(월드 좌표계) 안의 gfxArrows에 그려진다.
+        // 화면 좌표를 저장하면 카메라 오프셋이 이중 적용되어 불빛이 플레이어를 따라다닌다.
+        // screen = world - player + center  →  world = screen - center + player
+        this.torchLights.push({ x: lx - W / 2 + px, y: ly - H / 2 + py })
+      }
+
+      // 깊이 정렬 — 플레이어보다 위쪽이면 바닥(뒤), 아래쪽이면 전경(앞)
+      const isFront = it.sy > playerScreenY
+      const target = isFront ? fr : fctx
+
+      // 전경 프롭이 플레이어를 가리면 반투명 처리(디아블로/하데스 방식).
+      // 안 하면 큰 오브젝트 뒤에서 캐릭터를 놓친다.
+      let faded = false
+      if (isFront) {
+        const pxs = W / 2
+        const pys = H / 2
+        if (pxs > dx && pxs < dx + CW2 && pys > dy && pys < dy + CH2) {
+          target.save()
+          target.globalAlpha = 0.4
+          faded = true
+        }
+      }
+      target.drawImage(img, it.f * CW2, 0, CW2, CH2, dx, dy, CW2, CH2)
+      if (faded) target.restore()
+    }
+    this.propFrontCanvas.refresh()
   }
 
   // --- 대역(biome) 판정 -------------------------------------------------
@@ -2315,8 +2682,10 @@ class GameScene extends Phaser.Scene {
           ga.beginPath()
           started = true
         }
+        // 이동한 만큼만 뻗게 제한 → 발사 직후 꼬리가 캐릭터 반대편으로 튀지 않는다
+        const s1 = a.age < fx.streak ? a.age : fx.streak
         ga.moveTo(a.x, a.y)
-        ga.lineTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
+        ga.lineTo(a.x - a.vx * s1, a.y - a.vy * s1)
       }
       if (started) ga.strokePath()
 
@@ -2332,8 +2701,13 @@ class GameScene extends Phaser.Scene {
             ga.beginPath()
             started = true
           }
-          ga.moveTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
-          ga.lineTo(a.x - a.vx * fx.streak * tailMul, a.y - a.vy * fx.streak * tailMul)
+          const sA = a.age < fx.streak ? a.age : fx.streak
+          const tEnd = fx.streak * tailMul
+          const sB = a.age < tEnd ? a.age : tEnd
+          if (sB > sA) {
+            ga.moveTo(a.x - a.vx * sA, a.y - a.vy * sA)
+            ga.lineTo(a.x - a.vx * sB, a.y - a.vy * sB)
+          }
         }
         if (started) ga.strokePath()
       } else if (fx.trail === 'dots') {
@@ -2344,6 +2718,7 @@ class GameScene extends Phaser.Scene {
           if ((a.fx || 'basic') !== key) continue
           for (let d = 1; d <= 3; d++) {
             const s = fx.streak * (1 + d * 0.55)
+            if (s > a.age) break // 아직 그만큼 못 갔으면 그리지 않는다
             ga.fillCircle(a.x - a.vx * s, a.y - a.vy * s, 2.2)
           }
         }
@@ -2359,10 +2734,36 @@ class GameScene extends Phaser.Scene {
           ga.beginPath()
           started = true
         }
+        const s2 = a.age < fx.streak ? a.age : fx.streak
         ga.moveTo(a.x, a.y)
-        ga.lineTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
+        ga.lineTo(a.x - a.vx * s2, a.y - a.vy * s2)
       }
       if (started) ga.strokePath()
+    }
+
+    // 횃불 불꽃 — 전경 프롭(depth 3)에 가리지 않도록 전용 레이어(depth 4)에 그린다.
+    // torchLights는 월드 좌표이므로 화면 좌표로 변환: screen = world - player + center
+    const gfl = this.gfxFlames
+    gfl.clear()
+    if (this.torchLights.length) {
+      const tt = this.elapsed
+      const offX = W / 2 - this.player.x
+      const offY = H / 2 - this.player.y
+      for (let i = 0; i < this.torchLights.length; i++) {
+        const L = this.torchLights[i]
+        const sx = L.x + offX
+        const sy = L.y + offY
+        if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) continue
+        // 위치마다 다른 위상 → 다 같이 깜빡이지 않는다
+        const ph = (L.x * 0.017 + L.y * 0.013) % 6.283
+        const fl = 0.78 + 0.22 * Math.sin(tt * 9 + ph) + 0.08 * Math.sin(tt * 23 + ph * 2)
+        gfl.fillStyle(0xffb45c, 0.22 * fl)
+        gfl.fillCircle(sx, sy, 16 * fl)
+        gfl.fillStyle(0xffd9a0, 0.55 * fl)
+        gfl.fillCircle(sx, sy - 2, 8 * fl)
+        gfl.fillStyle(0xfff3d6, 0.9 * fl)
+        gfl.fillCircle(sx, sy - 4, 3.6 * fl)
+      }
     }
 
     // 머즐 플래시 — 발사 지점에서 짧게 터지는 빛. 스킬 색으로 구분되며,

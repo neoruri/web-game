@@ -50,6 +50,7 @@ export function simulate(cfg, opts = {}) {
   const GRENADE_MAX = 240 // 수류탄 최대 투척 거리
   const GRENADE_DUR = 0.45 // 포물선 비행 시간
   const grenades = [] // 날아가는 수류탄 {tx,ty,t,radius,dmg,burn}
+  const BARRAGE_JITTER = 0.45 // 난사 흩뿌림(rad) — main.js와 동일하게 유지
   const BURN_PCT = 0.3 // 화상 도트 비율/초
   const BURN_DUR = 3 // 화상 지속(초)
   const cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
@@ -62,7 +63,32 @@ export function simulate(cfg, opts = {}) {
   })
   // 룬 (보스 처치 시 봇 자동 장착)
   const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
-  const runeSlots = { basic: null, multishot: null, rapidfire: null, barrage: null, grenade: null }
+  // 스킬당 룬 슬롯 N개 (main.js의 RUNE_SLOTS와 동일하게 유지)
+  const RUNE_SLOTS = 3
+  const runeSlots = {}
+  for (const k of ['basic', 'multishot', 'rapidfire', 'barrage', 'grenade'])
+    runeSlots[k] = new Array(RUNE_SLOTS).fill(null)
+
+  // 룬 등급/수치 롤 — main.js의 RUNES.range · RUNE_TIERS.chance와 동일하게 유지!
+  const SIM_RUNE_RANGE = {
+    damage: { 1: [10, 18], 2: [20, 30], 3: [32, 45] },
+    pierce: { 1: [1, 1], 2: [1, 2], 3: [2, 3] },
+    projectile: { 1: [1, 1], 2: [1, 2], 3: [2, 2] },
+    cooldown: { 1: [8, 14], 2: [16, 22], 3: [24, 30] },
+    burn: { 1: [18, 28], 2: [30, 42], 3: [45, 60] },
+  }
+  const SIM_RUNE_INT = { pierce: 1, projectile: 1 }
+  function simRollRune(id, elapsed = 0) {
+    const boost = Math.min(0.18, elapsed / 600)
+    const r = Math.random()
+    const pEpic = 0.09 + boost * 0.5
+    const pRare = 0.29 + boost * 0.5
+    const t = r < pEpic ? 3 : r < pEpic + pRare ? 2 : 1
+    const [lo, hi] = SIM_RUNE_RANGE[id][t]
+    let v = lo + Math.random() * (hi - lo)
+    v = SIM_RUNE_INT[id] ? Math.round(v) : Math.round(v * 10) / 10
+    return { id, tier: t, v }
+  }
   let stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
   let attrCursor = 0 // (미사용)
   let skillPoints = 0 // (미사용)
@@ -81,6 +107,7 @@ export function simulate(cfg, opts = {}) {
     xpNeed: xpFor(cfg, 1),
     kills: 0,
     bossKills: 0,
+    runesGained: 0, // 한 판에 획득한 룬 수(보스 + 일반몹 드랍)
     firstCrisis: null,
     spawnAcc: 0,
     bossAcc: 0,
@@ -331,6 +358,30 @@ export function simulate(cfg, opts = {}) {
     }
   }
 
+  // 난사 각도 — 적 방향 가중 (main.js의 barrageAngle과 동일 로직 유지!)
+  // 완전 무작위 360°는 대부분 허공으로 날아가므로, 사거리 안 적 하나를 균등 무작위로
+  // 골라 그 방향 ±BARRAGE_JITTER 로 흩뿌린다.
+  function barrageAngle() {
+    const list = state.enemies
+    const n = list.length
+    if (!n) return Math.random() * Math.PI * 2
+    const maxD = stats.weapon.range * 1.5
+    const maxD2 = maxD * maxD
+    let pick = null
+    let seen = 0
+    for (let i = 0; i < n; i++) {
+      const e = list[i]
+      const dx = e.x - state.px
+      const dy = e.y - state.py
+      if (dx * dx + dy * dy > maxD2) continue
+      seen++
+      if (Math.random() < 1 / seen) pick = e
+    }
+    if (!pick) return Math.random() * Math.PI * 2
+    const base = Math.atan2(pick.y - state.py, pick.x - state.px)
+    return base + (Math.random() * 2 - 1) * BARRAGE_JITTER
+  }
+
   function updateBursts() {
     const iv = Math.max(0.02, cfg.skill.shotInterval) // 0 이하면 무한루프 → 클램프
     // (다발사격은 위 트리거에서 한 번에 부채꼴 발사)
@@ -358,7 +409,7 @@ export function simulate(cfg, opts = {}) {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        fireAngle(Math.random() * Math.PI * 2, st.dmg, st.pierce, st.burn)
+        fireAngle(barrageAngle(), st.dmg, st.pierce, st.burn)
       }
     }
   }
@@ -457,7 +508,9 @@ export function simulate(cfg, opts = {}) {
     e.kby += dirY * w.knockback * e.kbResist
     if (!e.boss) e.stun = cfg.enemy.hitStunSec // 피격 경직 (main.js 동기화)
     if (burn) {
-      const dps = amount * BURN_PCT
+      // burn은 도트 %/초 수치(룬 롤 결과). true면 기본값. (main.js 동기화)
+      const pct = burn === true ? BURN_PCT * 100 : burn
+      const dps = amount * (pct / 100)
       if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
       else e.burn.time = BURN_DUR
     }
@@ -477,6 +530,11 @@ export function simulate(cfg, opts = {}) {
     if (e.boss) {
       state.bossKills++
       botEquipRune()
+      state.runesGained++
+    } else if (Math.random() < (cfg.rune ? cfg.rune.normalDropChance : 0)) {
+      // 일반몹 드랍 — main.js는 자동 장착(빈 슬롯 우선). 시뮬도 동일하게 취급.
+      botEquipRune()
+      state.runesGained++
     }
     gainXp(e.gems * cfg.xp.gemValue)
     if (
@@ -511,12 +569,18 @@ export function simulate(cfg, opts = {}) {
     state.hp += stats.player.maxHp - prevMax
   }
 
-  // 봇 룬 장착 — 무작위 룬을 가장 높은 레벨 액티브(없으면 기본)에
+  // 봇 룬 장착 — 랜덤 룬(등급·수치 롤)을 가장 높은 레벨 액티브의 빈 슬롯에.
+  // main.js의 RUNE_TIERS/RUNES/rollRune과 **동일한 값을 유지할 것**.
   function botEquipRune() {
-    const rune = RUNE_POOL[(Math.random() * RUNE_POOL.length) | 0]
-    const owned = CARD_ACTIVES.filter((id) => (skills[id] || 0) > 0)
+    const id = RUNE_POOL[(Math.random() * RUNE_POOL.length) | 0]
+    const rune = simRollRune(id, state.t)
+    const owned = CARD_ACTIVES.filter((sk) => (skills[sk] || 0) > 0)
     owned.sort((a, b) => (skills[b] || 0) - (skills[a] || 0))
-    runeSlots[owned[0] || 'basic'] = rune
+    const target = owned[0] || 'basic'
+    const slots = runeSlots[target]
+    let i = slots.findIndex((r) => !r)
+    if (i < 0) i = 0 // 꽉 찼으면 첫 슬롯 교체
+    slots[i] = rune
     stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
   }
 
@@ -843,6 +907,7 @@ export function simulate(cfg, opts = {}) {
     level: state.level,
     kills: state.kills,
     bossKills: state.bossKills,
+    runesGained: state.runesGained,
     firstCrisis: state.firstCrisis,
   }
 }
