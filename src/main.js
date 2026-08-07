@@ -63,14 +63,23 @@ const COLOR_SKILL_ARROW = 0x89dceb // 스킬 발사체 (하늘색 — 기본과 
 // 스킬별 발사체 이펙트 — 색/굵기/길이로 구분한다. (룬 오버레이는 아직 미적용)
 //  tint: 색 · w: 선 굵기 · len: 화살 길이(반길이 px)
 //  키는 fireAngle(..., skill) 에 넘기는 스킬 id. 'basic' = 기본 활.
-//  trail: 'none' 없음 | 'thin' 얇은 선 | 'dots' 점선 | 'fade' 페이드 잔상
-//  impact: 'spark' 기본 스파크 | 'flash' 섬광 | 'boom' 폭발(수류탄은 기존 링 사용)
+// 화살 속도가 1200px/s(60fps에서 프레임당 20px)라 고정 길이로는 잔상이 끊겨 보인다.
+// → 길이를 "속도 × streak(초)"로 계산해 모션블러 스트릭처럼 그린다.
+//   streak 0.05s = 60px, 0.03s = 36px. 값이 클수록 길고 부드럽게 이어진다.
+//  trail: 'none' | 'thin' 얇은 선 | 'dots' 점선 | 'fade' 페이드 잔상(스트릭 뒤로 더 길게)
+//  impact: 'spark' 스파크 | 'flash' 섬광 | 'boom' 폭발(수류탄은 기존 링 사용)
+//  muzzle: 발사 지점 플래시 크기(px). 빠른 투사체는 "발사 순간"이 가장 잘 읽힌다.
 const SKILL_FX = {
-  basic: { tint: 0xfab387, w: 2, len: 10, trail: 'none', impact: 'spark' }, // 주황 · 기준
-  multishot: { tint: 0x89dceb, w: 2, len: 8, trail: 'thin', impact: 'spark' }, // 하늘 · 가벼운 다발
-  rapidfire: { tint: 0xf9e2af, w: 3, len: 6, trail: 'dots', impact: 'flash' }, // 노랑 · 따다닥
-  barrage: { tint: 0xa6e3a1, w: 2.5, len: 15, trail: 'fade', impact: 'spark' }, // 민트 · 길게
-  grenade: { tint: 0xfab387, w: 3, len: 10, trail: 'none', impact: 'boom' }, // 주황 · 투척체
+  // 주황 · 기준
+  basic: { tint: 0xfab387, w: 2.5, streak: 0.032, trail: 'none', impact: 'spark', muzzle: 7 },
+  // 하늘 · 가벼운 다발(짧고 얇게, 여러 발이 겹쳐 부채꼴이 보이도록)
+  multishot: { tint: 0x89dceb, w: 2, streak: 0.026, trail: 'thin', impact: 'spark', muzzle: 11 },
+  // 노랑 · 따다닥(짧은 탄환 + 점선)
+  rapidfire: { tint: 0xf9e2af, w: 3, streak: 0.022, trail: 'dots', impact: 'flash', muzzle: 8 },
+  // 민트 · 길게 뻗는 궤적
+  barrage: { tint: 0xa6e3a1, w: 2.5, streak: 0.055, trail: 'fade', impact: 'spark', muzzle: 9 },
+  // 주황 · 투척체(별도 렌더)
+  grenade: { tint: 0xfab387, w: 3, streak: 0.03, trail: 'none', impact: 'boom', muzzle: 12 },
 }
 const SKILL_FX_KEYS = Object.keys(SKILL_FX)
 const COLOR_GEM = 0x94e2d5
@@ -83,7 +92,10 @@ const MAX_DT = 0.05 // 탭 복귀 시 delta 폭주 방지 (터널링 방지)
 const COLOR_CRIT = '#f9e2af'
 const MAX_POPUPS = 24 // 데미지 숫자 상한 (스웜에서 폭주 방지)
 const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
-const PLAYER_SPRITE_SCALE = 0.55 // 폴백 기본값 (실제 배율은 cfg.player.spriteScale)
+// 외형 크기는 반지름(히트박스)에 비례시킨다 — 튜너의 '크기' 슬라이더 하나로
+// 캐릭터/몬스터 스프라이트·히트박스·그림자가 함께 바뀐다.
+const PLAYER_SPRITE_K = 0.055 // 배율 = player.radius × 이것 (기본 r10 → 0.55)
+const ENEMY_SPRITE_K = 0.11 // 배율 = enemy.radius × 이것 (기본 r10 → 1.1, 셀 32px)
 const SPRITE_H = 116 // 스프라이트 셀 높이. 화살 발사(활) 높이 = 배율×높이×0.4
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
@@ -189,6 +201,7 @@ class GameScene extends Phaser.Scene {
     this.enemies = []
     this.arrows = []
     this.explosions = [] // 수류탄 폭발 이펙트
+    this.muzzles = [] // 발사 지점 머즐 플래시 (스킬별 색)
     this.grenades = [] // 날아가는 수류탄(포물선)
     this.grenadePool = []
     this.particles = [] // 타격/사망 파편
@@ -217,14 +230,14 @@ class GameScene extends Phaser.Scene {
     this.worldLayer = this.add.container(0, 0).setDepth(1)
 
     this.gfxEnemies = this.add.graphics() // 바닥 그림자 + 보스 돔 + 체력바
-    // 일반 적은 Blitter(스프라이트 배치 렌더) 로 한 번에 그린다 — 300마리도
-    // GameObject 하나(Blitter)만 관리, 개별 Bob 은 화면 내 적 수만큼만 재사용.
-    this.enemyBlitter = this.add.blitter(0, 0, 'enemies')
-    this.enemyBobs = [] // Bob 풀(재사용, GC 회피)
+    // 일반 적은 풀링한 스프라이트로 그린다. 화면 밖은 컬링되므로 실제 활성 수는
+    // 화면 내 적 수뿐. 크기(반지름)에 맞춰 setScale, 피격·화상은 tint 로 표현.
+    this.enemyLayer = this.add.container(0, 0)
+    this.enemySprites = [] // 스프라이트 풀(재사용, 화면 내 적 수만큼만 보임)
     if (this.textures.exists('enemies') && this.textures.get('enemies').setFilter) {
       this.textures.get('enemies').setFilter(Phaser.Textures.FilterMode.NEAREST)
     }
-    this.gfxEnemyTop = this.add.graphics() // 스프라이트 위 오버레이(피격 플래시·화상)
+    this.gfxEnemyTop = this.add.graphics() // 스프라이트 위 오버레이(보스 돔·체력바)
     this.gfxArrows = this.add.graphics()
     this.gfxFx = this.add.graphics()
     this.gfxChar = this.add.graphics() // 플레이어 음영 오브(iso 스타일)
@@ -234,10 +247,10 @@ class GameScene extends Phaser.Scene {
       .circle(W / 2, H / 2, this.stats.player.radius, COLOR_PLAYER)
       .setVisible(false)
 
-    // 렌더 순서: 그림자/보스 → 적 스프라이트 → 플래시·화상 → 화살/이펙트 → 플레이어
+    // 렌더 순서: 그림자 → 적 스프라이트 → 보스 돔/체력바 → 화살/이펙트 → 플레이어
     this.worldLayer.add([
       this.gfxEnemies,
-      this.enemyBlitter,
+      this.enemyLayer,
       this.gfxEnemyTop,
       this.gfxArrows,
       this.gfxFx,
@@ -604,16 +617,17 @@ class GameScene extends Phaser.Scene {
       })
     }
 
-    const scale = this.cfg.player.spriteScale || PLAYER_SPRITE_SCALE
+    // 외형 배율은 반지름(히트박스)에 비례 — 튜너 '크기' 슬라이더 하나로 함께 조정됨
+    const scale = (this.cfg.player.radius || 10) * PLAYER_SPRITE_K
     this._bowOffsetY = SPRITE_H * scale * 0.4 // 화살 발사(활) 높이
     this.playerSprite = this.add
       .sprite(this.player.x, this.player.y, 'archer', 0)
       .setOrigin(0.5, 0.8) // 발끝 하단 정렬
       .setScale(scale)
-    // 림라이트(외곽 발광) — 어두운 바닥에 캐릭터가 묻히지 않게 실루엣을 띄운다.
-    // Phaser 내장 GPU FX 라 실루엣을 정확히 따라가고 값이 싸다. (WebGL 전용, 폴백 가드)
+    // 림라이트(외곽선) — 어두운 바닥에 캐릭터가 묻히지 않게 실루엣만 살짝 띄운다.
+    // 얇고 옅은 회색(흰색·큰 발광은 과함). Phaser 내장 GPU FX, WebGL 전용 가드.
     if (this.playerSprite.postFX) {
-      this.playerSprite.postFX.addGlow(0xbfe4ff, 4, 0, false, 0.1, 10)
+      this.playerSprite.postFX.addGlow(0xaab2bd, 2, 0, false, 0.05, 4)
     }
     this.worldLayer.add(this.playerSprite)
     this.animKey = 'idle'
@@ -1073,14 +1087,28 @@ class GameScene extends Phaser.Scene {
     // skill 인자는 스킬 id 문자열('multishot' 등) 또는 기본 활이면 'basic'/false.
     a.fx = typeof skill === 'string' && SKILL_FX[skill] ? skill : skill ? 'multishot' : 'basic'
     a.skill = a.fx !== 'basic' // 스킬 화살 여부 (시각 전용)
-    // 트레일용 직전 위치 기록(fade/dots에서 사용). 재사용 화살이므로 매번 초기화.
+    // 직전 위치 기록 — 스윕 충돌 판정(updateArrows)에서 사용.
+    // 화살 풀 재사용이므로 반드시 초기화해야 첫 프레임에 엉뚱한 선분이 생기지 않는다.
     a.px1 = a.x
     a.py1 = a.y
-    a.px2 = a.x
-    a.py2 = a.y
     a.burn = !!burn // 화상 룬
     a.hit.clear()
     this.arrows.push(a)
+
+    // 머즐 플래시 — 화살이 너무 빨라 잔상이 잘 안 보이므로, 발사 지점에 짧게 표시한다.
+    // 플레이어 옆에 머물러 시선 안에 들어오므로 스킬 구분 체감이 가장 크다.
+    const mfx = SKILL_FX[a.fx]
+    if (mfx && mfx.muzzle) {
+      this.muzzles.push({
+        x: a.x + Math.cos(angle) * 12,
+        y: a.y + Math.sin(angle) * 12,
+        angle,
+        r: mfx.muzzle,
+        tint: mfx.tint,
+        life: 0.09,
+        max: 0.09,
+      })
+    }
   }
 
   fireAt(target) {
@@ -1768,6 +1796,7 @@ class GameScene extends Phaser.Scene {
     this.updateGrenades(dt)
     this.updatePopups(dt)
     this.updateParticles(dt)
+    this.updateMuzzles(dt)
 
     // 그리드를 플레이어 주변 화면 영역으로 옮긴다 (무한 월드 대응)
     this.grid.setOrigin(this.player.x - W / 2, this.player.y - H / 2)
@@ -1798,9 +1827,7 @@ class GameScene extends Phaser.Scene {
 
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const a = this.arrows[i]
-      // 트레일용 궤적 기록(2단계) — 이동 전 위치를 밀어 넣는다
-      a.px2 = a.px1
-      a.py2 = a.py1
+      // 이동 전 위치 기록 → 아래 스윕 충돌 판정에서 "직전→현재" 선분으로 사용
       a.px1 = a.x
       a.py1 = a.y
       a.x += a.vx * dt
@@ -1816,17 +1843,31 @@ class GameScene extends Phaser.Scene {
         continue
       }
 
-      const near = this.grid.query(a.x, a.y, maxR, this.queryBuf)
+      // 스윕 판정 — 화살이 빠르거나 적이 작으면 프레임 사이에 스쳐 지날 수 있다(터널링).
+      // 현재 위치의 점 판정 대신 "직전→현재 이동 선분"까지의 최단거리로 판정한다.
+      const sx = a.px1
+      const sy = a.py1
+      const segx = a.x - sx
+      const segy = a.y - sy
+      const seg2 = segx * segx + segy * segy || 1
+      const segLen = Math.sqrt(seg2)
+      const mx = (sx + a.x) / 2
+      const my = (sy + a.y) / 2
+      // 선분 전체를 덮도록 조회 반경을 이동거리만큼 넓힌다
+      const near = this.grid.query(mx, my, maxR + segLen / 2, this.queryBuf)
       let spent = false
 
       for (let j = 0; j < near.length; j++) {
         const e = near[j]
         if (a.hit.has(e)) continue
 
-        const hitR = e.r + 5 // 정확한 판정은 개체별 반지름으로
-        const dx = a.x - e.x
-        const dy = a.y - e.y
-        if (dx * dx + dy * dy >= hitR * hitR) continue
+        const hitR = e.r + 5 // 개체별 반지름
+        // 적 중심에서 이동 선분 위 가장 가까운 점까지의 거리로 판정
+        let t = ((e.x - sx) * segx + (e.y - sy) * segy) / seg2
+        t = t < 0 ? 0 : t > 1 ? 1 : t
+        const ddx = e.x - (sx + t * segx)
+        const ddy = e.y - (sy + t * segy)
+        if (ddx * ddx + ddy * ddy >= hitR * hitR) continue
 
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
@@ -2082,6 +2123,15 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // 머즐 플래시 수명 감소
+  updateMuzzles(dt) {
+    for (let i = this.muzzles.length - 1; i >= 0; i--) {
+      const m = this.muzzles[i]
+      m.life -= dt
+      if (m.life <= 0) this.muzzles.splice(i, 1)
+    }
+  }
+
   updateParticles(dt) {
     const fr = Math.max(0, 1 - 6 * dt) // 감속
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -2124,45 +2174,37 @@ class GameScene extends Phaser.Scene {
       ge.fillEllipse(e.x, e.y + e.r * 0.9, e.r * 1.9, e.r * 0.9)
     }
 
-    // 2) 일반 적 — Blitter 스프라이트(타입=행[고블린/사냥개/궁수], 걷기=열).
-    //    Bob 은 화면 내 적 수만큼만 재사용하고 나머지는 숨긴다(GC·드로우콜 최소).
-    const bobs = this.enemyBobs
+    // 2) 일반 적 — 풀링 스프라이트(타입=행[고블린/사냥개/궁수], 걷기=열).
+    //    크기는 반지름 비례(setScale) → 튜너 '크기'로 조정됨. 피격/화상은 tint.
+    //    화면 밖은 이미 컬링됐으므로 활성 스프라이트 = 화면 내 적 수뿐.
+    const sprites = this.enemySprites
     const walk = Math.floor(this.elapsed * 8)
     let bi = 0
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
       if (e.boss) continue
-      let bob = bobs[bi]
-      if (!bob) {
-        bob = this.enemyBlitter.create(0, 0, 0)
-        bobs[bi] = bob
+      let spr = sprites[bi]
+      if (!spr) {
+        spr = this.add.sprite(0, 0, 'enemies', 0).setOrigin(0.5, 0.72)
+        this.enemyLayer.add(spr)
+        sprites[bi] = spr
       }
       const row = e.type === 'rusher' ? 1 : e.type === 'shooter' ? 2 : 0
-      bob.setFrame(row * 4 + ((walk + e.animOff) & 3))
-      bob.x = e.x - 16
-      bob.y = e.y - 24
-      bob.setFlipX(px < e.x) // 플레이어를 바라보게
-      bob.visible = true
+      spr.setFrame(row * 4 + ((walk + e.animOff) & 3))
+      spr.setPosition(e.x, e.y)
+      spr.setScale(e.r * ENEMY_SPRITE_K)
+      spr.setFlipX(px < e.x) // 플레이어를 바라보게
+      if (e.flash > 0) spr.setTintFill(0xffffff) // 피격 흰 섬광
+      else if (e.burn && e.burn.time > 0) spr.setTint(0xff9a4a) // 화상 주황
+      else spr.clearTint()
+      spr.visible = true
       bi++
     }
-    for (let k = bi; k < bobs.length; k++) bobs[k].visible = false
+    for (let k = bi; k < sprites.length; k++) sprites[k].visible = false
 
-    // 3) 스프라이트 위 오버레이 — 일반 적 피격 플래시(흰) + 화상(주황), 그리고 보스(돔)
+    // 3) 보스 오버레이 준비 — 스프라이트 위층에 돔/체력바를 그린다
     const gt = this.gfxEnemyTop
     gt.clear()
-    gt.fillStyle(COLOR_ENEMY_HIT, 0.55)
-    for (let i = 0; i < es.length; i++) {
-      const e = es[i]
-      if (e.boss || e.flash <= 0) continue
-      gt.fillCircle(e.x, e.y - e.r * 0.4, e.r * 1.15)
-    }
-    gt.fillStyle(0xf0963c, 0.35)
-    for (let i = 0; i < es.length; i++) {
-      const e = es[i]
-      if (e.boss || !e.burn || e.burn.time <= 0) continue
-      const flick = 0.7 + 0.3 * Math.sin(this.elapsed * 22 + e.x)
-      gt.fillCircle(e.x, e.y - e.r * 0.3, e.r * (1.0 + 0.15 * flick))
-    }
 
     // 4) 보스 — 스프라이트와 구분되게 보라 돔(입체+눈)으로 따로, 스프라이트 위에 그려
     //    존재감을 준다. 체력바도 여기(위층)라 다른 적에 가리지 않는다.
@@ -2199,47 +2241,58 @@ class GameScene extends Phaser.Scene {
 
     const ga = this.gfxArrows
     ga.clear()
-    // 스킬별 이펙트 — SKILL_FX의 색/굵기/길이로 구분. 같은 스킬끼리 묶어 한 번에 스트로크.
+    // 스킬별 이펙트 — 속도 비례 스트릭(모션블러)으로 그려 빠른 화살도 선으로 이어져 보인다.
+    // 스트릭 길이 = 속도 × fx.streak(초). 화살 뒤쪽으로 뻗는다(머리는 현재 위치).
     for (let k = 0; k < SKILL_FX_KEYS.length; k++) {
       const key = SKILL_FX_KEYS[k]
       const fx = SKILL_FX[key]
 
-      // (1) 트레일 먼저 — 화살 본체 아래에 깔린다
-      if (fx.trail === 'fade' || fx.trail === 'thin') {
-        // 잔상: 직전 위치들로 이어진 반투명 선 (fade는 2단계로 더 길게)
-        const steps = fx.trail === 'fade' ? 2 : 1
-        for (let s = steps; s >= 1; s--) {
-          const alpha = fx.trail === 'fade' ? 0.13 * s : 0.22
-          let started = false
-          for (let i = 0; i < this.arrows.length; i++) {
-            const a = this.arrows[i]
-            if ((a.fx || 'basic') !== key) continue
-            if (!started) {
-              ga.lineStyle(fx.w * (fx.trail === 'fade' ? 1 : 0.7), fx.tint, alpha)
-              ga.beginPath()
-              started = true
-            }
-            ga.moveTo(s === 2 ? a.px2 : a.px1, s === 2 ? a.py2 : a.py1)
-            ga.lineTo(a.x, a.y)
-          }
-          if (started) ga.strokePath()
+      // (1) 넓고 흐린 글로우 — 어두운 바닥 위에서 존재감을 준다
+      let started = false
+      for (let i = 0; i < this.arrows.length; i++) {
+        const a = this.arrows[i]
+        if ((a.fx || 'basic') !== key) continue
+        if (!started) {
+          ga.lineStyle(fx.w * 2.6, fx.tint, 0.16)
+          ga.beginPath()
+          started = true
         }
-      } else if (fx.trail === 'dots') {
-        // 점선: 뒤쪽으로 작은 점 3개
-        ga.fillStyle(fx.tint, 0.35)
+        ga.moveTo(a.x, a.y)
+        ga.lineTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
+      }
+      if (started) ga.strokePath()
+
+      // (2) 트레일 — fade는 스트릭 뒤로 더 길게 이어붙인 반투명 꼬리
+      if (fx.trail === 'fade' || fx.trail === 'thin') {
+        const tailMul = fx.trail === 'fade' ? 2.2 : 1.5 // 스트릭 대비 꼬리 배수
+        started = false
         for (let i = 0; i < this.arrows.length; i++) {
           const a = this.arrows[i]
           if ((a.fx || 'basic') !== key) continue
-          const ux = Math.cos(a.angle)
-          const uy = Math.sin(a.angle)
+          if (!started) {
+            ga.lineStyle(fx.w * 0.8, fx.tint, fx.trail === 'fade' ? 0.34 : 0.26)
+            ga.beginPath()
+            started = true
+          }
+          ga.moveTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
+          ga.lineTo(a.x - a.vx * fx.streak * tailMul, a.y - a.vy * fx.streak * tailMul)
+        }
+        if (started) ga.strokePath()
+      } else if (fx.trail === 'dots') {
+        // 점선: 스트릭 뒤로 점 3개 (속도에 비례해 간격 벌어짐)
+        ga.fillStyle(fx.tint, 0.5)
+        for (let i = 0; i < this.arrows.length; i++) {
+          const a = this.arrows[i]
+          if ((a.fx || 'basic') !== key) continue
           for (let d = 1; d <= 3; d++) {
-            ga.fillCircle(a.x - ux * (fx.len + d * 7), a.y - uy * (fx.len + d * 7), 1.6)
+            const s = fx.streak * (1 + d * 0.55)
+            ga.fillCircle(a.x - a.vx * s, a.y - a.vy * s, 2.2)
           }
         }
       }
 
-      // (2) 화살 본체 — 같은 스킬끼리 한 번에 스트로크
-      let started = false
+      // (3) 스트릭 본체 — 진하고 선명하게
+      started = false
       for (let i = 0; i < this.arrows.length; i++) {
         const a = this.arrows[i]
         if ((a.fx || 'basic') !== key) continue
@@ -2248,12 +2301,27 @@ class GameScene extends Phaser.Scene {
           ga.beginPath()
           started = true
         }
-        const cx = Math.cos(a.angle) * fx.len
-        const cy = Math.sin(a.angle) * fx.len
-        ga.moveTo(a.x - cx, a.y - cy)
-        ga.lineTo(a.x + cx, a.y + cy)
+        ga.moveTo(a.x, a.y)
+        ga.lineTo(a.x - a.vx * fx.streak, a.y - a.vy * fx.streak)
       }
       if (started) ga.strokePath()
+    }
+
+    // 머즐 플래시 — 발사 지점에서 짧게 터지는 빛. 스킬 색으로 구분되며,
+    // 화살보다 오래(0.09s) 한 자리에 머물러 체감이 크다.
+    for (let i = 0; i < this.muzzles.length; i++) {
+      const m = this.muzzles[i]
+      const k = m.life / m.max // 1 → 0
+      ga.fillStyle(m.tint, 0.5 * k)
+      ga.fillCircle(m.x, m.y, m.r * (0.5 + 0.5 * k))
+      ga.fillStyle(0xffffff, 0.55 * k)
+      ga.fillCircle(m.x, m.y, m.r * 0.4 * k)
+      // 발사 방향으로 짧은 쐐기
+      ga.lineStyle(2, m.tint, 0.6 * k)
+      ga.beginPath()
+      ga.moveTo(m.x, m.y)
+      ga.lineTo(m.x + Math.cos(m.angle) * m.r * 1.6 * k, m.y + Math.sin(m.angle) * m.r * 1.6 * k)
+      ga.strokePath()
     }
 
     // 수류탄 폭발 — 커지면서 사라지는 링

@@ -675,6 +675,8 @@ export function simulate(cfg, opts = {}) {
     const maxR = Math.max(cfg.enemy.radius, cfg.boss.radius) + 5
     for (let i = state.arrows.length - 1; i >= 0; i--) {
       const a = state.arrows[i]
+      const sx = a.x // 이동 전 위치(스윕 판정 선분 시작)
+      const sy = a.y
       a.x += a.vx * dt
       a.y += a.vy * dt
       // 플레이어 기준 거리로 제거 (월드 좌표 — main.js 와 동일 수정)
@@ -684,15 +686,24 @@ export function simulate(cfg, opts = {}) {
         removeSwap(state.arrows, i, arrowPool)
         continue
       }
-      const near = grid.query(a.x, a.y, maxR, buf)
+      // 스윕 판정 (main.js 동기화) — 이동 선분까지 최단거리로 터널링 방지
+      const segx = a.x - sx
+      const segy = a.y - sy
+      const seg2 = segx * segx + segy * segy || 1
+      const segLen = Math.sqrt(seg2)
+      const mx = (sx + a.x) / 2
+      const my = (sy + a.y) / 2
+      const near = grid.query(mx, my, maxR + segLen / 2, buf)
       let spent = false
       for (let j = 0; j < near.length; j++) {
         const e = near[j]
         if (a.hit.has(e)) continue
         const hitR = e.r + 5
-        const dx = a.x - e.x
-        const dy = a.y - e.y
-        if (dx * dx + dy * dy >= hitR * hitR) continue
+        let t = ((e.x - sx) * segx + (e.y - sy) * segy) / seg2
+        t = t < 0 ? 0 : t > 1 ? 1 : t
+        const ddx = e.x - (sx + t * segx)
+        const ddy = e.y - (sy + t * segy)
+        if (ddx * ddx + ddy * ddy >= hitR * hitR) continue
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
         damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
