@@ -14,6 +14,7 @@ import { createGrowthScreen } from './growth-ui.js'
 import { createLevelupScreen } from './levelup-cards.js'
 import { createRuneScreen } from './rune-screen.js'
 import { createResultScreen } from './result-screen.js'
+import { createTitleScreen } from './title-screen.js'
 import { Grid } from './grid.js'
 
 // --- 룬 (드랍 → 스킬 슬롯에 장착) -------------------------------------------
@@ -262,6 +263,14 @@ class GameScene extends Phaser.Scene {
   }
 
   preload() {
+    // 로딩 진행률을 타이틀 화면 막대에 연결.
+    // (씬은 로드가 끝난 뒤 create() 가 돌기 때문에, 진행률은 여기서만 잡을 수 있다)
+    this.load.on('progress', (p) => titleScreen && titleScreen.setProgress(p))
+
+    // 배경음악 — ogg 우선, 미지원 브라우저는 m4a 폴백.
+    // ⚠️ 로드만 해두고 **재생은 타이틀에서 탭한 뒤**에 한다(브라우저 오디오 정책).
+    this.load.audio('bgm', ['/audio/bgm_dungeon.ogg', '/audio/bgm_dungeon.m4a'])
+
     // 캐릭터 동작 스프라이트시트 (96×116 셀, 8열×7행)
     this.load.spritesheet(
       'archer',
@@ -375,7 +384,6 @@ class GameScene extends Phaser.Scene {
     this.eliteCount = 0 // 이번 판에 등장시킨 엘리트 수
     this.eliteKills = 0 // 처치한 엘리트 수(결과 화면용)
     this.bossKills = 0 // 처치한 보스 수 (bossCount = 등장 수라 따로 센다)
-    this._firstRuneGiven = false // Lv3 첫 룬 보장을 이미 지급했는지
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
     this.grid = new Grid(W, H, 56)
@@ -448,6 +456,34 @@ class GameScene extends Phaser.Scene {
     // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
     if (this.growthBtn) this.growthBtn.setVisible(false)
     if (this.growthBtnText) this.growthBtnText.setVisible(false)
+
+    // --- 타이틀 게이트 ---
+    // 첫 진입에만 타이틀을 기다린다. "다시 하기"(scene.restart)로 create() 가
+    // 다시 돌 때는 gameStarted 가 이미 true 라 곧바로 플레이가 시작된다.
+    this.sound.mute = loadMuted()
+    if (!gameStarted) {
+      this.waitStart = true
+      this._bootFrame = false
+      titleScreen.ready()
+      startGame = () => {
+        gameStarted = true
+        this.waitStart = false
+        this.playBgm()
+      }
+    } else {
+      this.waitStart = false
+      this.playBgm() // 재시작 시에도 음악은 이어진다(이미 재생 중이면 아무 일 없음)
+    }
+  }
+
+  // 배경음악 재생. 이미 재생 중이면 건드리지 않는다 —
+  // scene.restart() 마다 새로 play() 하면 소리가 겹쳐 쌓인다.
+  playBgm() {
+    if (!this.cache.audio.exists('bgm')) return
+    const cur = this.sound.get('bgm')
+    if (cur && cur.isPlaying) return
+    const bgm = cur || this.sound.add('bgm', { loop: true, volume: 0.5 })
+    bgm.play()
   }
 
   // 카드 패시브 스택 → 배율 보너스 객체 (deriveStats에 전달)
@@ -1098,6 +1134,32 @@ class GameScene extends Phaser.Scene {
 
     this.pauseBtn.on('pointerdown', () => this.togglePause())
 
+    // 소리 on/off — 멈춤 버튼 왼쪽. 웹 게임에서 음소거는 필수 기능이다
+    // (사무실/공공장소에서 갑자기 소리가 나면 바로 탭을 닫는다).
+    const sx = bx - r * 2 - 10
+    this.soundBtn = this.add
+      .rectangle(sx, by, r * 2, r * 2, 0x313244, 0.9)
+      .setStrokeStyle(2, 0x585b70)
+      .setDepth(15)
+      .setInteractive({ useHandCursor: true })
+    this.soundIcon = this.add
+      .text(sx, by, '', { fontFamily: 'Arial, sans-serif', fontSize: '20px' })
+      .setOrigin(0.5)
+      .setDepth(16)
+    this.refreshSoundIcon()
+    this.soundBtn.on('pointerdown', () => {
+      this.sound.mute = !this.sound.mute
+      saveMuted(this.sound.mute)
+      this.refreshSoundIcon()
+    })
+  }
+
+  refreshSoundIcon() {
+    if (!this.soundIcon) return
+    const m = this.sound.mute
+    this.soundIcon.setText(m ? '🔇' : '🔊')
+    this.soundIcon.setAlpha(m ? 0.5 : 1)
+
     // 일시정지 오버레이 (버튼보다 아래 depth 라 버튼은 계속 보인다)
     this.pauseOverlay = this.add
       .rectangle(W / 2, H / 2, W, H, 0x11111b, 0.72)
@@ -1153,6 +1215,7 @@ class GameScene extends Phaser.Scene {
       }
       // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
       if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
+      if (this.soundBtn && this.soundBtn.getBounds().contains(p.x, p.y)) return
       if (this.growthBtn.getBounds().contains(p.x, p.y)) return
       if (this.userPaused || this.growthOpen || this.levelupOpen || this.runeOpen) return
 
@@ -2197,18 +2260,15 @@ class GameScene extends Phaser.Scene {
     this.lvText.setText('Lv ' + this.level)
     this._pendingLevels = (this._pendingLevels || 0) + levels
 
-    // 첫 룬 보장 — Lv3 도달 시 아직 룬이 하나도 없으면 1개 지급한다.
-    //
-    // 왜 필요한가: 룬 드랍을 엘리트 전용(시간 기반)으로 바꾸니 후반 폭주는 잡혔지만,
-    // **초반에 급사한 판이 완전히 무보상**이 됐다. 시뮬로 재보니 판의 35~55%가
-    // 룬 0개로 끝난다(회피 실력 가정을 바꿔도 이 비율은 그대로 높다).
-    // 엘리트 등장을 앞당기는 방법은 효과가 없었다 — 엘리트가 일찍 오면
-    // 그만큼 일찍 죽어서 총 룬 수가 오히려 줄었다(생존 중앙 81s → 55s).
-    // 그래서 전투 결과에 의존하지 않는 **진행 기반 보장**으로 해결한다.
-    if (this.level >= 3 && !this._firstRuneGiven) {
-      this._firstRuneGiven = true
-      this.grantRune(false)
-    }
+    // ⚠️ "첫 룬 보장"을 넣었다가 **제거했다.** 어떤 조건으로도 성립하지 않는 장치였다:
+    //   · Lv3 기준 → 중앙 28.5초에 발동. 첫 엘리트 룬(중앙 53.7초)보다 25초 빨라
+    //     판의 79%가 엘리트를 잡기 전에 공짜 룬을 받았다(= 엘리트 드랍 설계가 무너짐).
+    //   · 45초로 늦춤 → 여전히 42%가 받았다(첫 엘리트를 잡는 데 시간이 걸리므로).
+    //   · 75초 이상으로 늦춤 → **한 번도 발동하지 않았다.** 그때까지 산 판은 이미
+    //     엘리트를 잡았고, 룬 0개로 끝나는 판은 그전에 죽는다(중앙 29초).
+    // 즉 "엘리트 드랍을 앞지르지 않는다"와 "초반 급사 판을 구제한다"는 동시에 만족될 수 없다.
+    // 룬 0개로 끝나는 판이 약 40%인 건 **보상 문제가 아니라 초반 급사 문제**다 —
+    // 스폰 압박/난이도 곡선에서 따로 풀어야 한다. 보상으로 덮으면 설계만 흐려진다.
 
     this.maybeOpenModal()
   }
@@ -2439,6 +2499,17 @@ class GameScene extends Phaser.Scene {
   // --- 루프 ---------------------------------------------------------------
 
   update(time, delta) {
+    // 타이틀 대기 중 — 게임 로직은 멈추지만 **한 프레임은 그려둔다.**
+    // 그러면 타이틀 뒤에 던전 바닥과 캐릭터가 비쳐 "게임이 준비됐다"는 느낌이 난다.
+    // (아무것도 안 그리면 검은 화면이라 로딩이 안 끝난 것처럼 보인다)
+    if (this.waitStart) {
+      if (!this._bootFrame) {
+        this._bootFrame = true
+        this.updateBackground()
+        this.render()
+      }
+      return
+    }
     if (this.gameOver || this.userPaused || this.growthOpen || this.levelupOpen || this.runeOpen) return
     // 한 프레임에서 오류가 나도 게임 루프 전체가 멈추지 않게(프리즈 방지) +
     // 원인을 콘솔에 한 번 남긴다(진단).
@@ -3545,6 +3616,41 @@ class GameScene extends Phaser.Scene {
   }
 }
 
+// --- 타이틀/부팅 상태 (모듈 스코프) ---------------------------------------
+// 씬 바깥에 두는 이유: scene.restart() 는 create() 를 다시 돌리므로, 씬 안에
+// 두면 "다시 하기"마다 타이틀이 또 뜬다. 한 번 시작했다는 사실은 씬보다 오래 산다.
+let gameStarted = false
+let startGame = null // create() 가 채워넣는 시작 콜백
+let titleScreen = null
+
+const MUTE_KEY = 'wg_mute_v1'
+
+function loadMuted() {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1'
+  } catch {
+    return false // 사파리 프라이빗 모드 등에서 실패해도 게임은 돌아야 한다
+  }
+}
+
+function saveMuted(m) {
+  try {
+    localStorage.setItem(MUTE_KEY, m ? '1' : '0')
+  } catch {
+    /* 저장 실패는 무시 */
+  }
+}
+
+// Phaser 보다 먼저 띄운다 — 로딩 진행률을 처음부터 보여주기 위해.
+titleScreen = createTitleScreen({
+  onStart: () => startGame && startGame(),
+  getMuted: loadMuted,
+  onToggleMute: (m) => {
+    saveMuted(m)
+    if (game && game.sound) game.sound.mute = m
+  },
+})
+
 const config = {
   type: Phaser.AUTO,
   parent: 'app',
@@ -3555,10 +3661,14 @@ const config = {
     width: W,
     height: H,
   },
+  // 오디오: 사용자 제스처 전에는 컨텍스트가 잠긴다. Phaser 가 첫 입력에
+  // 자동 해제해 주지만, 타이틀 탭이 그 제스처 역할을 하므로 문제되지 않는다.
+  audio: { disableWebAudio: false },
   scene: GameScene,
 }
 
 const game = new Phaser.Game(config)
+game.sound.mute = loadMuted()
 
 // 튜너에서 값이 바뀌면 새 설정으로 재시작한다.
 // 씬의 create() 안이 아니라 여기서 한 번만 등록해야 한다 —

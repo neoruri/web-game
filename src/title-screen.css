@@ -1,0 +1,176 @@
+/* 타이틀 + 로딩 화면 — 어두운 던전 톤에 맞춤 */
+#title-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200; /* 모든 오버레이보다 위 */
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: radial-gradient(120% 80% at 50% 20%, #1a1424 0%, #0b0a10 55%, #050508 100%);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+  color: #e6e0f0;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+#title-modal.ti-out {
+  opacity: 0;
+  pointer-events: none;
+}
+#title-modal * {
+  box-sizing: border-box;
+}
+
+/* 가장자리 어둡게 — 게임 화면의 비네트와 톤을 맞춘다 */
+.ti-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(75% 55% at 50% 42%, transparent 40%, rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+}
+
+.ti-panel {
+  position: relative;
+  width: min(94vw, 460px);
+  margin: 0 auto;
+  padding: 8vh 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+/* --- 워드마크 --- */
+.ti-mark {
+  text-align: center;
+}
+.ti-title {
+  font-size: clamp(38px, 12vw, 62px);
+  font-weight: 900;
+  letter-spacing: 5px;
+  line-height: 1;
+  /* 금속에 빛이 스치는 느낌 — 던전 톤과 어울리는 탁한 금색 */
+  background: linear-gradient(#e8d9a8 6%, #b08a4a 42%, #6b4f28 62%, #d8c48c 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.8));
+}
+.ti-sub {
+  margin-top: 10px;
+  font-size: 14px;
+  letter-spacing: 7px;
+  color: #8d7fa6;
+  text-indent: 7px; /* letter-spacing 로 생긴 오른쪽 여백 보정 */
+}
+
+/* --- 로딩 / 시작 --- */
+.ti-mid {
+  width: 100%;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.ti-loadwrap {
+  width: 100%;
+  max-width: 300px;
+  text-align: center;
+}
+.ti-loadbar {
+  height: 6px;
+  border-radius: 3px;
+  background: #1c1826;
+  overflow: hidden;
+  border: 1px solid #302a40;
+}
+.ti-loadfill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6b4f28, #d8b45c);
+  transition: width 0.18s ease-out;
+}
+.ti-loadtx {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #7d7291;
+  letter-spacing: 1px;
+}
+
+.ti-start {
+  padding: 16px 40px;
+  border-radius: 999px;
+  border: 1px solid #7a5f2e;
+  background: linear-gradient(#2a2135, #1a1523);
+  color: #f0e2bb;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(216, 180, 92, 0.14);
+  animation: tiPulse 2.1s ease-in-out infinite;
+}
+.ti-start:active {
+  transform: scale(0.97);
+}
+@keyframes tiPulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(216, 180, 92, 0.1); }
+  50% { box-shadow: 0 0 34px rgba(216, 180, 92, 0.3); }
+}
+
+/* --- 하단: 조작 안내 + 소리 --- */
+.ti-foot {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ti-help {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #6f6684;
+  line-height: 1.5;
+}
+.ti-help b {
+  color: #9b8fb3;
+  font-weight: 600;
+  margin-right: 5px;
+}
+.ti-snd {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid #302a40;
+  background: #16121f;
+  color: #cfc3e2;
+  font-size: 20px;
+  cursor: pointer;
+  transition: 0.12s;
+}
+.ti-snd.off {
+  opacity: 0.5;
+}
+.ti-snd:active {
+  transform: scale(0.94);
+}
+
+/* 가로가 짧은 화면(가로 모드 폰)에서 위아래가 눌리지 않게 */
+@media (max-height: 520px) {
+  .ti-panel {
+    padding: 4vh 18px 14px;
+    gap: 12px;
+  }
+  .ti-mid {
+    min-height: 66px;
+  }
+}

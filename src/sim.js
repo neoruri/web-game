@@ -138,8 +138,6 @@ export function simulate(cfg, opts = {}) {
     telegraphs: [],
   }
 
-  let firstRuneGiven = false // Lv3 첫 룬 보장 (main.js _firstRuneGiven 동기화)
-
   const skillAcc = {}
   for (const id of ACTIVE_IDS) skillAcc[id] = 0
 
@@ -737,12 +735,6 @@ export function simulate(cfg, opts = {}) {
     botPickCard()
     stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
     state.hp += stats.player.maxHp - prevMax
-    // Lv3 첫 룬 보장 (main.js onLevelUp 동기화) — 초반 급사 판의 무보상 방지
-    if (state.level >= 3 && !firstRuneGiven) {
-      firstRuneGiven = true
-      botEquipRune()
-      state.runesGained++
-    }
   }
 
   // 봇 룬 장착 — 랜덤 룬(등급·수치 롤)을 가장 높은 레벨 액티브의 빈 슬롯에.
