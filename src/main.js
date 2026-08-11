@@ -13,6 +13,7 @@ import {
 import { createGrowthScreen } from './growth-ui.js'
 import { createLevelupScreen } from './levelup-cards.js'
 import { createRuneScreen } from './rune-screen.js'
+import { createResultScreen } from './result-screen.js'
 import { Grid } from './grid.js'
 
 // --- 룬 (드랍 → 스킬 슬롯에 장착) -------------------------------------------
@@ -160,6 +161,20 @@ const SKILL_FX = {
 }
 const SKILL_FX_KEYS = Object.keys(SKILL_FX)
 
+// --- 엘리트 몹 4종 --------------------------------------------------------
+// 능력치 접두어(이속·체력 배수)가 아니라 **공격 패턴**으로 구분한다.
+// 이유: 능력치만 바꾸면 플레이어의 대응이 "계속 쏘기"로 똑같다. 패턴은 행동을 바꾼다.
+//   row  = elites_sheet.png 의 행 (스프라이트 색 = 아래 color 와 동일하게 그려짐)
+//   verb = 플레이어가 강제로 하게 되는 행동 (설계 의도를 코드에 남긴다)
+const ELITE_KINDS = [
+  { id: 'charger', row: 0, name: '돌격자', tint: 0xec6050, verb: '측면 회피' },
+  { id: 'bombardier', row: 1, name: '포격수', tint: 0xf29840, verb: '자리 비우기' },
+  { id: 'scattershot', row: 2, name: '산탄사수', tint: 0x6ed6ce, verb: '각도 이탈' },
+  { id: 'warden', row: 3, name: '수호자', tint: 0xc08ef4, verb: '우선순위 처치' },
+]
+const ELITE_BY_ID = {}
+for (const k of ELITE_KINDS) ELITE_BY_ID[k.id] = k
+
 // 프롭(오브젝트) 배치 격자 — 이 타일 수마다 한 칸. 크면 오브젝트가 드물어진다.
 const PROP_CELL = 3
 
@@ -180,6 +195,9 @@ const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
 // 캐릭터/몬스터 스프라이트·히트박스·그림자가 함께 바뀐다.
 const PLAYER_SPRITE_K = 0.055 // 배율 = player.radius × 이것 (기본 r10 → 0.55)
 const ENEMY_SPRITE_K = 0.11 // 배율 = enemy.radius × 이것 (기본 r10 → 1.1, 셀 32px)
+// 엘리트는 셀이 48px(일반 32px)이라 배율 계수가 다르다.
+// r16 × 0.075 = 1.2 → 화면상 약 58px (일반 몹 35px 대비 확실히 크다)
+const ELITE_SPRITE_K = 0.075
 const SPRITE_H = 116 // 스프라이트 셀 높이. 화살 발사(활) 높이 = 배율×높이×0.4
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
@@ -233,6 +251,12 @@ class GameScene extends Phaser.Scene {
     this.load.spritesheet('enemies', '/sprites/dungeon/enemies_sheet.png', {
       frameWidth: 32,
       frameHeight: 32,
+    })
+    // 엘리트 스프라이트 (48×48, 4행[돌격자/포격수/산탄사수/수호자]×4프레임)
+    // 셀이 일반 몹보다 크다 — 갑옷·장비를 그려 실루엣으로 구분하기 위함.
+    this.load.spritesheet('elites', '/sprites/dungeon/elites_sheet.png', {
+      frameWidth: 48,
+      frameHeight: 48,
     })
   }
 
@@ -313,6 +337,12 @@ class GameScene extends Phaser.Scene {
     this.telePool = []
     this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
     this._visBuf = [] // 렌더용 화면 내 적 목록(매 프레임 재사용, GC 회피)
+    this._wardenBuf = [] // 수호자 목록(매 프레임 재수집 — 죽으면 오라도 즉시 사라져야 함)
+    this.eliteAcc = 0 // 엘리트 등장 누적 시간
+    this.eliteCount = 0 // 이번 판에 등장시킨 엘리트 수
+    this.eliteKills = 0 // 처치한 엘리트 수(결과 화면용)
+    this.bossKills = 0 // 처치한 보스 수 (bossCount = 등장 수라 따로 센다)
+    this._firstRuneGiven = false // Lv3 첫 룬 보장을 이미 지급했는지
 
     // 그리드 셀은 가장 큰 적(보스)이 들어갈 만큼은 되어야 한다
     this.grid = new Grid(W, H, 56)
@@ -333,6 +363,14 @@ class GameScene extends Phaser.Scene {
     if (this.textures.exists('enemies') && this.textures.get('enemies').setFilter) {
       this.textures.get('enemies').setFilter(Phaser.Textures.FilterMode.NEAREST)
     }
+    // 엘리트는 텍스처가 다르므로(48px 셀) 별도 풀·별도 레이어로 그린다.
+    // 일반 몹 위에 오도록 enemyLayer 다음에 넣는다(엘리트가 잡몹에 가려지면 안 됨).
+    this.eliteLayer = this.add.container(0, 0)
+    this.eliteSprites = []
+    this.eliteLabels = [] // 이름표 텍스트 풀 (동시 엘리트 수만큼, 보통 3개 이하)
+    if (this.textures.exists('elites') && this.textures.get('elites').setFilter) {
+      this.textures.get('elites').setFilter(Phaser.Textures.FilterMode.NEAREST)
+    }
     this.gfxEnemyTop = this.add.graphics() // 스프라이트 위 오버레이(보스 돔·체력바)
     this.gfxArrows = this.add.graphics()
     this.gfxFx = this.add.graphics()
@@ -347,6 +385,7 @@ class GameScene extends Phaser.Scene {
     this.worldLayer.add([
       this.gfxEnemies,
       this.enemyLayer,
+      this.eliteLayer,
       this.gfxEnemyTop,
       this.gfxArrows,
       this.gfxFx,
@@ -371,6 +410,8 @@ class GameScene extends Phaser.Scene {
     // 룬 획득/장착 (보스 처치)
     // onEquip(skillId, slotIdx) — 랜덤 획득 방식이라 룬은 이미 큐에 있다
     this.runeScreen = createRuneScreen({ onEquip: (sid, idx) => this.onRuneEquip(sid, idx) })
+    // 결과 화면 — 다시 하기를 누르면 씬을 재시작한다
+    this.result = createResultScreen({ onRetry: () => this.scene.restart() })
     // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
     if (this.growthBtn) this.growthBtn.setVisible(false)
     if (this.growthBtnText) this.growthBtnText.setVisible(false)
@@ -556,17 +597,27 @@ class GameScene extends Phaser.Scene {
   }
 
   // 스킬에 장착. slotIdx가 없으면 빈 슬롯 우선, 없으면 첫 슬롯 교체.
+  // skillId 가 null/미지정이면 **장착하지 않고 가방으로** 보낸다.
+  //   장착을 강제하면 슬롯이 꽉 찬 상태에서 더 좋은 룬을 억지로 빼야 했다.
+  //   버리는 게 아니라 가방에 남으므로 다음 레벨업 화면에서 다시 판단할 수 있다.
   onRuneEquip(skillId, slotIdx = -1) {
     const rune = this._pendingRunes.shift()
     if (rune) {
-      const slots = this.runeSlots[skillId]
-      let i = slotIdx
-      if (i < 0 || i >= slots.length) {
-        i = slots.findIndex((r) => !r)
-        if (i < 0) i = 0
+      const slots = skillId ? this.runeSlots[skillId] : null
+      if (slots) {
+        let i = slotIdx
+        if (i < 0 || i >= slots.length) {
+          i = slots.findIndex((r) => !r)
+          if (i < 0) i = 0
+        }
+        const old = slots[i]
+        slots[i] = rune
+        if (old) this.runeBag.push(old) // 교체로 빠진 룬은 버리지 않고 가방으로
+        this.recompute()
+      } else {
+        rune.isNew = true
+        this.runeBag.push(rune)
       }
-      slots[i] = rune
-      this.recompute()
     }
     this.runeOpen = false
     this.maybeOpenModal()
@@ -1061,7 +1112,12 @@ class GameScene extends Phaser.Scene {
       .setDepth(9)
 
     this.input.on('pointerdown', (p) => {
-      if (this.gameOver) return this.scene.restart()
+      // 사망 후: 결과 화면이 뜨기 전(사망 애니 재생 중) 클릭은 무시한다.
+      // 그러지 않으면 결과 화면을 건너뛰고 **최고 기록이 저장되지 않는다.**
+      if (this.gameOver) {
+        if (this.result && this.result.isOpen) this.scene.restart()
+        return
+      }
       // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
       if (this.pauseBtn.getBounds().contains(p.x, p.y)) return
       if (this.growthBtn.getBounds().contains(p.x, p.y)) return
@@ -1093,7 +1149,8 @@ class GameScene extends Phaser.Scene {
     this.input.on('pointerup', () => this.releaseStick())
 
     this.input.keyboard.on('keydown-SPACE', () => {
-      if (this.gameOver) this.scene.restart()
+      // 결과 화면이 뜬 뒤에만 재시작 (기록 저장 보장)
+      if (this.gameOver && this.result && this.result.isOpen) this.scene.restart()
     })
 
     // PC: ESC 또는 P 로 멈춤 토글
@@ -1184,6 +1241,15 @@ class GameScene extends Phaser.Scene {
     e.boss = spec.boss
     e.type = spec.type || 'basic'
     e.ranged = spec.ranged || false
+    // 엘리트 — kind id('charger'|...) 또는 null. 아래 3개는 패턴 상태.
+    e.elite = spec.elite || null
+    e.eliteRow = spec.eliteRow || 0
+    e.charging = 0 // >0 이면 돌진 중(이 시간 동안 저장된 방향으로 직진)
+    e.chvx = 0
+    e.chvy = 0
+    e.windup = 0 // >0 이면 예고 중(제자리에 멈춘다 — 회피할 틈을 준다)
+    e.buffed = false // 수호자 오라 적용 여부(매 프레임 재계산)
+    e.auraPulse = 0 // 수호자 오라 펄스 연출 잔여 시간 (풀 재사용 시 잔류 방지)
     e.kbx = 0
     e.kby = 0
     e.stun = 0 // 피격 경직 남은 시간(초)
@@ -1193,9 +1259,11 @@ class GameScene extends Phaser.Scene {
     e.animOff = (Math.random() * 4) | 0 // 걷기 프레임 위상(개체별 어긋나게)
     e.atk = spec.boss
       ? this.cfg.boss.attackInterval
-      : spec.ranged
-        ? this.cfg.enemy.shooterInterval
-        : 0
+      : spec.elite
+        ? this.cfg.elite.attackInterval * 0.5 // 등장 후 첫 패턴은 조금 빨리(존재감)
+        : spec.ranged
+          ? this.cfg.enemy.shooterInterval
+          : 0
     this.enemies.push(e)
     return e
   }
@@ -1238,6 +1306,55 @@ class GameScene extends Phaser.Scene {
       boss: false,
       type,
       ranged,
+    })
+  }
+
+  // 엘리트 등장 — 시간 기반. 룬 드랍이 여기에 묶여 있으므로
+  // 이 주기가 곧 "판당 룬 개수"다(킬 수와 무관 → 실력 편차에 덜 흔들린다).
+  spawnElite() {
+    const el = this.cfg.elite
+    // 동시 생존 상한 — 넘으면 이번 차례는 건너뛴다(누적은 유지하지 않음)
+    let alive = 0
+    for (let i = 0; i < this.enemies.length; i++) if (this.enemies[i].elite) alive++
+    if (alive >= el.maxAlive) return false
+
+    const kind = ELITE_KINDS[(Math.random() * ELITE_KINDS.length) | 0]
+    const p = this.edgePosition(60)
+    this.makeEnemy(p.x, p.y, {
+      hp: this.enemyHpNow * el.hpMul,
+      r: el.radius,
+      speed: this.cfg.enemy.speed * el.speedMul,
+      dmg: el.contactDamage,
+      kbResist: el.knockbackResist,
+      gems: el.gems,
+      boss: false,
+      type: 'elite',
+      elite: kind.id,
+      eliteRow: kind.row,
+    })
+    this.eliteCount++
+    this.announceElite(kind)
+    return true
+  }
+
+  // 보스처럼 화면을 덮지 않고, 짧게 스쳐가는 알림. 색 = 그 엘리트의 패턴 색.
+  announceElite(kind) {
+    const t = this.add
+      .text(W / 2, 96, `엘리트 · ${kind.name}`, {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '22px',
+        color: '#' + kind.tint.toString(16).padStart(6, '0'),
+      })
+      .setOrigin(0.5)
+      .setDepth(25)
+
+    this.tweens.add({
+      targets: t,
+      alpha: { from: 1, to: 0 },
+      y: 78,
+      duration: 1200,
+      ease: 'Quad.easeOut',
+      onComplete: () => t.destroy(),
     })
   }
 
@@ -1590,6 +1707,87 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // --- 엘리트 패턴 ---------------------------------------------------------
+  // 공통 규칙: **반드시 예고(telegraph) 후 발동**. 예고 없는 큰 피해는 불공평하게 느껴진다.
+  // 예고 중에는 엘리트가 멈춘다(e.windup) → 플레이어가 읽고 대응할 틈이 생긴다.
+  eliteAttack(e) {
+    const el = this.cfg.elite
+    const ang = Math.atan2(this.player.y - e.y, this.player.x - e.x)
+    e.windup = el.telegraphTime
+
+    if (e.elite === 'charger') {
+      // 돌격자 — 조준 방향으로 직선 돌진. 정면이 아니라 **측면**으로 피해야 한다.
+      const t = this.pushTele(e.x, e.y, el.telegraphTime, 'charge', e)
+      t.ang = ang
+      t.len = e.speed * el.chargeSpeedMul * el.chargeDur
+    } else if (e.elite === 'bombardier') {
+      // 포격수 — 플레이어의 **현재 위치**에 착탄 예고 원. 그 자리를 비우면 피한다.
+      const t = this.pushTele(this.player.x, this.player.y, el.telegraphTime, 'shell', e)
+      t.r = el.shellRadius
+    } else if (e.elite === 'scattershot') {
+      // 산탄사수 — 부채꼴 다중 탄. 라인에서 벗어나거나 사이로 빠져야 한다.
+      const t = this.pushTele(e.x, e.y, el.telegraphTime, 'fan', e)
+      t.ang = ang
+    } else if (e.elite === 'warden') {
+      // 수호자는 능동 공격이 없다 — 오라가 상시 발동(updateEnemies에서 처리).
+      // 대신 주기마다 오라를 시각적으로 크게 펄스해 "저것부터 죽여야 한다"를 알린다.
+      e.windup = 0
+      e.auraPulse = 0.6
+    }
+  }
+
+  pushTele(x, y, life, kind, owner) {
+    const t = this.telePool.pop() || {}
+    t.x = x
+    t.y = y
+    t.life = life
+    t.max = life
+    t.kind = kind
+    t.owner = owner || null
+    t.ang = 0
+    t.len = 0
+    t.r = 0
+    this.telegraphs.push(t)
+    return t
+  }
+
+  // 포격 착탄 — 폭발 링(시각) + 반경 안이면 플레이어 피해.
+  // explodeAt 은 "적"에게 피해를 주는 함수라 여기서는 쓰지 않는다(적끼리 자해 방지).
+  landShell(t) {
+    const el = this.cfg.elite
+    this.explosions.push({ x: t.x, y: t.y, r: t.r, life: 0.32, max: 0.32 })
+    this.cameras.main.shake(90, 0.004)
+    const dx = this.player.x - t.x
+    const dy = this.player.y - t.y
+    const hit = t.r + this.stats.player.radius
+    if (dx * dx + dy * dy <= hit * hit && this.invulnLeft === 0) {
+      this.hitPlayer(el.shellDamage)
+    }
+  }
+
+  // 산탄 — 부채꼴로 여러 발. 발사 시점의 엘리트 위치에서 나간다.
+  fireScatter(t) {
+    const el = this.cfg.elite
+    const src = t.owner
+    const ox = src ? src.x : t.x
+    const oy = src ? src.y : t.y
+    const n = Math.max(1, Math.round(el.scatterCount))
+    const mid = (n - 1) / 2
+    for (let i = 0; i < n; i++) {
+      const a = t.ang + (i - mid) * el.scatterSpread
+      const p = this.eProjPool.pop() || {}
+      p.x = ox
+      p.y = oy
+      p.vx = Math.cos(a) * el.scatterBoltSpeed
+      p.vy = Math.sin(a) * el.scatterBoltSpeed
+      p.dmg = el.scatterBoltDamage
+      p.life = 4
+      p.tint = 0x6ed6ce
+      p.rad = 5
+      this.eProjectiles.push(p)
+    }
+  }
+
   // 원거리형 적의 단발 탄 (예고 없이 즉시)
   fireEnemyShot(e) {
     const c = this.cfg.enemy
@@ -1601,24 +1799,50 @@ class GameScene extends Phaser.Scene {
     p.vy = Math.sin(ang) * c.shooterBoltSpeed
     p.dmg = c.shooterBoltDamage
     p.life = 4
+    p.tint = 0x94e2d5 // 원거리형 색(COLOR_SHOOTER)
+    p.rad = 5
     this.eProjectiles.push(p)
   }
 
   updateTelegraphs(dt) {
     const b = this.cfg.boss
+    const el = this.cfg.elite
     for (let i = this.telegraphs.length - 1; i >= 0; i--) {
       const t = this.telegraphs[i]
+      // 돌격자 예고선은 엘리트가 움직이지 않아도 몸에 붙어 있어야 자연스럽다
+      if (t.kind === 'charge' && t.owner) {
+        t.x = t.owner.x
+        t.y = t.owner.y
+      }
       t.life -= dt
       if (t.life > 0) continue
-      // 예고 끝 → 실탄 발사
-      const p = this.eProjPool.pop() || {}
-      p.x = t.x
-      p.y = t.y
-      p.vx = Math.cos(t.ang) * b.boltSpeed
-      p.vy = Math.sin(t.ang) * b.boltSpeed
-      p.dmg = b.boltDamage
-      p.life = 4
-      this.eProjectiles.push(p)
+
+      // 예고 끝 → 종류별 발동. kind 가 없으면 기존 보스 라인탄(하위 호환).
+      if (t.kind === 'charge') {
+        const o = t.owner
+        // 예고 도중 죽었으면 발동하지 않는다 (indexOf로 생존 확인)
+        if (o && this.enemies.indexOf(o) >= 0) {
+          o.charging = el.chargeDur
+          o.chvx = Math.cos(t.ang) * o.speed * el.chargeSpeedMul
+          o.chvy = Math.sin(t.ang) * o.speed * el.chargeSpeedMul
+        }
+      } else if (t.kind === 'shell') {
+        this.landShell(t) // 착탄은 시전자 생존과 무관(이미 날아간 포탄)
+      } else if (t.kind === 'fan') {
+        if (t.owner && this.enemies.indexOf(t.owner) >= 0) this.fireScatter(t)
+      } else {
+        const p = this.eProjPool.pop() || {}
+        p.x = t.x
+        p.y = t.y
+        p.vx = Math.cos(t.ang) * b.boltSpeed
+        p.vy = Math.sin(t.ang) * b.boltSpeed
+        p.dmg = b.boltDamage
+        p.life = 4
+        p.tint = 0xf38ba8 // 보스 탄 색
+        p.rad = 6
+        this.eProjectiles.push(p)
+      }
+      t.owner = null // 풀에 죽은 적 참조를 남기지 않는다(GC/버그 방지)
       this.removeSwap(this.telegraphs, i, this.telePool)
     }
   }
@@ -1717,28 +1941,38 @@ class GameScene extends Phaser.Scene {
     const ex = e.x
     const ey = e.y
     const wasBoss = e.boss
+    const wasElite = !!e.elite
 
-    // 사망 파편 — 적 색으로 튀어나가며 사라짐
+    // 사망 파편 — 적 색으로 튀어나가며 사라짐. 엘리트는 패턴 색 + 파편을 크게.
     const col = e.boss
       ? COLOR_BOSS
-      : e.type === 'rusher'
-        ? COLOR_RUSHER
-        : e.type === 'shooter'
-          ? COLOR_SHOOTER
-          : COLOR_ENEMY
-    this.spawnParticles(ex, ey, e.boss ? 20 : 9, col, e.boss ? 240 : 170, e.boss ? 4 : 3, 0.45)
+      : wasElite
+        ? ELITE_BY_ID[e.elite].tint
+        : e.type === 'rusher'
+          ? COLOR_RUSHER
+          : e.type === 'shooter'
+            ? COLOR_SHOOTER
+            : COLOR_ENEMY
+    const nPart = e.boss ? 20 : wasElite ? 16 : 9
+    this.spawnParticles(ex, ey, nPart, col, e.boss ? 240 : 200, e.boss ? 4 : 3, 0.45)
     if (wasBoss) this.cameras.main.shake(160, 0.006)
+    else if (wasElite) this.cameras.main.shake(110, 0.004)
     this.removeSwap(this.enemies, idx, this.enemyPool)
     this.kills++
     this.killText.setText('Kills: ' + this.kills)
     this.gainXp(e.gems * this.cfg.xp.gemValue)
 
-    // 보스 처치 → 룬 드랍 (레벨업 카드가 있으면 그 다음에 순서대로)
+    // 룬 드랍 — 보스와 **엘리트**만. 일반몹 %드랍은 폐기(킬 비례 폭주 때문).
+    // normalDropChance 는 기본 0이지만 되돌리고 싶을 때를 위해 경로는 남겨둔다.
     if (wasBoss) {
+      this.bossKills++
       this.grantRune(true)
       this.maybeOpenModal()
+    } else if (wasElite) {
+      this.eliteKills++
+      this.grantRune(false)
+      this.maybeOpenModal()
     } else if (Math.random() < (this.cfg.rune?.normalDropChance ?? 0)) {
-      // 일반몹 드랍 — 가방에 보관(NEW). 장착은 다음 레벨업 화면에서.
       this.bagGrantRune()
     }
 
@@ -1785,6 +2019,20 @@ class GameScene extends Phaser.Scene {
     // 뱀서 표준: 레벨업 → 정지 후 3택 카드. (능력치/스킬포인트 지급 보류)
     this.lvText.setText('Lv ' + this.level)
     this._pendingLevels = (this._pendingLevels || 0) + levels
+
+    // 첫 룬 보장 — Lv3 도달 시 아직 룬이 하나도 없으면 1개 지급한다.
+    //
+    // 왜 필요한가: 룬 드랍을 엘리트 전용(시간 기반)으로 바꾸니 후반 폭주는 잡혔지만,
+    // **초반에 급사한 판이 완전히 무보상**이 됐다. 시뮬로 재보니 판의 35~55%가
+    // 룬 0개로 끝난다(회피 실력 가정을 바꿔도 이 비율은 그대로 높다).
+    // 엘리트 등장을 앞당기는 방법은 효과가 없었다 — 엘리트가 일찍 오면
+    // 그만큼 일찍 죽어서 총 룬 수가 오히려 줄었다(생존 중앙 81s → 55s).
+    // 그래서 전투 결과에 의존하지 않는 **진행 기반 보장**으로 해결한다.
+    if (this.level >= 3 && !this._firstRuneGiven) {
+      this._firstRuneGiven = true
+      this.grantRune(false)
+    }
+
     this.maybeOpenModal()
   }
 
@@ -1961,35 +2209,49 @@ class GameScene extends Phaser.Scene {
     }
     this.releaseStick()
 
-    const f = { fontFamily: 'Arial, sans-serif' }
+    // 결과 화면 — 성과 요약 + 최고 기록 비교. 사망 애니를 잠깐 보여준 뒤 띄운다.
+    this.time.delayedCall(650, () => {
+      if (!this.gameOver) return // 그 사이 재시작됐으면 무시
+      this.result.show(this.buildResult())
+    })
+  }
 
-    this.add
-      .text(W / 2, H / 2 - 50, 'GAME OVER', {
-        ...f,
-        fontSize: '56px',
-        color: '#f38ba8',
-      })
-      .setOrigin(0.5)
-      .setDepth(30)
+  // 결과 화면에 넘길 데이터 — 이번 판에 장착한 룬 전체 + 최종 빌드
+  buildResult() {
+    const runes = []
+    for (const sid in this.runeSlots) {
+      for (const r of this.runeSlots[sid]) {
+        if (!r) continue
+        runes.push({
+          icon: RUNES[r.id].icon,
+          label: runeLabel(r),
+          desc: runeDesc(r),
+          tier: r.tier,
+          tierColor: RUNE_TIERS[r.tier].color,
+        })
+      }
+    }
+    // 등급 높은 순 → 좋은 걸 위에 보여준다
+    runes.sort((a, b) => b.tier - a.tier)
 
-    this.add
-      .text(
-        W / 2,
-        H / 2 + 16,
-        `버틴 시간 ${this.formatTime()}   ·   Lv ${this.level}   ·   처치 ${this.kills}   ·   보스 ${this.bossCount}`,
-        { ...f, fontSize: '20px', color: '#cdd6f4' }
-      )
-      .setOrigin(0.5)
-      .setDepth(30)
+    const skills = []
+    for (const id in CARD_SKILLS) {
+      const lv = this.skillLevels[id] || 0
+      if (lv > 0) skills.push({ icon: CARD_SKILLS[id].icon, name: CARD_SKILLS[id].name, level: lv })
+    }
 
-    this.add
-      .text(W / 2, H / 2 + 70, '클릭 또는 Space 로 재시작', {
-        ...f,
-        fontSize: '16px',
-        color: '#a6adc8',
-      })
-      .setOrigin(0.5)
-      .setDepth(30)
+    return {
+      survived: this.elapsed,
+      timeText: this.formatTime(),
+      level: this.level,
+      kills: this.kills,
+      // ⚠️ bossCount 는 "등장 수"다. 처치 수는 bossKills 를 따로 센다
+      //    (예전엔 등장 수를 '보스 처치'로 표시해 실제보다 부풀려 나왔다).
+      bossKills: this.bossKills,
+      eliteKills: this.eliteKills,
+      runes,
+      skills,
+    }
   }
 
   formatTime() {
@@ -2039,6 +2301,17 @@ class GameScene extends Phaser.Scene {
       this.spawnEnemy()
     }
 
+    // 엘리트 — 시간 기반 등장. 룬 드랍이 여기에만 걸려 있으므로 이 주기가
+    // 판당 룬 개수를 결정한다(킬 비례가 아니라서 후반에 폭주하지 않는다).
+    this.eliteAcc += dt
+    const eliteEvery =
+      this.eliteCount === 0 ? this.cfg.elite.firstSec : this.cfg.elite.everySec
+    if (this.eliteAcc >= eliteEvery) {
+      // 상한에 걸려 실패하면 누적을 조금만 되돌려 잠시 후 다시 시도한다
+      if (this.spawnElite()) this.eliteAcc -= eliteEvery
+      else this.eliteAcc = eliteEvery - 3
+    }
+
     this.bossAcc += dt
     // 첫 보스만 firstBossSec 로 앞당김(룬 조기 경험). 이후는 everySec 간격.
     const bossEvery =
@@ -2047,8 +2320,9 @@ class GameScene extends Phaser.Scene {
       this.bossAcc -= bossEvery
       this.spawnBoss()
     }
+    // 엘리트가 룬 공급원이므로 "언제 오나"를 보여주는 게 보스보다 중요하다
     this.bossTimerText.setText(
-      `다음 보스 ${Math.ceil(bossEvery - this.bossAcc)}초`
+      `엘리트 ${Math.max(0, Math.ceil(eliteEvery - this.eliteAcc))}초  ·  보스 ${Math.ceil(bossEvery - this.bossAcc)}초`
     )
 
     const { vx, vy } = this.moveInput()
@@ -2183,6 +2457,16 @@ class GameScene extends Phaser.Scene {
 
     let incoming = 0 // 이번 프레임에 닿은 적 중 가장 아픈 것
     const despawn2 = DESPAWN_DIST * DESPAWN_DIST
+    const el = this.cfg.elite
+
+    // 수호자 오라 — 매 프레임 다시 수집한다. 수호자가 죽으면 강화가 즉시 풀려야
+    // "저것부터 죽이면 편해진다"는 인과가 플레이어에게 읽힌다(캐시하면 안 됨).
+    const wardens = this._wardenBuf
+    wardens.length = 0
+    for (let i = 0; i < this.enemies.length; i++) {
+      if (this.enemies[i].elite === 'warden') wardens.push(this.enemies[i])
+    }
+    const wr2 = el.wardenRadius * el.wardenRadius
 
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i]
@@ -2208,6 +2492,37 @@ class GameScene extends Phaser.Scene {
         }
       }
 
+      if (e.auraPulse > 0) e.auraPulse -= dt
+
+      // 돌격 중 — 저장된 방향으로 직진. 경직·분리·플레이어 밀어내기 모두 무시하고
+      // **뚫고 지나간다**. 예고를 봤다면 측면으로 피할 수 있으므로 공평하다.
+      if (e.charging > 0) {
+        e.charging -= dt
+        e.x += e.chvx * dt
+        e.y += e.chvy * dt
+        if (e.flash > 0) e.flash -= dt
+        const cdx = px - e.x
+        const cdy = py - e.y
+        const ct = pr + e.r
+        if (cdx * cdx + cdy * cdy <= ct * ct && el.chargeDamage > incoming) {
+          incoming = el.chargeDamage
+        }
+        continue
+      }
+
+      // 예고 중 — 제자리에 멈춘다. 이 정지가 곧 "지금 뭔가 온다"는 신호다.
+      if (e.windup > 0) {
+        e.windup -= dt
+        if (e.flash > 0) e.flash -= dt
+        e.kbx *= decay
+        e.kby *= decay
+        const wdx = px - e.x
+        const wdy = py - e.y
+        const wt = pr + e.r
+        if (wdx * wdx + wdy * wdy <= wt * wt && e.dmg > incoming) incoming = e.dmg
+        continue
+      }
+
       // 피격 경직 — 이동/추격/분리/공격 전부 정지 (플래시·넉백만 감쇠)
       if (e.stun > 0) {
         e.stun -= dt
@@ -2218,6 +2533,20 @@ class GameScene extends Phaser.Scene {
       }
 
       const len = Math.hypot(dx, dy) || 1
+
+      // 수호자 오라 판정 — 엘리트/보스는 강화 대상이 아니다(엘리트가 서로 버프하면 폭주)
+      e.buffed = false
+      if (wardens.length && !e.elite && !e.boss) {
+        for (let w = 0; w < wardens.length; w++) {
+          const wd = wardens[w]
+          const wdx = e.x - wd.x
+          const wdy = e.y - wd.y
+          if (wdx * wdx + wdy * wdy <= wr2) {
+            e.buffed = true
+            break
+          }
+        }
+      }
 
       // 겹침 방지: 그리드로 근처 적만 조회해 밀어냄 (최대 6마리)
       let sx = 0
@@ -2264,6 +2593,11 @@ class GameScene extends Phaser.Scene {
       if (e.boss && dx * dx + dy * dy > BOSS_LEASH * BOSS_LEASH) {
         espeed = Math.max(e.speed, this.stats.player.speed * BOSS_CATCHUP)
       }
+      // 수호자 오라 — 이속 강화. ⚠️ 플레이어 이속을 넘으면 회피 자체가 불가능해지므로
+      // 강화 후 속도를 플레이어의 90%로 clamp 한다(돌진형에 겹쳐 붙는 경우 대비).
+      if (e.buffed) {
+        espeed = Math.min(espeed * el.wardenSpeedMul, this.stats.player.speed * 0.9)
+      }
 
       e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
       e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt
@@ -2284,12 +2618,18 @@ class GameScene extends Phaser.Scene {
         e.y = py + uy * minD
       }
 
-      // 보스 라인 탄막 / 원거리형 단발
+      // 보스 라인 탄막 / 엘리트 패턴 / 원거리형 단발
       if (e.boss) {
         e.atk -= dt
         if (e.atk <= 0) {
           e.atk += this.cfg.boss.attackInterval
           this.fireBossLine(e)
+        }
+      } else if (e.elite) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += el.attackInterval
+          this.eliteAttack(e)
         }
       } else if (e.ranged) {
         e.atk -= dt
@@ -2301,8 +2641,9 @@ class GameScene extends Phaser.Scene {
 
       // 가장자리에 닿아 있으면(겹침 방지로 딱 붙은 상태 포함) 접촉 피해
       const touch = pr + e.r
-      if (dx * dx + dy * dy <= touch * touch && e.dmg > incoming) {
-        incoming = e.dmg
+      const cdmg = e.buffed ? e.dmg * el.wardenDamageMul : e.dmg
+      if (dx * dx + dy * dy <= touch * touch && cdmg > incoming) {
+        incoming = cdmg
       }
     }
 
@@ -2599,6 +2940,20 @@ class GameScene extends Phaser.Scene {
       ge.fillEllipse(e.x, e.y + e.r * 0.9, e.r * 1.9, e.r * 0.9)
     }
 
+    // 1-b) 수호자 오라 — 바닥에 그린다(스프라이트 아래). 이 원 안의 적이 강해지므로
+    //      "원을 지우려면 중심을 죽여야 한다"가 그림만으로 읽혀야 한다.
+    const auraR = this.cfg.elite.wardenRadius
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (e.elite !== 'warden') continue
+      const pulse = e.auraPulse > 0 ? 1 + (e.auraPulse / 0.6) * 0.12 : 1
+      const breathe = 0.9 + 0.1 * Math.sin(this.elapsed * 3)
+      ge.fillStyle(0xc08ef4, 0.07 * breathe)
+      ge.fillCircle(e.x, e.y, auraR * pulse)
+      ge.lineStyle(2, 0xc08ef4, 0.32 * breathe)
+      ge.strokeCircle(e.x, e.y, auraR * pulse)
+    }
+
     // 2) 일반 적 — 풀링 스프라이트(타입=행[고블린/사냥개/궁수], 걷기=열).
     //    크기는 반지름 비례(setScale) → 튜너 '크기'로 조정됨. 피격/화상은 tint.
     //    화면 밖은 이미 컬링됐으므로 활성 스프라이트 = 화면 내 적 수뿐.
@@ -2607,7 +2962,7 @@ class GameScene extends Phaser.Scene {
     let bi = 0
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
-      if (e.boss) continue
+      if (e.boss || e.elite) continue // 보스=돔, 엘리트=별도 시트(48px)
       let spr = sprites[bi]
       if (!spr) {
         spr = this.add.sprite(0, 0, 'enemies', 0).setOrigin(0.5, 0.72)
@@ -2621,11 +2976,41 @@ class GameScene extends Phaser.Scene {
       spr.setFlipX(px < e.x) // 플레이어를 바라보게
       if (e.flash > 0) spr.setTintFill(0xffffff) // 피격 흰 섬광
       else if (e.burn && e.burn.time > 0) spr.setTint(0xff9a4a) // 화상 주황
+      else if (e.buffed) spr.setTint(0xc08ef4) // 수호자 오라 — 강화된 적은 보라
       else spr.clearTint()
       spr.visible = true
       bi++
     }
     for (let k = bi; k < sprites.length; k++) sprites[k].visible = false
+
+    // 2-b) 엘리트 — 48px 시트(행=패턴). 일반 몹 위 레이어라 잡몹에 가리지 않는다.
+    //      예고 중에는 걷기 프레임을 멈추고(정지 자세) 흰색으로 깜빡여 "온다"를 알린다.
+    const esp = this.eliteSprites
+    let ei = 0
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (!e.elite) continue
+      let spr = esp[ei]
+      if (!spr) {
+        spr = this.add.sprite(0, 0, 'elites', 0).setOrigin(0.5, 0.72)
+        this.eliteLayer.add(spr)
+        esp[ei] = spr
+      }
+      // 예고/돌진 중이면 프레임 2~3(장전·돌진 자세)을 쓴다
+      const acting = e.windup > 0 || e.charging > 0
+      const fr = acting ? 2 + (Math.floor(this.elapsed * 12) & 1) : (walk + e.animOff) & 3
+      spr.setFrame(e.eliteRow * 4 + fr)
+      spr.setPosition(e.x, e.y)
+      spr.setScale(e.r * ELITE_SPRITE_K)
+      spr.setFlipX(px < e.x)
+      if (e.flash > 0) spr.setTintFill(0xffffff)
+      else if (e.windup > 0 && Math.floor(this.elapsed * 14) % 2 === 0) spr.setTintFill(0xffffff)
+      else if (e.burn && e.burn.time > 0) spr.setTint(0xff9a4a)
+      else spr.clearTint()
+      spr.visible = true
+      ei++
+    }
+    for (let k = ei; k < esp.length; k++) esp[k].visible = false
 
     // 3) 보스 오버레이 준비 — 스프라이트 위층에 돔/체력바를 그린다
     const gt = this.gfxEnemyTop
@@ -2663,6 +3048,39 @@ class GameScene extends Phaser.Scene {
       gt.fillStyle(0xf38ba8, 1)
       gt.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 5)
     }
+
+    // 4-b) 엘리트 체력바 + 이름표.
+    //   체력바가 없으면 "체력 4배"가 플레이어에게 전혀 안 보여서 위협이 아니라
+    //   답답함으로만 남는다 — 엘리트에게 체력바는 선택이 아니라 필수다.
+    const labels = this.eliteLabels
+    let li = 0
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i]
+      if (!e.elite) continue
+      const kind = ELITE_BY_ID[e.elite]
+      const bw = e.r * 2.8
+      const bx = e.x - bw / 2
+      const by = e.y - e.r - 16
+      gt.fillStyle(0x1b1b28, 0.9)
+      gt.fillRect(bx - 1, by - 1, bw + 2, 6)
+      gt.fillStyle(kind.tint, 1)
+      gt.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 4)
+
+      let lb = labels[li]
+      if (!lb) {
+        lb = this.add
+          .text(0, 0, '', { fontFamily: 'Arial, sans-serif', fontSize: '11px' })
+          .setOrigin(0.5, 1)
+        this.eliteLayer.add(lb)
+        labels[li] = lb
+      }
+      lb.setText(kind.name)
+      lb.setColor('#' + kind.tint.toString(16).padStart(6, '0'))
+      lb.setPosition(e.x, by - 3)
+      lb.visible = true
+      li++
+    }
+    for (let k = li; k < labels.length; k++) labels[k].visible = false
 
     const ga = this.gfxArrows
     ga.clear()
@@ -2795,11 +3213,67 @@ class GameScene extends Phaser.Scene {
       gf.fillCircle(ex.x, ex.y, ex.r)
     }
 
-    // 보스 탄막 예고 — 발사 직전일수록 진해지는 라인
+    // 예고 표시 — 종류마다 모양이 달라야 "무엇이 오는지"가 읽힌다.
+    //   charge = 돌진 경로(길이 제한된 두꺼운 띠)  → 측면으로 비켜라
+    //   shell  = 지면 착탄 원(안쪽이 차오름)        → 그 자리를 떠나라
+    //   fan    = 부채꼴 라인 여러 개                → 각도에서 빠져라
+    //   (kind 없음) = 기존 보스 라인탄
     const TELE_LEN = 900
+    const elc = this.cfg.elite
     for (let i = 0; i < this.telegraphs.length; i++) {
       const t = this.telegraphs[i]
-      const k = 1 - t.life / t.max // 0 → 1 (발사 임박)
+      const k = 1 - t.life / t.max // 0 → 1 (발동 임박)
+
+      if (t.kind === 'charge') {
+        const ex2 = t.x + Math.cos(t.ang) * t.len
+        const ey2 = t.y + Math.sin(t.ang) * t.len
+        // 굵은 경로 띠 + 임박할수록 진해짐
+        gf.lineStyle(14, 0xec6050, 0.1 + k * 0.22)
+        gf.beginPath()
+        gf.moveTo(t.x, t.y)
+        gf.lineTo(ex2, ey2)
+        gf.strokePath()
+        gf.lineStyle(2, 0xec6050, 0.4 + k * 0.5)
+        gf.beginPath()
+        gf.moveTo(t.x, t.y)
+        gf.lineTo(ex2, ey2)
+        gf.strokePath()
+        continue
+      }
+
+      if (t.kind === 'shell') {
+        // 바깥 테두리는 고정 크기(착탄 범위), 안쪽이 차오르며 타이밍을 알려준다
+        gf.lineStyle(2, 0xf29840, 0.5 + k * 0.4)
+        gf.strokeCircle(t.x, t.y, t.r)
+        gf.fillStyle(0xf29840, 0.1 + k * 0.16)
+        gf.fillCircle(t.x, t.y, t.r * k)
+        // 십자 조준 — 지면 표시라는 걸 분명히
+        gf.lineStyle(1, 0xf29840, 0.45)
+        gf.beginPath()
+        gf.moveTo(t.x - t.r, t.y)
+        gf.lineTo(t.x + t.r, t.y)
+        gf.moveTo(t.x, t.y - t.r)
+        gf.lineTo(t.x, t.y + t.r)
+        gf.strokePath()
+        continue
+      }
+
+      if (t.kind === 'fan') {
+        const ox = t.owner ? t.owner.x : t.x
+        const oy = t.owner ? t.owner.y : t.y
+        const n = Math.max(1, Math.round(elc.scatterCount))
+        const mid = (n - 1) / 2
+        gf.lineStyle(2, 0x6ed6ce, 0.2 + k * 0.45)
+        gf.beginPath()
+        for (let j = 0; j < n; j++) {
+          const a = t.ang + (j - mid) * elc.scatterSpread
+          gf.moveTo(ox, oy)
+          gf.lineTo(ox + Math.cos(a) * 340, oy + Math.sin(a) * 340)
+        }
+        gf.strokePath()
+        continue
+      }
+
       gf.lineStyle(2 + k * 2, 0xf38ba8, 0.25 + k * 0.5)
       gf.beginPath()
       gf.moveTo(t.x, t.y)
@@ -2807,11 +3281,14 @@ class GameScene extends Phaser.Scene {
       gf.strokePath()
     }
 
-    // 적 투사체 (보스 탄)
-    gf.fillStyle(0xf38ba8, 1)
+    // 적 투사체 — 발사한 쪽의 색으로 그린다(보스 분홍 / 산탄사수 청록 등).
+    // 풀에서 재사용되므로 tint 는 스폰 시점에 항상 지정해야 한다(안 하면 이전 색이 남는다).
     for (let i = 0; i < this.eProjectiles.length; i++) {
       const p = this.eProjectiles[i]
-      gf.fillCircle(p.x, p.y, 6)
+      gf.fillStyle(p.tint || 0xf38ba8, 1)
+      gf.fillCircle(p.x, p.y, p.rad || 6)
+      gf.fillStyle(0xffffff, 0.5)
+      gf.fillCircle(p.x - 1.5, p.y - 1.5, (p.rad || 6) * 0.35)
     }
 
     // 날아가는 수류탄 (포물선) — 바닥 그림자 + 솟았다 떨어지는 본체

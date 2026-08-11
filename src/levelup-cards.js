@@ -21,6 +21,8 @@ export function createLevelupScreen({ onPick, onEquipFromBag, getRuneState }) {
   let sel = -1 // 선택한 가방 룬 index
 
   const root = document.createElement('div')
+  // scene.restart()로 create()가 다시 돌 때 오버레이가 DOM에 쌓이는 것을 막는다
+  document.getElementById('levelup-modal')?.remove()
   root.id = 'levelup-modal'
   root.className = 'lv-hidden'
   root.innerHTML = `

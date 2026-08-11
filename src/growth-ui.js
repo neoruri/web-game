@@ -86,6 +86,8 @@ export function createGrowthScreen({
   let sel = { type: 'attr', id: 'str' } // 하단 독에 표시할 대상
 
   const root = document.createElement('div')
+  // scene.restart()로 create()가 다시 돌 때 오버레이가 DOM에 쌓이는 것을 막는다
+  document.getElementById('growth-modal')?.remove()
   root.id = 'growth-modal'
   root.className = 'growth-hidden'
   root.innerHTML = `

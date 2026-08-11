@@ -56,11 +56,45 @@ export const DEFAULTS = {
     rampCap: 17,
     maxEnemies: 300,
   },
-  // 룬 드랍 — 보스는 항상 1개(모달), 일반몹은 낮은 확률로 자동 장착.
-  // ⚠️ 일반 킬은 한 판 수백 마리라 확률이 조금만 커도 폭주한다.
-  //    0.01(1%) ≈ 한 판 3개 정도. 10%면 30개 → 절대 금지.
+  // 룬 드랍 — **엘리트/보스 전용**. 일반몹 %드랍은 폐기했다.
+  // 이유: 일반몹 드랍은 킬 수에 선형 비례하는데 킬 수가 후반에 폭증해서
+  //       10분에 룬이 50~100개까지 쌓였다(가방 UI가 사용 불가). 킬 비례를 버리고
+  //       **시간 기반**(엘리트 등장 주기)으로 바꾸면 판당 개수가 예측 가능해진다.
+  // ⚠️ normalDropChance 를 다시 0보다 크게 올리면 그 폭주가 그대로 재현된다.
   rune: {
-    normalDropChance: 0.01,
+    normalDropChance: 0,
+  },
+  // 엘리트 몹 — 예고가 있는 공격 패턴 4종. 시간 기반 등장 + 룬 확정 드랍.
+  // 능력치만 바꾸는 접두어(이속/체력)가 아니라 **플레이어가 할 행동을 바꾸는** 설계:
+  //   돌격자=측면 회피 / 포격수=자리 비우기 / 산탄사수=각도 이탈 / 수호자=우선순위 처치
+  elite: {
+    firstSec: 30, // 첫 엘리트 등장(초)
+    everySec: 24, // 이후 등장 간격(초)
+    maxAlive: 3, // 동시 생존 상한 (넘으면 등장을 미룬다)
+    hpMul: 4, // 일반 적 대비 체력 — 패턴을 최소 한 번은 보여줘야 하므로 필요
+    speedMul: 0.9,
+    radius: 16,
+    contactDamage: 14,
+    gems: 5,
+    knockbackResist: 0.4,
+    attackInterval: 4.5, // 패턴 발동 주기(초)
+    telegraphTime: 0.7, // 예고 시간 — 짧으면 불공평, 길면 시시하다
+    // 돌격자
+    chargeSpeedMul: 4.2,
+    chargeDur: 0.5,
+    chargeDamage: 22,
+    // 포격수
+    shellRadius: 46,
+    shellDamage: 18,
+    // 산탄사수
+    scatterCount: 5,
+    scatterSpread: 0.3, // 발사체 사이 각도(라디안)
+    scatterBoltSpeed: 200,
+    scatterBoltDamage: 8,
+    // 수호자 — 주변 일반 적을 강화(오라). 처치 우선순위를 만드는 장치.
+    wardenRadius: 150,
+    wardenSpeedMul: 1.35,
+    wardenDamageMul: 1.4,
   },
   boss: {
     everySec: 60,
@@ -207,6 +241,35 @@ export const SCHEMA = [
       { key: 'rampPerMin', label: '분당 스폰 배율', min: 1, max: 3, step: 0.05, effect: '↑ 1분마다 스폰량 급증(난이도 급상승)  ·  ↓ 완만' },
       { key: 'rampCap', label: '스폰 배율 상한', min: 1, max: 60, step: 1, effect: '↑ 후반 물량 상한이 높아 극한까지  ·  ↓ 상한이 낮아 관리 가능' },
       { key: 'maxEnemies', label: '동시 적 수 상한', min: 20, max: 1500, step: 20, effect: '↑ 화면에 적 많음(성능 부담↑)  ·  ↓ 덜 붐빔' },
+    ],
+  },
+  {
+    key: 'elite',
+    label: '엘리트 · 등장·체력',
+    fields: [
+      { key: 'firstSec', label: '첫 엘리트 등장(초)', min: 10, max: 180, step: 5, effect: '↑ 늦게 첫 등장(룬을 늦게 얻음)  ·  ↓ 일찍' },
+      { key: 'everySec', label: '등장 간격(초)', min: 8, max: 120, step: 2, effect: '↑ 드물게 등장(룬 적음)  ·  ↓ 자주(룬 많음). 판당 룬 개수를 직접 정하는 값' },
+      { key: 'maxAlive', label: '동시 생존 상한', min: 1, max: 8, step: 1, effect: '↑ 여러 마리가 겹쳐 패턴이 동시에 터짐  ·  ↓ 한 번에 하나씩' },
+      { key: 'hpMul', label: '체력 배수 (일반 대비)', min: 1, max: 12, step: 0.5, effect: '↑ 오래 살아 패턴을 여러 번 보여줌  ·  ↓ 너무 낮으면 패턴 보기 전에 죽어 접두어가 무의미' },
+      { key: 'radius', label: '크기(반지름)', min: 10, max: 34, step: 1, effect: '↑ 커서 일반 몹과 확실히 구분  ·  ↓ 작아서 묻힘' },
+      { key: 'contactDamage', label: '접촉 데미지', min: 1, max: 60, step: 1, effect: '↑ 닿으면 아픔  ·  ↓ 덜 아픔' },
+      { key: 'gems', label: '드랍 젬 수', min: 1, max: 30, step: 1, effect: '↑ 처치 보상 큼(레벨업 가속)  ·  ↓ 적음' },
+    ],
+  },
+  {
+    key: 'elite',
+    label: '엘리트 · 패턴',
+    fields: [
+      { key: 'attackInterval', label: '패턴 발동 주기(초)', min: 1, max: 12, step: 0.5, effect: '↑ 뜸하게 패턴  ·  ↓ 자주(압박↑)' },
+      { key: 'telegraphTime', label: '예고 시간(초)', min: 0.2, max: 2.5, step: 0.1, effect: '↑ 예고가 길어 피하기 쉬움  ·  ↓ 짧아서 불공평해짐(0.5 이하 비권장)' },
+      { key: 'chargeSpeedMul', label: '돌격자 돌진 속도 배수', min: 1.5, max: 8, step: 0.2, effect: '↑ 빠르게 꽂힘(측면 회피 필수)  ·  ↓ 느려서 쉽게 피함' },
+      { key: 'chargeDamage', label: '돌격자 돌진 피해', min: 1, max: 80, step: 1, effect: '↑ 맞으면 치명적  ·  ↓ 덜 아픔' },
+      { key: 'shellRadius', label: '포격수 폭발 반경(px)', min: 15, max: 140, step: 5, effect: '↑ 넓어 자리를 크게 비워야 함  ·  ↓ 좁아 조금만 움직이면 됨' },
+      { key: 'shellDamage', label: '포격수 폭발 피해', min: 1, max: 70, step: 1, effect: '↑ 착탄이 치명적  ·  ↓ 덜 아픔' },
+      { key: 'scatterCount', label: '산탄사수 발사체 수', min: 2, max: 12, step: 1, effect: '↑ 탄이 촘촘해 틈이 좁음  ·  ↓ 사이로 빠지기 쉬움' },
+      { key: 'scatterBoltDamage', label: '산탄사수 탄 피해', min: 1, max: 40, step: 1, effect: '↑ 한 발이 아픔  ·  ↓ 덜 아픔' },
+      { key: 'wardenRadius', label: '수호자 오라 반경(px)', min: 50, max: 400, step: 10, effect: '↑ 넓은 범위의 적이 강화됨(먼저 죽여야 함)  ·  ↓ 좁아 무시 가능' },
+      { key: 'wardenSpeedMul', label: '수호자 오라 이속 배수', min: 1, max: 2.2, step: 0.05, effect: '↑ 강화된 적이 빠름(1.6 넘으면 회피 불가)  ·  ↓ 체감 약함' },
     ],
   },
   {

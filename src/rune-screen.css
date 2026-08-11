@@ -76,3 +76,22 @@
 /* 스마트 기본값 — 빈 슬롯이 있는 스킬을 초록으로 추천 */
 .rn-skill.rn-hint { border-color: #4a9e6b; box-shadow: 0 0 0 1px #4a9e6b inset; }
 .rn-skill.rn-full { opacity: 0.82; }
+
+/* --- 장착 안 하고 넘기기 ---
+   장착이 강제였을 때는 슬롯이 꽉 찬 상태에서 좋은 룬을 억지로 빼야 했다.
+   버리는 게 아니라 가방으로 가므로, 판단을 레벨업 화면으로 미룰 수 있다. */
+.rn-foot { display: flex; justify-content: center; padding: 2px 0 4px; }
+.rn-skip {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 13px;
+  background: #191426;
+  border: 1px solid #3a2f4b;
+  color: #a99cc0;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.12s;
+}
+.rn-skip:active { transform: scale(0.98); background: #221a33; }

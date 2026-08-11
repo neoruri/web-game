@@ -49,7 +49,12 @@
 .growth-actions button:active { transform: scale(0.96); }
 
 /* 스크롤 영역 (능력치 + 스킬트리) */
-.growth-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+/* body의 `touch-action: none`(조이스틱용)을 되돌려야 모바일 스크롤이 먹는다 */
+.growth-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  touch-action: pan-y; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* 섹션 공통 */
 .gv-hd {
@@ -151,6 +156,7 @@
   background: #191926;
   padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   max-height: 42dvh; overflow-y: auto;
+  touch-action: pan-y; overscroll-behavior: contain;
 }
 .gv-dock-main { display: flex; align-items: center; gap: 12px; }
 .gv-dock-info { flex: 1; min-width: 0; }

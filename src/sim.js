@@ -29,6 +29,11 @@ const DESPAWN_DIST = SPAWN_DIST + 280
 // 보스 러버밴딩 (main.js 동기화) — 화면 밖이면 플레이어보다 빠르게 접근
 const BOSS_LEASH = Math.hypot(W, H) / 2
 const BOSS_CATCHUP = 1.25
+// 엘리트 패턴 피격률 가정치. 실제 게임은 **예고를 보고 피할 수 있지만** 봇은 못 한다.
+// 그래서 패턴을 그대로 재현하지 않고 이 확률로 "가끔 맞는다"고 근사한다.
+// 0 = 항상 회피(엘리트 무해) / 1 = 항상 피격(과대평가).
+// ⚠️ 시뮬 절대값을 이 값이 좌우한다. 결과는 설정 A/B 비교용으로만 쓸 것.
+const ELITE_PATTERN_HIT = 0.35
 
 function clone(o) {
   return JSON.parse(JSON.stringify(o))
@@ -107,17 +112,22 @@ export function simulate(cfg, opts = {}) {
     xpNeed: xpFor(cfg, 1),
     kills: 0,
     bossKills: 0,
-    runesGained: 0, // 한 판에 획득한 룬 수(보스 + 일반몹 드랍)
+    eliteKills: 0,
+    runesGained: 0, // 한 판에 획득한 룬 수(엘리트 + 보스)
     firstCrisis: null,
     spawnAcc: 0,
     bossAcc: 0,
     bossSpawns: 0,
+    eliteAcc: 0,
+    eliteSpawns: 0,
     fireAcc: 0,
     enemies: [],
     arrows: [],
     eProjectiles: [],
     telegraphs: [],
   }
+
+  let firstRuneGiven = false // Lv3 첫 룬 보장 (main.js _firstRuneGiven 동기화)
 
   const skillAcc = {}
   for (const id of ACTIVE_IDS) skillAcc[id] = 0
@@ -168,6 +178,8 @@ export function simulate(cfg, opts = {}) {
     en.boss = spec.boss
     en.type = spec.type || 'basic'
     en.ranged = spec.ranged || false
+    en.elite = spec.elite || null
+    en.buffed = false
     en.kbx = 0
     en.kby = 0
     en.stun = 0 // 피격 경직 남은 시간(초)
@@ -175,9 +187,11 @@ export function simulate(cfg, opts = {}) {
     en.wob = Math.random() * Math.PI * 2
     en.atk = spec.boss
       ? cfg.boss.attackInterval
-      : spec.ranged
-        ? cfg.enemy.shooterInterval
-        : 0
+      : spec.elite
+        ? cfg.elite.attackInterval * 0.5
+        : spec.ranged
+          ? cfg.enemy.shooterInterval
+          : 0
     state.enemies.push(en)
   }
 
@@ -219,6 +233,33 @@ export function simulate(cfg, opts = {}) {
       type,
       ranged,
     })
+  }
+
+  // 엘리트 (main.js spawnElite 동기화) — 시간 기반, 동시 생존 상한 있음.
+  // ⚠️ 패턴(돌진·포격·산탄)은 시뮬에서 완전히 재현하지 않는다. 봇은 예고를 보고
+  //    회피하는 판단을 못 하므로, 그대로 넣으면 피해가 과대평가된다. 대신 아래
+  //    ELITE_PATTERN_HIT 확률로 "가끔 맞는다"고 근사한다. 절대값보다 **비교**에 쓸 것.
+  function spawnElite() {
+    const el = cfg.elite
+    if (!el) return false
+    let alive = 0
+    for (let i = 0; i < state.enemies.length; i++) if (state.enemies[i].elite) alive++
+    if (alive >= el.maxAlive) return false
+    const kinds = ['charger', 'bombardier', 'scattershot', 'warden']
+    const p = edge(60)
+    makeEnemy(p.x, p.y, {
+      hp: enemyHpNow() * el.hpMul,
+      r: el.radius,
+      speed: cfg.enemy.speed * el.speedMul,
+      dmg: el.contactDamage,
+      kbResist: el.knockbackResist,
+      gems: el.gems,
+      boss: false,
+      type: 'elite',
+      elite: kinds[(Math.random() * kinds.length) | 0],
+    })
+    state.eliteSpawns++
+    return true
   }
 
   function spawnBoss() {
@@ -531,8 +572,13 @@ export function simulate(cfg, opts = {}) {
       state.bossKills++
       botEquipRune()
       state.runesGained++
+    } else if (e.elite) {
+      // 엘리트 확정 드랍 — 이제 룬의 주 공급원(킬 비례가 아니라 시간 기반)
+      state.eliteKills++
+      botEquipRune()
+      state.runesGained++
     } else if (Math.random() < (cfg.rune ? cfg.rune.normalDropChance : 0)) {
-      // 일반몹 드랍 — main.js는 자동 장착(빈 슬롯 우선). 시뮬도 동일하게 취급.
+      // 일반몹 드랍 — 기본 0. 되돌리면 킬 비례 폭주가 재현된다.
       botEquipRune()
       state.runesGained++
     }
@@ -567,6 +613,12 @@ export function simulate(cfg, opts = {}) {
     botPickCard()
     stats = deriveStats(cfg, attr, skills, specs, cardBonusObj(), runeSlots)
     state.hp += stats.player.maxHp - prevMax
+    // Lv3 첫 룬 보장 (main.js onLevelUp 동기화) — 초반 급사 판의 무보상 방지
+    if (state.level >= 3 && !firstRuneGiven) {
+      firstRuneGiven = true
+      botEquipRune()
+      state.runesGained++
+    }
   }
 
   // 봇 룬 장착 — 랜덤 룬(등급·수치 롤)을 가장 높은 레벨 액티브의 빈 슬롯에.
@@ -695,6 +747,17 @@ export function simulate(cfg, opts = {}) {
       spawnEnemy()
     }
 
+    // 엘리트 (main.js 동기화) — 룬 공급원. 이 주기가 판당 룬 개수를 정한다.
+    if (cfg.elite) {
+      state.eliteAcc += dt
+      const eliteEvery =
+        state.eliteSpawns === 0 ? cfg.elite.firstSec : cfg.elite.everySec
+      if (state.eliteAcc >= eliteEvery) {
+        if (spawnElite()) state.eliteAcc -= eliteEvery
+        else state.eliteAcc = eliteEvery - 3
+      }
+    }
+
     // 보스
     state.bossAcc += dt
     // 첫 보스만 firstBossSec (main.js 동기화)
@@ -788,6 +851,15 @@ export function simulate(cfg, opts = {}) {
     let incoming = 0
     const despawn2 = DESPAWN_DIST * DESPAWN_DIST
 
+    // 수호자 오라 (main.js 동기화) — 매 프레임 재수집
+    const wardens = []
+    if (cfg.elite) {
+      for (let i = 0; i < state.enemies.length; i++) {
+        if (state.enemies[i].elite === 'warden') wardens.push(state.enemies[i])
+      }
+    }
+    const wr2 = cfg.elite ? cfg.elite.wardenRadius * cfg.elite.wardenRadius : 0
+
     for (let i = 0; i < state.enemies.length; i++) {
       const e = state.enemies[i]
       const dx = state.px - e.x
@@ -820,6 +892,19 @@ export function simulate(cfg, opts = {}) {
       }
 
       const len = Math.hypot(dx, dy) || 1
+
+      // 수호자 오라 판정 (main.js 동기화) — 엘리트/보스는 대상 아님
+      e.buffed = false
+      if (wardens.length && !e.elite && !e.boss) {
+        for (let w = 0; w < wardens.length; w++) {
+          const wdx = e.x - wardens[w].x
+          const wdy = e.y - wardens[w].y
+          if (wdx * wdx + wdy * wdy <= wr2) {
+            e.buffed = true
+            break
+          }
+        }
+      }
 
       // 겹침 방지: 근처 적들로부터 밀려나는 힘 (그리드로 이웃만, 최대 6마리)
       let sx = 0
@@ -862,6 +947,10 @@ export function simulate(cfg, opts = {}) {
       if (e.boss && dx * dx + dy * dy > BOSS_LEASH * BOSS_LEASH) {
         espeed = Math.max(e.speed, stats.player.speed * BOSS_CATCHUP)
       }
+      // 수호자 오라 이속 강화 + 플레이어 90% clamp (main.js 동기화)
+      if (e.buffed) {
+        espeed = Math.min(espeed * cfg.elite.wardenSpeedMul, stats.player.speed * 0.9)
+      }
 
       e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
       e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt
@@ -887,6 +976,12 @@ export function simulate(cfg, opts = {}) {
           e.atk += cfg.boss.attackInterval
           fireBossLine(e)
         }
+      } else if (e.elite) {
+        e.atk -= dt
+        if (e.atk <= 0) {
+          e.atk += cfg.elite.attackInterval
+          elitePattern(e)
+        }
       } else if (e.ranged) {
         e.atk -= dt
         if (e.atk <= 0) {
@@ -896,9 +991,28 @@ export function simulate(cfg, opts = {}) {
       }
 
       const touch = pr + e.r
-      if (dx * dx + dy * dy <= touch * touch && e.dmg > incoming) incoming = e.dmg
+      // 수호자 오라 — 접촉 피해 증폭 (main.js 동기화)
+      const cdmg = e.buffed ? e.dmg * cfg.elite.wardenDamageMul : e.dmg
+      if (dx * dx + dy * dy <= touch * touch && cdmg > incoming) incoming = cdmg
     }
     if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
+  }
+
+  // 엘리트 패턴 — 시뮬 근사.
+  // 실제 게임은 예고를 보고 피할 수 있지만 봇은 그 판단을 못 한다. 확률로 근사한다.
+  //   ELITE_PATTERN_HIT = 숙련 플레이어가 놓치는 비율의 가정값.
+  // ⚠️ 이 값이 절대 생존시간을 좌우한다. 시뮬 결과는 **설정 A vs B 비교**에만 쓸 것.
+  function elitePattern(e) {
+    const el = cfg.elite
+    if (e.elite === 'warden') return // 수호자는 오라만(능동 공격 없음)
+    if (Math.random() >= ELITE_PATTERN_HIT) return
+    const dmg =
+      e.elite === 'charger'
+        ? el.chargeDamage
+        : e.elite === 'bombardier'
+          ? el.shellDamage
+          : el.scatterBoltDamage * 2 // 산탄은 보통 1~2발만 스친다고 가정
+    if (state.invulnLeft === 0) hitPlayer(dmg)
   }
 
   return {
@@ -907,6 +1021,8 @@ export function simulate(cfg, opts = {}) {
     level: state.level,
     kills: state.kills,
     bossKills: state.bossKills,
+    eliteKills: state.eliteKills,
+    eliteSpawns: state.eliteSpawns,
     runesGained: state.runesGained,
     firstCrisis: state.firstCrisis,
   }
