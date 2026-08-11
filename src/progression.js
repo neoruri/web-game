@@ -75,10 +75,25 @@ function tierBonuses(attr, pass) {
 //   burn(도트 %/초)                          → 최댓값만 (도트 중첩은 과해짐)
 // 하위 호환: 문자열('damage')이나 단일 객체가 와도 동작한다.
 export const RUNE_CDR_CAP = 45 // 룬만으로 줄일 수 있는 쿨타임 상한(%)
-const LEGACY_V = { damage: 20, cooldown: 15, pierce: 1, projectile: 1, burn: 30 }
+export const RUNE_CHILL_CAP = 55 // 이속 감소 상한(%) — 넘으면 적이 사실상 정지한다
+const LEGACY_V = {
+  damage: 20, cooldown: 15, pierce: 1, projectile: 1,
+  burn: 30, poison: 12, chill: 20, vuln: 15,
+}
+
+// 중첩 규칙 — 룬을 추가할 때 **어느 쪽인지 반드시 정해야** 한다.
+//   MAX  : 같은 종류를 여러 개 껴도 가장 큰 값만 (상태이상 — 대상에 1개만 붙으므로)
+//   합산 : 값이 더해진다 (수치 강화)
+// ⚠️ "명중 시 새 히트를 만드는" 효과(연쇄·폭발)는 **룬으로 넣지 않는다.**
+//    발사체 수와 곱해져서 다발 사격(최대 18발)에 붙으면 히트가 폭증한다.
+//    그런 원소는 특화(SPECIALIZATIONS)에서 배타적 선택으로 주는 게 맞다.
+const RUNE_MAX_ONLY = { burn: 1, chill: 1, vuln: 1 }
 
 export function aggregateRunes(slots) {
-  const out = { damage: 0, cooldown: 0, pierce: 0, projectile: 0, burn: 0 }
+  const out = {
+    damage: 0, cooldown: 0, pierce: 0, projectile: 0,
+    burn: 0, poison: 0, chill: 0, vuln: 0,
+  }
   if (!slots) return out
   const arr = Array.isArray(slots) ? slots : [slots]
   for (let i = 0; i < arr.length; i++) {
@@ -87,11 +102,20 @@ export function aggregateRunes(slots) {
     const id = typeof r === 'string' ? r : r.id
     if (!id || out[id] === undefined) continue
     const v = typeof r === 'string' ? LEGACY_V[id] : (r.v ?? LEGACY_V[id])
-    if (id === 'burn') out.burn = Math.max(out.burn, v)
+    if (RUNE_MAX_ONLY[id]) out[id] = Math.max(out[id], v)
     else out[id] += v
   }
   if (out.cooldown > RUNE_CDR_CAP) out.cooldown = RUNE_CDR_CAP
+  if (out.chill > RUNE_CHILL_CAP) out.chill = RUNE_CHILL_CAP
   return out
+}
+
+// 발사체가 들고 다닐 상태이상 묶음.
+// 화살마다 객체를 새로 만들면 GC 부담이 크므로, deriveStats 시점에 **한 번만** 만들고
+// 발사체는 이 참조만 들고 다닌다(재계산 전까지 불변).
+function makeSfx(agg) {
+  if (!agg.burn && !agg.poison && !agg.chill && !agg.vuln) return null
+  return { burn: agg.burn, poison: agg.poison, chill: agg.chill, vuln: agg.vuln }
 }
 
 // runeSlots: { basic|multishot|... : [ {id,tier,v} | null, ... ] }  (스킬당 N슬롯)
@@ -143,6 +167,7 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
   if (bagg.pierce) s.weapon.pierce += bagg.pierce
   if (bagg.projectile) s.weapon.extraArrows += bagg.projectile
   if (bagg.burn) s.weapon.burn = bagg.burn // 도트 %/초 (0이면 없음)
+  s.weapon.sfx = makeSfx(bagg) // 화상·독·냉기·취약 묶음 (없으면 null)
 
   // 이동/체력 — 능력치 + 카드 패시브
   s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove
@@ -225,6 +250,7 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
       else if (st.duration != null) st.duration += 0.4 * agg.projectile
     }
     if (agg.burn) st.burn = agg.burn // 도트 %/초
+    st.sfx = makeSfx(agg) // 화상·독·냉기·취약 묶음 (없으면 null)
 
     s.skillStats[id] = st
   }

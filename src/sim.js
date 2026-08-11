@@ -58,6 +58,11 @@ export function simulate(cfg, opts = {}) {
   const BARRAGE_JITTER = 0.45 // 난사 흩뿌림(rad) — main.js와 동일하게 유지
   const BURN_PCT = 0.3 // 화상 도트 비율/초
   const BURN_DUR = 3 // 화상 지속(초)
+  // 상태이상 3종 — main.js 와 **같은 값을 유지할 것**
+  const POISON_DUR = 4
+  const POISON_MAX_STACKS = 5
+  const CHILL_DUR = 2.5
+  const VULN_DUR = 3
   const cardPassives = { dmg: 0, move: 0, hp: 0, atkSpeed: 0 }
   let cardCursor = 0
   const cardBonusObj = () => ({
@@ -67,7 +72,10 @@ export function simulate(cfg, opts = {}) {
     atkSpeed: cardPassives.atkSpeed * CARD_STEP.atkSpeed,
   })
   // 룬 (보스 처치 시 봇 자동 장착)
-  const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
+  const RUNE_POOL = [
+    'damage', 'pierce', 'projectile', 'cooldown',
+    'burn', 'poison', 'chill', 'vuln',
+  ]
   // 스킬당 룬 슬롯 N개 (main.js의 RUNE_SLOTS와 동일하게 유지)
   const RUNE_SLOTS = 3
   const runeSlots = {}
@@ -81,6 +89,9 @@ export function simulate(cfg, opts = {}) {
     projectile: { 1: [1, 1], 2: [1, 2], 3: [2, 2] },
     cooldown: { 1: [8, 14], 2: [16, 22], 3: [24, 30] },
     burn: { 1: [18, 28], 2: [30, 42], 3: [45, 60] },
+    poison: { 1: [8, 12], 2: [13, 18], 3: [20, 26] },
+    chill: { 1: [12, 18], 2: [20, 28], 3: [30, 40] },
+    vuln: { 1: [10, 15], 2: [16, 22], 3: [24, 32] },
   }
   const SIM_RUNE_INT = { pierce: 1, projectile: 1 }
   function simRollRune(id, elapsed = 0) {
@@ -184,6 +195,9 @@ export function simulate(cfg, opts = {}) {
     en.kby = 0
     en.stun = 0 // 피격 경직 남은 시간(초)
     en.burn = null // 화상 도트
+    en.poison = null // 독 도트 {dps,stacks,time}
+    en.chill = null // 냉기 {mul,time}
+    en.vuln = null // 취약 {mul,time}
     en.wob = Math.random() * Math.PI * 2
     en.atk = spec.boss
       ? cfg.boss.attackInterval
@@ -301,7 +315,7 @@ export function simulate(cfg, opts = {}) {
     return best
   }
 
-  function fireAngle(ang, dmg, pierce, burn) {
+  function fireAngle(ang, dmg, pierce, sfx) {
     const w = stats.weapon
     const a = arrowPool.pop() || { hit: new Set() }
     a.x = state.px
@@ -310,7 +324,7 @@ export function simulate(cfg, opts = {}) {
     a.vy = Math.sin(ang) * w.speed
     a.pierceLeft = pierce ?? w.pierce
     a.dmg = dmg
-    a.burn = !!burn
+    a.sfx = sfx || null // 상태이상 묶음 (deriveStats가 만든 불변 참조)
     a.hit.clear()
     state.arrows.push(a)
   }
@@ -319,11 +333,11 @@ export function simulate(cfg, opts = {}) {
     const ang = Math.atan2(target.y - state.py, target.x - state.px)
     const w = stats.weapon
     const dmg = w.damage
-    fireAngle(ang, dmg, w.pierce, w.burn)
+    fireAngle(ang, dmg, w.pierce, w.sfx)
     const extra = w.extraArrows || 0
     for (let i = 1; i <= extra; i++) {
       const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
-      fireAngle(ang + off, dmg, w.pierce, w.burn)
+      fireAngle(ang + off, dmg, w.pierce, w.sfx)
     }
   }
 
@@ -345,7 +359,7 @@ export function simulate(cfg, opts = {}) {
           const spread = ((cfg.skill.multishotSpread * Math.PI) / 180) * st.spreadMul
           for (let s = 0; s < st.shots; s++) {
             const frac = st.shots <= 1 ? 0.5 : s / (st.shots - 1)
-            fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, st.burn)
+            fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, st.sfx)
           }
           fired = true
         }
@@ -360,19 +374,29 @@ export function simulate(cfg, opts = {}) {
         burst.barrage.acc = cfg.skill.shotInterval
         fired = true
       } else if (id === 'grenade') {
-        const t = nearestEnemy()
-        if (t) {
-          for (let i = 0; i < st.count; i++) {
-            const dx = t.x - state.px
-            const dy = t.y - state.py
-            const d = Math.hypot(dx, dy) || 1
-            const reach = Math.min(d, GRENADE_MAX)
-            const jx = (Math.random() - 0.5) * st.radius * 1.1
-            const jy = (Math.random() - 0.5) * st.radius * 1.1
+        // 밀집 조준 + 비행시간 예측 + 링 배치 (main.js bestGrenadeTarget/triggerGrenade 동기화)
+        const aim = bestGrenadeTarget(st.radius)
+        if (aim) {
+          const dx = aim.x - state.px
+          const dy = aim.y - state.py
+          const d = Math.hypot(dx, dy) || 1
+          const reach = Math.min(d, GRENADE_MAX)
+          const cx = state.px + (dx / d) * reach
+          const cy = state.py + (dy / d) * reach
+          const count = Math.max(1, Math.round(st.count))
+          const ringR = st.radius * 1.15
+          const rot = Math.random() * Math.PI * 2
+          for (let i = 0; i < count; i++) {
+            let ox = 0
+            let oy = 0
+            if (count > 1) {
+              const a = rot + (i / count) * Math.PI * 2
+              ox = Math.cos(a) * ringR
+              oy = Math.sin(a) * ringR * 0.62
+            }
             grenades.push({
-              tx: state.px + (dx / d) * reach + jx,
-              ty: state.py + (dy / d) * reach + jy,
-              t: 0, radius: st.radius, dmg: st.dmg, burn: st.burn,
+              tx: cx + ox, ty: cy + oy,
+              t: 0, radius: st.radius, dmg: st.dmg, sfx: st.sfx,
             })
           }
           fired = true
@@ -392,7 +416,17 @@ export function simulate(cfg, opts = {}) {
       const g = grenades[i]
       g.t += dt
       if (g.t >= GRENADE_DUR) {
-        explodeAt(g.tx, g.ty, g.radius, g.dmg, g.burn) // 착탄 시 폭발
+        // 착탄 지점이 비었으면 근처 적으로 보정 (main.js 동기화)
+        let tx = g.tx
+        let ty = g.ty
+        if (!anyEnemyWithin(tx, ty, g.radius)) {
+          const alt = nearestEnemyTo(tx, ty, g.radius * 2)
+          if (alt) {
+            tx = alt.x
+            ty = alt.y
+          }
+        }
+        explodeAt(tx, ty, g.radius, g.dmg, g.sfx)
         grenades[i] = grenades[grenades.length - 1]
         grenades.pop()
       }
@@ -438,7 +472,7 @@ export function simulate(cfg, opts = {}) {
           r.left = 0
           break
         }
-        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), st.dmg, st.pierce, st.burn)
+        fireAngle(Math.atan2(t.y - state.py, t.x - state.px), st.dmg, st.pierce, st.sfx)
         r.left--
       }
     }
@@ -450,7 +484,7 @@ export function simulate(cfg, opts = {}) {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        fireAngle(barrageAngle(), st.dmg, st.pierce, st.burn)
+        fireAngle(barrageAngle(), st.dmg, st.pierce, st.sfx)
       }
     }
   }
@@ -524,7 +558,74 @@ export function simulate(cfg, opts = {}) {
     if (incoming > 0 && state.invulnLeft === 0) hitPlayer(incoming)
   }
 
-  function explodeAt(x, y, r, dmg, burn) {
+  // 밀집 조준 (main.js bestGrenadeTarget 동기화)
+  function bestGrenadeTarget(radius) {
+    const list = state.enemies
+    const n = list.length
+    if (!n) return null
+    const range = stats.weapon.range * 1.2
+    const range2 = range * range
+    const SAMPLE = 14
+    let best = null
+    let bestScore = -1
+    let seen = 0
+    for (let i = 0; i < n && seen < SAMPLE; i++) {
+      const e = list[(i * 7919) % n]
+      const dx = e.x - state.px
+      const dy = e.y - state.py
+      if (dx * dx + dy * dy > range2) continue
+      seen++
+      const near = grid.query(e.x, e.y, radius, explodeBuf)
+      let cnt = 0
+      for (let j = 0; j < near.length; j++) {
+        const o = near[j]
+        const ox = o.x - e.x
+        const oy = o.y - e.y
+        if (ox * ox + oy * oy <= radius * radius) cnt++
+      }
+      if (cnt > bestScore) {
+        bestScore = cnt
+        best = e
+      }
+    }
+    if (!best) return null
+    const tdx = state.px - best.x
+    const tdy = state.py - best.y
+    const td = Math.hypot(tdx, tdy) || 1
+    const lead = best.speed * GRENADE_DUR
+    return { x: best.x + (tdx / td) * lead, y: best.y + (tdy / td) * lead }
+  }
+
+  function anyEnemyWithin(x, y, r) {
+    const near = grid.query(x, y, r, explodeBuf)
+    for (let i = 0; i < near.length; i++) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const rr = r + e.r
+      if (dx * dx + dy * dy <= rr * rr) return true
+    }
+    return false
+  }
+
+  function nearestEnemyTo(x, y, maxD) {
+    const near = grid.query(x, y, maxD, explodeBuf)
+    let best = null
+    let bestD = maxD * maxD
+    for (let i = 0; i < near.length; i++) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const d = dx * dx + dy * dy
+      if (d < bestD) {
+        bestD = d
+        best = e
+      }
+    }
+    return best
+  }
+
+  function explodeAt(x, y, r, dmg, sfx) {
     const maxEnemyR = Math.max(cfg.enemy.radius, cfg.boss.radius)
     const near = grid.query(x, y, r + maxEnemyR, explodeBuf)
     for (let i = near.length - 1; i >= 0; i--) {
@@ -535,25 +636,48 @@ export function simulate(cfg, opts = {}) {
       const d2 = dx * dx + dy * dy
       if (d2 > reach * reach) continue
       const d = Math.sqrt(d2) || 1
-      damageEnemy(e, dmg, dx / d, dy / d, burn)
+      damageEnemy(e, dmg, dx / d, dy / d, sfx)
     }
   }
 
-  function damageEnemy(e, amount, dirX, dirY, burn) {
+  function damageEnemy(e, amount, dirX, dirY, sfx) {
     const w = stats.weapon
     const c = stats.combat
     if (c.critChance > 0 && Math.random() < c.critChance) amount *= c.critDmg
+    // 취약 — 이미 걸린 디버프만 이번 피해를 증폭 (main.js 동기화)
+    if (e.vuln && e.vuln.time > 0) amount *= 1 + e.vuln.mul
 
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
     if (!e.boss) e.stun = cfg.enemy.hitStunSec // 피격 경직 (main.js 동기화)
-    if (burn) {
-      // burn은 도트 %/초 수치(룬 롤 결과). true면 기본값. (main.js 동기화)
-      const pct = burn === true ? BURN_PCT * 100 : burn
-      const dps = amount * (pct / 100)
-      if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
-      else e.burn.time = BURN_DUR
+    // 상태이상 (main.js damageEnemy 동기화)
+    if (sfx) {
+      const S = typeof sfx === 'object' ? sfx : { burn: sfx === true ? BURN_PCT * 100 : sfx }
+      if (S.burn) {
+        const dps = amount * (S.burn / 100)
+        if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
+        else e.burn.time = BURN_DUR
+      }
+      if (S.poison) {
+        const dps = amount * (S.poison / 100)
+        if (!e.poison) e.poison = { dps, stacks: 1, time: POISON_DUR }
+        else {
+          if (e.poison.stacks < POISON_MAX_STACKS) e.poison.stacks++
+          if (dps > e.poison.dps) e.poison.dps = dps
+          e.poison.time = POISON_DUR
+        }
+      }
+      if (S.chill) {
+        const mul = S.chill / 100
+        if (!e.chill || mul > e.chill.mul) e.chill = { mul, time: CHILL_DUR }
+        else e.chill.time = CHILL_DUR
+      }
+      if (S.vuln) {
+        const mul = S.vuln / 100
+        if (!e.vuln || mul > e.vuln.mul) e.vuln = { mul, time: VULN_DUR }
+        else e.vuln.time = VULN_DUR
+      }
     }
     if (e.hp <= 0) killEnemy(e)
   }
@@ -833,7 +957,7 @@ export function simulate(cfg, opts = {}) {
         if (ddx * ddx + ddy * ddy >= hitR * hitR) continue
         a.hit.add(e)
         const len = Math.hypot(a.vx, a.vy) || 1
-        damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
+        damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.sfx)
         if (--a.pierceLeft <= 0) {
           spent = true
           break
@@ -872,16 +996,27 @@ export function simulate(cfg, opts = {}) {
         continue
       }
 
-      // 화상 도트 (main.js 동기화)
+      // 도트 — 화상(중첩X) + 독(중첩O) (main.js 동기화)
+      let dot = 0
       if (e.burn && e.burn.time > 0) {
         e.burn.time -= dt
-        e.hp -= e.burn.dps * dt
+        dot += e.burn.dps
+      }
+      if (e.poison && e.poison.time > 0) {
+        e.poison.time -= dt
+        dot += e.poison.dps * e.poison.stacks
+        if (e.poison.time <= 0) e.poison = null
+      }
+      if (dot > 0) {
+        e.hp -= dot * dt
         if (e.hp <= 0) {
           killEnemy(e)
           i--
           continue
         }
       }
+      if (e.chill && e.chill.time > 0) e.chill.time -= dt
+      if (e.vuln && e.vuln.time > 0) e.vuln.time -= dt
 
       // 피격 경직 — 이동/추격/분리/공격 정지 (main.js 동기화)
       if (e.stun > 0) {
@@ -951,6 +1086,8 @@ export function simulate(cfg, opts = {}) {
       if (e.buffed) {
         espeed = Math.min(espeed * cfg.elite.wardenSpeedMul, stats.player.speed * 0.9)
       }
+      // 냉기 룬 — 오라 강화 뒤에 적용 (main.js 동기화)
+      if (e.chill && e.chill.time > 0) espeed *= 1 - e.chill.mul
 
       e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
       e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt

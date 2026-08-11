@@ -53,11 +53,39 @@ const RUNES = {
   burn: {
     icon: '🔥', name: '화상', color: '#f0963c', unit: '%', int: false,
     range: { 1: [18, 28], 2: [30, 42], 3: [45, 60] },
-    fmt: (v) => `화상 ${v}%/초 (3초)`,
+    fmt: (v) => `화상 ${v}%/초 (3초) · 중첩 안 됨`,
     shortFmt: (v) => `${v}%/s`,
   },
+  // --- 아래 3종은 상태이상. 발사체 수와 곱해지지 않게 규칙을 설계했다 ---
+  // 독 — 화상과 달리 **중첩된다**(최대 5스택). 그래서 다발·연발처럼 히트가 많은
+  //      스킬에서 강하다. 단 스택 상한이 있어 18발이 18스택이 되지는 않는다.
+  poison: {
+    icon: '🧪', name: '독', color: '#a6e3a1', unit: '%', int: false,
+    range: { 1: [8, 12], 2: [13, 18], 3: [20, 26] },
+    fmt: (v) => `독 ${v}%/초 · 최대 ${POISON_MAX_STACKS}중첩 (${POISON_DUR}초)`,
+    shortFmt: (v) => `${v}%/s×`,
+  },
+  // 냉기 — 이속 감소. 중첩 안 됨(최대값) + 캡이 있어 정지 고정이 안 된다.
+  //      난사처럼 넓게 뿌리는 스킬과 궁합이 좋다(여러 적을 동시에 느리게).
+  chill: {
+    icon: '❄️', name: '냉기', color: '#89dceb', unit: '%', int: false,
+    range: { 1: [12, 18], 2: [20, 28], 3: [30, 40] },
+    fmt: (v) => `적 이속 -${v}% (${CHILL_DUR}초)`,
+    shortFmt: (v) => `-${v}%`,
+  },
+  // 취약 — 받는 피해 증폭. **다른 스킬의 피해까지 올려준다**는 게 핵심.
+  //      피해가 낮은 연발 사격이 "디버프를 거는 역할"로 가치를 갖는다.
+  vuln: {
+    icon: '💢', name: '취약', color: '#f38ba8', unit: '%', int: false,
+    range: { 1: [10, 15], 2: [16, 22], 3: [24, 32] },
+    fmt: (v) => `받는 피해 +${v}% (${VULN_DUR}초)`,
+    shortFmt: (v) => `+${v}%`,
+  },
 }
-const RUNE_POOL = ['damage', 'pierce', 'projectile', 'cooldown', 'burn']
+const RUNE_POOL = [
+  'damage', 'pierce', 'projectile', 'cooldown',
+  'burn', 'poison', 'chill', 'vuln',
+]
 
 // 스킬당 룬 슬롯 수. 늘리면 파워가 곱해지니 밸런스 확인 후 조정할 것.
 const RUNE_SLOTS = 3
@@ -111,6 +139,11 @@ const GRENADE_DUR = 0.45 // 수류탄 포물선 비행 시간(초)
 const GRENADE_ARC = 62 // 포물선 최대 높이(px)
 const BURN_PCT = 0.3 // 화상 도트 = 명중 피해의 이 비율/초
 const BURN_DUR = 3 // 화상 지속(초)
+// 상태이상 3종 (독·냉기·취약). sim.js 와 **같은 값을 유지할 것**.
+const POISON_DUR = 4 // 독 지속(초) — 명중마다 갱신
+const POISON_MAX_STACKS = 5 // 독 중첩 상한. 이게 없으면 다발 18발 = 18중첩이 된다
+const CHILL_DUR = 2.5 // 냉기 지속(초)
+const VULN_DUR = 3 // 취약 지속(초)
 
 // 세로 모드 (모바일 우선). 9:16 비율.
 const W = 540
@@ -1253,7 +1286,10 @@ class GameScene extends Phaser.Scene {
     e.kbx = 0
     e.kby = 0
     e.stun = 0 // 피격 경직 남은 시간(초)
-    e.burn = null // 화상 도트 {dps,time}
+    e.burn = null // 화상 도트 {dps,time} — 중첩 안 됨
+    e.poison = null // 독 도트 {dps,stacks,time} — 최대 POISON_MAX_STACKS 중첩
+    e.chill = null // 냉기 {mul,time} — 이속 감소
+    e.vuln = null // 취약 {mul,time} — 받는 피해 증폭
     e.flash = 0
     e.wob = Math.random() * Math.PI * 2 // 유기적 흔들림 위상
     e.animOff = (Math.random() * 4) | 0 // 걷기 프레임 위상(개체별 어긋나게)
@@ -1429,7 +1465,7 @@ class GameScene extends Phaser.Scene {
     return this.player.y - (this.playerSprite ? this._bowOffsetY : 0)
   }
 
-  fireAngle(angle, dmg, pierce, skill, burn) {
+  fireAngle(angle, dmg, pierce, skill, sfx) {
     const w = this.stats.weapon
     const a = this.arrowPool.pop() || { hit: new Set() }
     const ux = Math.cos(angle)
@@ -1457,7 +1493,9 @@ class GameScene extends Phaser.Scene {
     // 화살 풀 재사용이므로 반드시 초기화해야 첫 프레임에 엉뚱한 선분이 생기지 않는다.
     a.px1 = a.x
     a.py1 = a.y
-    a.burn = !!burn // 화상 룬
+    // 상태이상 묶음 {burn,poison,chill,vuln}. deriveStats 가 만든 **불변 참조**를
+    // 그대로 들고 다닌다(화살마다 객체를 만들면 GC 부담이 크다). 없으면 null.
+    a.sfx = sfx || null
     a.hit.clear()
     this.arrows.push(a)
 
@@ -1512,12 +1550,12 @@ class GameScene extends Phaser.Scene {
     const angle = Math.atan2(target.y - this.bowY, target.x - this.player.x)
     const w = this.stats.weapon
     const dmg = w.damage
-    this.fireAngle(angle, dmg, undefined, 'basic', w.burn)
+    this.fireAngle(angle, dmg, undefined, 'basic', w.sfx)
     // 민첩30 추가 화살 — 살짝 벌려서 발사
     const extra = w.extraArrows || 0
     for (let i = 1; i <= extra; i++) {
       const off = 0.12 * Math.ceil(i / 2) * (i % 2 ? 1 : -1)
-      this.fireAngle(angle + off, dmg, undefined, 'basic', w.burn)
+      this.fireAngle(angle + off, dmg, undefined, 'basic', w.sfx)
     }
   }
 
@@ -1562,7 +1600,7 @@ class GameScene extends Phaser.Scene {
     const n = st.shots
     for (let i = 0; i < n; i++) {
       const frac = n <= 1 ? 0.5 : i / (n - 1) // 0..1
-      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, 'multishot', st.burn)
+      this.fireAngle(base + (frac - 0.5) * spread, st.dmg, st.pierce, 'multishot', st.sfx)
     }
     this.flashSkill(0x89dceb)
     return true
@@ -1585,30 +1623,94 @@ class GameScene extends Phaser.Scene {
     return true // 360° 는 타겟 없어도 발동
   }
 
+  // 수류탄 조준 — **가장 가까운 적이 아니라 가장 밀집한 곳**을 노린다.
+  //
+  // 왜: 기본 활도 nearestEnemy() 를 쏘기 때문에 둘이 같은 표적으로 몰렸다.
+  //     화살(1200px/s)이 먼저 도착해 그 적을 죽여버리고, 0.45초 뒤 도착한 수류탄은
+  //     빈 자리에서 터졌다. 광역 무기가 단일 표적을 따라가면 존재 의미가 없다.
+  // 추가로 비행시간만큼 **예측 사격**한다 — 적은 플레이어를 향해 오므로 예측이 쉽다.
+  bestGrenadeTarget(radius) {
+    const list = this.enemies
+    const n = list.length
+    if (!n) return null
+    const range = this.stats.weapon.range * 1.2
+    const range2 = range * range
+    const px = this.player.x
+    const py = this.bowY
+
+    // 후보는 최대 SAMPLE 개만 본다 — 전수 조사하면 밀집도 계산이 O(n²)로 튄다
+    const SAMPLE = 14
+    let best = null
+    let bestScore = -1
+    let seen = 0
+    for (let i = 0; i < n && seen < SAMPLE; i++) {
+      // 배열 앞쪽만 보지 않도록 소수 스트라이드로 골고루 훑는다
+      const e = list[(i * 7919) % n]
+      const dx = e.x - px
+      const dy = e.y - py
+      if (dx * dx + dy * dy > range2) continue
+      seen++
+      // 이 적 주변 폭발 반경 안의 적 수 = 점수
+      const near = this.grid.query(e.x, e.y, radius, this.explodeBuf)
+      let cnt = 0
+      for (let j = 0; j < near.length; j++) {
+        const o = near[j]
+        const ox = o.x - e.x
+        const oy = o.y - e.y
+        if (ox * ox + oy * oy <= radius * radius) cnt++
+      }
+      if (cnt > bestScore) {
+        bestScore = cnt
+        best = e
+      }
+    }
+    if (!best) return null
+    // 비행시간 예측 — 적은 플레이어 방향으로 이동하므로 그만큼 앞을 노린다
+    const tdx = px - best.x
+    const tdy = py - best.y
+    const td = Math.hypot(tdx, tdy) || 1
+    const lead = best.speed * GRENADE_DUR
+    return { x: best.x + (tdx / td) * lead, y: best.y + (tdy / td) * lead }
+  }
+
   triggerGrenade(st) {
-    const target = this.nearestEnemy()
-    if (!target) return false
+    const aim = this.bestGrenadeTarget(st.radius)
+    if (!aim) return false
     const bx = this.player.x
     const by = this.bowY
-    for (let i = 0; i < st.count; i++) {
-      // 대상 방향으로, 최대 사거리 안쪽(적정 거리)에 착탄. 여러 개면 살짝 흩뿌림.
-      const dx = target.x - bx
-      const dy = target.y - by
-      const d = Math.hypot(dx, dy) || 1
-      const reach = Math.min(d, GRENADE_MAX)
-      const jx = (Math.random() - 0.5) * st.radius * 1.1
-      const jy = (Math.random() - 0.5) * st.radius * 1.1
-      this.spawnGrenade(bx, by, bx + (dx / d) * reach + jx, by + (dy / d) * reach + jy, st.radius, st.dmg, st.burn)
+    const dx = aim.x - bx
+    const dy = aim.y - by
+    const d = Math.hypot(dx, dy) || 1
+    const reach = Math.min(d, GRENADE_MAX)
+    const cx = bx + (dx / d) * reach
+    const cy = by + (dy / d) * reach
+
+    // 여러 발이면 **링 배치**로 흩뿌린다.
+    // 기존엔 ±(radius × 0.55) 무작위 지터라 반경 30px 기준 중심이 16px밖에 안 벌어져서
+    // 폭발이 거의 완전히 겹쳤다(= 한 점에 뭉쳐 나가는 것처럼 보임).
+    // 링 반지름을 radius × 1.15 로 두면 인접 폭발 중심이 약 2×radius 벌어진다.
+    const count = Math.max(1, Math.round(st.count))
+    const ringR = st.radius * 1.15
+    const rot = Math.random() * Math.PI * 2 // 매번 조금 다르게(패턴 고정 방지)
+    for (let i = 0; i < count; i++) {
+      let ox = 0
+      let oy = 0
+      if (count > 1) {
+        const a = rot + (i / count) * Math.PI * 2
+        ox = Math.cos(a) * ringR
+        oy = Math.sin(a) * ringR * 0.62 // 아이소 뷰(2:1)라 세로를 눌러 원이 타원으로 보이게
+      }
+      this.spawnGrenade(bx, by, cx + ox, cy + oy, st.radius, st.dmg, st.sfx)
     }
     this.flashSkill(0xf9e2af)
     return true
   }
 
-  spawnGrenade(x, y, tx, ty, radius, dmg, burn) {
+  spawnGrenade(x, y, tx, ty, radius, dmg, sfx) {
     const g = this.grenadePool.pop() || {}
     g.sx = x; g.sy = y; g.x = x; g.y = y
     g.tx = tx; g.ty = ty
-    g.t = 0; g.radius = radius; g.dmg = dmg; g.burn = !!burn
+    g.t = 0; g.radius = radius; g.dmg = dmg; g.sfx = sfx || null
     this.grenades.push(g)
   }
 
@@ -1620,10 +1722,50 @@ class GameScene extends Phaser.Scene {
       g.x = g.sx + (g.tx - g.sx) * k
       g.y = g.sy + (g.ty - g.sy) * k
       if (g.t >= GRENADE_DUR) {
-        this.explodeAt(g.tx, g.ty, g.radius, g.dmg, g.burn) // 착탄 시 폭발
+        // 착탄 지점이 비었으면 근처 적으로 살짝 보정한다(예측이 빗나간 경우).
+        // 유도 거리를 radius×2 로 제한 — 화면 반대편까지 끌려가면 광역기가 아니라 유도탄이 된다.
+        let tx = g.tx
+        let ty = g.ty
+        if (!this.anyEnemyWithin(tx, ty, g.radius)) {
+          const alt = this.nearestEnemyTo(tx, ty, g.radius * 2)
+          if (alt) {
+            tx = alt.x
+            ty = alt.y
+          }
+        }
+        this.explodeAt(tx, ty, g.radius, g.dmg, g.sfx)
         this.removeSwap(this.grenades, i, this.grenadePool)
       }
     }
+  }
+
+  anyEnemyWithin(x, y, r) {
+    const near = this.grid.query(x, y, r, this.explodeBuf)
+    for (let i = 0; i < near.length; i++) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const rr = r + e.r
+      if (dx * dx + dy * dy <= rr * rr) return true
+    }
+    return false
+  }
+
+  nearestEnemyTo(x, y, maxD) {
+    const near = this.grid.query(x, y, maxD, this.explodeBuf)
+    let best = null
+    let bestD = maxD * maxD
+    for (let i = 0; i < near.length; i++) {
+      const e = near[i]
+      const dx = e.x - x
+      const dy = e.y - y
+      const d = dx * dx + dy * dy
+      if (d < bestD) {
+        bestD = d
+        best = e
+      }
+    }
+    return best
   }
 
   // 연사/지속 진행 — 매 프레임 간격만큼 차면 발사한다
@@ -1649,7 +1791,7 @@ class GameScene extends Phaser.Scene {
           st.dmg,
           st.pierce,
           'rapidfire',
-          st.burn
+          st.sfx
         )
         r.left--
       }
@@ -1663,12 +1805,12 @@ class GameScene extends Phaser.Scene {
       b.acc += dt
       while (b.acc >= iv) {
         b.acc -= iv
-        this.fireAngle(this.barrageAngle(), st.dmg, st.pierce, 'barrage', st.burn)
+        this.fireAngle(this.barrageAngle(), st.dmg, st.pierce, 'barrage', st.sfx)
       }
     }
   }
 
-  explodeAt(x, y, r, dmg, burn) {
+  explodeAt(x, y, r, dmg, sfx) {
     const maxEnemyR = Math.max(this.cfg.enemy.radius, this.cfg.boss.radius)
     // updateArrows 가 queryBuf 를 쓰므로 폭발은 별도 버퍼로 조회한다
     const near = this.grid.query(x, y, r + maxEnemyR, this.explodeBuf)
@@ -1682,7 +1824,7 @@ class GameScene extends Phaser.Scene {
       const d2 = dx * dx + dy * dy
       if (d2 > reach * reach) continue
       const d = Math.sqrt(d2) || 1
-      this.damageEnemy(e, dmg, dx / d, dy / d, burn)
+      this.damageEnemy(e, dmg, dx / d, dy / d, sfx)
     }
 
     this.explosions.push({ x, y, r, life: 0.3, max: 0.3 })
@@ -1892,7 +2034,7 @@ class GameScene extends Phaser.Scene {
     })
   }
 
-  damageEnemy(e, amount, dirX, dirY, burn) {
+  damageEnemy(e, amount, dirX, dirY, sfx) {
     const w = this.stats.weapon
     const c = this.stats.combat
 
@@ -1903,6 +2045,10 @@ class GameScene extends Phaser.Scene {
       crit = true
     }
 
+    // 취약 — 이미 걸려 있는 디버프가 이번 피해를 증폭한다.
+    // (이번 히트로 새로 걸리는 취약은 아래에서 적용 → 자기 자신을 증폭하지 않는다)
+    if (e.vuln && e.vuln.time > 0) amount *= 1 + e.vuln.mul
+
     e.hp -= amount
     e.kbx += dirX * w.knockback * e.kbResist
     e.kby += dirY * w.knockback * e.kbResist
@@ -1910,13 +2056,44 @@ class GameScene extends Phaser.Scene {
     // 피격 경직 — 잠깐 정지(보스 제외). config로 조절. SET이라 누적 없음.
     if (!e.boss) e.stun = this.cfg.enemy.hitStunSec
 
-    // 화상 룬 — 명중 시 도트 부여(더 센 도트면 갱신, 아니면 지속만 새로고침)
-    // burn 은 이제 불린이 아니라 **도트 %/초 수치**(룬 등급·랜덤롤 결과). true면 기본값.
-    if (burn) {
-      const pct = burn === true ? BURN_PCT * 100 : burn
-      const dps = amount * (pct / 100)
-      if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
-      else e.burn.time = BURN_DUR
+    // --- 상태이상 부여 (sfx = {burn,poison,chill,vuln}, 없으면 null) ---
+    // 하위 호환: 옛 호출이 숫자/true(화상)를 넘겨도 동작한다.
+    if (sfx) {
+      const S = typeof sfx === 'object' ? sfx : { burn: sfx === true ? BURN_PCT * 100 : sfx }
+
+      // 화상 — 중첩 안 됨. 더 센 도트면 갱신, 아니면 지속만 새로고침.
+      if (S.burn) {
+        const dps = amount * (S.burn / 100)
+        if (!e.burn || dps > e.burn.dps) e.burn = { dps, time: BURN_DUR }
+        else e.burn.time = BURN_DUR
+      }
+
+      // 독 — **중첩된다**(상한 POISON_MAX_STACKS). 히트가 많은 스킬일수록 빨리 쌓인다.
+      // 스택당 dps 는 "가장 센 히트" 기준으로 유지한다(약한 히트가 스택을 희석하지 않게).
+      if (S.poison) {
+        const dps = amount * (S.poison / 100)
+        if (!e.poison) e.poison = { dps, stacks: 1, time: POISON_DUR }
+        else {
+          if (e.poison.stacks < POISON_MAX_STACKS) e.poison.stacks++
+          if (dps > e.poison.dps) e.poison.dps = dps
+          e.poison.time = POISON_DUR
+        }
+      }
+
+      // 냉기 — 이속 감소. 중첩 안 됨(최대값만).
+      if (S.chill) {
+        const mul = S.chill / 100
+        if (!e.chill || mul > e.chill.mul) e.chill = { mul, time: CHILL_DUR }
+        else e.chill.time = CHILL_DUR
+      }
+
+      // 취약 — 받는 피해 증폭. 중첩 안 됨(최대값만).
+      // 이번 히트에는 적용되지 않는다(위에서 이미 계산 완료) → 다음 히트부터 효과.
+      if (S.vuln) {
+        const mul = S.vuln / 100
+        if (!e.vuln || mul > e.vuln.mul) e.vuln = { mul, time: VULN_DUR }
+        else e.vuln.time = VULN_DUR
+      }
     }
 
     // 데미지 숫자 (머리 위). 크리는 크고 금색.
@@ -2435,7 +2612,7 @@ class GameScene extends Phaser.Scene {
         const hfx = SKILL_FX[a.fx] || SKILL_FX.basic
         if (hfx.impact === 'flash') this.spawnSpark(a.x, a.y, 0xffffff, 'flash')
         else this.spawnSpark(a.x, a.y, hfx.tint, 'spark')
-        this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.burn)
+        this.damageEnemy(e, a.dmg, a.vx / len, a.vy / len, a.sfx)
 
         if (--a.pierceLeft <= 0) {
           spent = true
@@ -2481,16 +2658,28 @@ class GameScene extends Phaser.Scene {
         continue
       }
 
-      // 화상 도트 — 지속 동안 초당 피해, 도트로 죽으면 처치 처리
+      // 도트 — 화상(중첩X) + 독(중첩O). 도트로 죽으면 처치 처리.
+      let dot = 0
       if (e.burn && e.burn.time > 0) {
         e.burn.time -= dt
-        e.hp -= e.burn.dps * dt
+        dot += e.burn.dps
+      }
+      if (e.poison && e.poison.time > 0) {
+        e.poison.time -= dt
+        dot += e.poison.dps * e.poison.stacks
+        if (e.poison.time <= 0) e.poison = null // 만료 시 스택 초기화
+      }
+      if (dot > 0) {
+        e.hp -= dot * dt
         if (e.hp <= 0) {
           this.killEnemy(e)
           i--
           continue
         }
       }
+      // 디버프 타이머 (피해 없음)
+      if (e.chill && e.chill.time > 0) e.chill.time -= dt
+      if (e.vuln && e.vuln.time > 0) e.vuln.time -= dt
 
       if (e.auraPulse > 0) e.auraPulse -= dt
 
@@ -2598,6 +2787,8 @@ class GameScene extends Phaser.Scene {
       if (e.buffed) {
         espeed = Math.min(espeed * el.wardenSpeedMul, this.stats.player.speed * 0.9)
       }
+      // 냉기 룬 — 이속 감소. 오라 강화 **뒤에** 적용해 강화된 적도 늦출 수 있게 한다.
+      if (e.chill && e.chill.time > 0) espeed *= 1 - e.chill.mul
 
       e.x += mvx * espeed * dt + sx * sepStr * dt + e.kbx * dt
       e.y += mvy * espeed * dt + sy * sepStr * dt + e.kby * dt
@@ -2974,8 +3165,13 @@ class GameScene extends Phaser.Scene {
       spr.setPosition(e.x, e.y)
       spr.setScale(e.r * ENEMY_SPRITE_K)
       spr.setFlipX(px < e.x) // 플레이어를 바라보게
+      // tint 우선순위 — 위가 먼저. 상태이상은 색으로만 구분되니 순서가 중요하다.
+      //   피격 > 화상 > 독 > 냉기 > 취약 > 수호자 강화
       if (e.flash > 0) spr.setTintFill(0xffffff) // 피격 흰 섬광
       else if (e.burn && e.burn.time > 0) spr.setTint(0xff9a4a) // 화상 주황
+      else if (e.poison && e.poison.time > 0) spr.setTint(0x9ae86a) // 독 연두
+      else if (e.chill && e.chill.time > 0) spr.setTint(0x8ad4f5) // 냉기 하늘
+      else if (e.vuln && e.vuln.time > 0) spr.setTint(0xf58aa0) // 취약 분홍
       else if (e.buffed) spr.setTint(0xc08ef4) // 수호자 오라 — 강화된 적은 보라
       else spr.clearTint()
       spr.visible = true
@@ -3006,6 +3202,8 @@ class GameScene extends Phaser.Scene {
       if (e.flash > 0) spr.setTintFill(0xffffff)
       else if (e.windup > 0 && Math.floor(this.elapsed * 14) % 2 === 0) spr.setTintFill(0xffffff)
       else if (e.burn && e.burn.time > 0) spr.setTint(0xff9a4a)
+      else if (e.poison && e.poison.time > 0) spr.setTint(0x9ae86a)
+      else if (e.chill && e.chill.time > 0) spr.setTint(0x8ad4f5)
       else spr.clearTint()
       spr.visible = true
       ei++

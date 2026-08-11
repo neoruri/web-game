@@ -3,7 +3,13 @@
 
 // 저장 키에 버전을 붙인다. 밸런스 기본값을 크게 바꿀 때 버전을 올리면
 // 브라우저에 남은 옛 저장값을 무시하고 새 기본값으로 시작한다.
-const KEY = 'survivor.config.v4'
+//
+// v4 → v5 (2026-08-11): 일반몹 룬 드랍을 폐기(normalDropChance 0.01 → 0)하고
+//   엘리트 드랍으로 옮겼다. 그런데 withDefaults() 는 **저장된 숫자를 기본값 위에
+//   덮어쓴다** — v4 키에 남아 있던 0.01 이 계속 살아나서 일반몹이 여전히 룬을
+//   드랍했다. 기본값만 바꾸는 것으로는 부족하고 키 버전을 올려야 한다.
+//   ⚠️ 앞으로도 기본값을 "0으로 끄는" 변경을 할 때는 반드시 이 키를 올릴 것.
+const KEY = 'survivor.config.v5'
 
 export const DEFAULTS = {
   player: {
@@ -362,7 +368,9 @@ export function resetConfig() {
 export const PRESET_SLOTS = ['A', 'B', 'C']
 
 function presetKey(slot) {
-  return `survivor.preset.${slot}`
+  // 프리셋도 KEY 와 같은 버전을 따라간다. 버전 없이 두면 옛 프리셋을 불러올 때
+  // 폐기한 값(예: normalDropChance 0.01)이 되살아난다 — v4→v5 에서 실제로 겪은 문제.
+  return `survivor.preset.${KEY}.${slot}`
 }
 
 export function savePreset(slot, cfg) {
