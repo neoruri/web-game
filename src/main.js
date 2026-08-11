@@ -15,6 +15,8 @@ import { createLevelupScreen } from './levelup-cards.js'
 import { createRuneScreen } from './rune-screen.js'
 import { createResultScreen } from './result-screen.js'
 import { createTitleScreen } from './title-screen.js'
+import { createShopScreen } from './shop-screen.js'
+import { loadMeta, metaBonuses, buyUpgrade } from './meta.js'
 import { Grid } from './grid.js'
 
 // --- 룬 (드랍 → 스킬 슬롯에 장착) -------------------------------------------
@@ -145,6 +147,12 @@ const POISON_DUR = 4 // 독 지속(초) — 명중마다 갱신
 const POISON_MAX_STACKS = 5 // 독 중첩 상한. 이게 없으면 다발 18발 = 18중첩이 된다
 const CHILL_DUR = 2.5 // 냉기 지속(초)
 const VULN_DUR = 3 // 취약 지속(초)
+
+// 배경음악 — "던전 오스티나토" (120BPM, 16마디)
+// ⚠️ BGM_LOOP_SEC 는 tools/audio/gen_bgm.py 의 LOOP 와 **반드시 같아야 한다.**
+//    인코더 패딩을 잘라내는 기준값이라 틀리면 루프가 어긋난다.
+const BGM_LOOP_SEC = 32.0
+const BGM_VOLUME = 0.55
 
 // 세로 모드 (모바일 우선). 9:16 비율.
 const W = 540
@@ -327,10 +335,14 @@ class GameScene extends Phaser.Scene {
     this.runeOpen = false
 
     // 능력치·스킬·카드·룬 → 최종 전투 stats (단일 재계산 지점)
+    // 상점(영구 성장)은 판이 시작될 때 한 번 읽는다 — 판 중간에 바뀌지 않는다
+    this.meta = loadMeta()
+    this.metaBonus = metaBonuses(this.meta)
     this.stats = deriveStats(
       this.cfg, this.attributes, this.skillLevels, this.specs,
-      this.cardBonusObj(), this.runeSlots
+      this.cardBonusObj(), this.runeSlots, this.metaBonus
     )
+    this.goldMul = this.stats.goldMul || 1
 
     this.elapsed = 0
     this.kills = 0
@@ -380,6 +392,10 @@ class GameScene extends Phaser.Scene {
     this.explodeBuf = [] // 폭발 범위 조회용 (queryBuf 와 겹치면 안 됨)
     this._visBuf = [] // 렌더용 화면 내 적 목록(매 프레임 재사용, GC 회피)
     this._wardenBuf = [] // 수호자 목록(매 프레임 재수집 — 죽으면 오라도 즉시 사라져야 함)
+    this.coins = [] // 바닥에 떨어진 골드 동전
+    this.coinPool = []
+    this.gold = 0 // 이번 판에 획득한 골드(표시용 정수)
+    this._goldAcc = 0 // 내부 누적(배율 때문에 소수)
     this.eliteAcc = 0 // 엘리트 등장 누적 시간
     this.eliteCount = 0 // 이번 판에 등장시킨 엘리트 수
     this.eliteKills = 0 // 처치한 엘리트 수(결과 화면용)
@@ -451,8 +467,25 @@ class GameScene extends Phaser.Scene {
     // 룬 획득/장착 (보스 처치)
     // onEquip(skillId, slotIdx) — 랜덤 획득 방식이라 룬은 이미 큐에 있다
     this.runeScreen = createRuneScreen({ onEquip: (sid, idx) => this.onRuneEquip(sid, idx) })
-    // 결과 화면 — 다시 하기를 누르면 씬을 재시작한다
-    this.result = createResultScreen({ onRetry: () => this.scene.restart() })
+    // 결과 화면 — 다시 하기를 누르면 씬을 재시작한다.
+    // 상점은 결과 화면 위에 겹쳐 열린다(결과를 닫지 않는다).
+    this.result = createResultScreen({
+      onRetry: () => this.scene.restart(),
+      onShop: () => this.shop.show(),
+    })
+    // 상점 — 사망 직후에 들어간다. 여기서 산 강화는 **다음 판**부터 적용된다
+    // (this.metaBonus 는 create() 에서 한 번만 읽으므로 자동으로 그렇게 된다).
+    this.shop = createShopScreen({
+      getGold: () => loadGold(),
+      getMeta: () => this.meta,
+      onBuy: (id) => {
+        const r = buyUpgrade(id, loadGold(), this.meta, spendGold)
+        // 상점에서 골드를 쓰면 결과 화면의 '보유' 숫자가 어긋난다 → 같이 갱신
+        if (r.ok && this.result) this.result.setGold(r.gold)
+        return r
+      },
+      onClose: () => {},
+    })
     // 성장(스킬트리) 버튼 숨김 — 진행은 카드로.
     if (this.growthBtn) this.growthBtn.setVisible(false)
     if (this.growthBtnText) this.growthBtnText.setVisible(false)
@@ -482,8 +515,20 @@ class GameScene extends Phaser.Scene {
     if (!this.cache.audio.exists('bgm')) return
     const cur = this.sound.get('bgm')
     if (cur && cur.isPlaying) return
-    const bgm = cur || this.sound.add('bgm', { loop: true, volume: 0.5 })
+    const bgm = cur || this.sound.add('bgm', { loop: true, volume: BGM_VOLUME })
     bgm.play()
+
+    // 루프 빈틈 제거.
+    // OGG/AAC 인코더는 블록 단위로 패딩을 붙여서 디코드 길이가 악보 길이보다 길다
+    // (실측 32.010s vs 악보 32.000s). Phaser 의 loop 는 버퍼 **전체**를 돌리므로
+    // 그 패딩(약 10ms)이 매 바퀴 무음으로 끼어든다 → 리듬이 끊겨 들린다.
+    // Web Audio 소스에 loopEnd 를 직접 지정해 악보 길이에서 정확히 되감게 한다.
+    // (HTML5 Audio 폴백에는 source 가 없어 이 최적화가 적용되지 않는다 — 허용)
+    const src = bgm.source
+    if (src && 'loopEnd' in src) {
+      src.loopStart = 0
+      src.loopEnd = BGM_LOOP_SEC
+    }
   }
 
   // 카드 패시브 스택 → 배율 보너스 객체 (deriveStats에 전달)
@@ -748,9 +793,11 @@ class GameScene extends Phaser.Scene {
   // 최대 HP 증가분만큼 현재 HP 도 함께 올린다 (활력 스펙).
   recompute() {
     const prevMax = this.stats.player.maxHp
+    // ⚠️ metaBonus 를 반드시 같이 넘긴다. 빼먹으면 레벨업·룬 장착으로 재계산될 때마다
+    //    상점 강화가 사라진다(가장 놓치기 쉬운 버그).
     this.stats = deriveStats(
       this.cfg, this.attributes, this.skillLevels, this.specs,
-      this.cardBonusObj(), this.runeSlots
+      this.cardBonusObj(), this.runeSlots, this.metaBonus
     )
     const gained = this.stats.player.maxHp - prevMax
     if (gained > 0) this.hp += gained
@@ -1044,6 +1091,19 @@ class GameScene extends Phaser.Scene {
       .setDepth(d)
 
     // 멈춤 버튼 자리를 비우려고 우측 정보는 한 칸씩 내렸다
+    // 골드 — 좌상단 레벨 아래. 판이 끝나도 남는 재화라 눈에 잘 띄는 자리에 둔다.
+    this.goldIcon = this.add
+      .ellipse(26, 80, 17, 13, 0xf9d75c)
+      .setStrokeStyle(2, 0x8a6a1a)
+      .setDepth(d)
+    this.goldIconIn = this.add
+      .ellipse(26, 79, 8, 6, 0xfff0b8)
+      .setDepth(d)
+    this.goldText = this.add
+      .text(40, 80, '0', { ...font, fontSize: '19px', color: '#f9d75c' })
+      .setOrigin(0, 0.5)
+      .setDepth(d)
+
     this.killText = this.add
       .text(W - 20, 68, 'Kills: 0', { ...font, fontSize: '20px' })
       .setOrigin(1, 0)
@@ -1210,7 +1270,10 @@ class GameScene extends Phaser.Scene {
       // 사망 후: 결과 화면이 뜨기 전(사망 애니 재생 중) 클릭은 무시한다.
       // 그러지 않으면 결과 화면을 건너뛰고 **최고 기록이 저장되지 않는다.**
       if (this.gameOver) {
-        if (this.result && this.result.isOpen) this.scene.restart()
+        // 상점을 열어둔 상태면 재시작하지 않는다(쇼핑 중 실수로 새 판이 시작됨)
+        if (this.result && this.result.isOpen && !(this.shop && this.shop.isOpen)) {
+          this.scene.restart()
+        }
         return
       }
       // 버튼을 누른 것이면 조이스틱을 켜지 않는다 (버튼이 자체 처리)
@@ -1246,7 +1309,9 @@ class GameScene extends Phaser.Scene {
 
     this.input.keyboard.on('keydown-SPACE', () => {
       // 결과 화면이 뜬 뒤에만 재시작 (기록 저장 보장)
-      if (this.gameOver && this.result && this.result.isOpen) this.scene.restart()
+      if (this.gameOver && this.result && this.result.isOpen && !(this.shop && this.shop.isOpen)) {
+        this.scene.restart()
+      }
     })
 
     // PC: ESC 또는 P 로 멈춤 토글
@@ -1406,6 +1471,79 @@ class GameScene extends Phaser.Scene {
       type,
       ranged,
     })
+  }
+
+  // --- 골드 -----------------------------------------------------------------
+  // 판이 끝나도 남는 유일한 재화. "다음 판을 켤 이유"를 만드는 장치다.
+  // 동전을 **눈에 보이게** 떨어뜨리는 게 핵심 — 숫자만 오르면 보상감이 없다.
+  spawnCoin(x, y, n = 1) {
+    const g = this.cfg.gold
+    for (let i = 0; i < n; i++) {
+      const c = this.coinPool.pop() || {}
+      c.x = x
+      c.y = y
+      // 튀어나오는 초기 속도 — 여러 개가 한 점에서 나와도 흩어져 보인다
+      const a = Math.random() * Math.PI * 2
+      const sp = 40 + Math.random() * 70
+      c.vx = Math.cos(a) * sp
+      c.vy = Math.sin(a) * sp * 0.55 // 아이소 뷰라 세로는 눌러서
+      c.life = g.life
+      c.spin = Math.random() * Math.PI * 2 // 회전 위상(개체마다 다르게)
+      c.pull = false // 자석에 걸렸는지
+      this.coins.push(c)
+    }
+  }
+
+  updateCoins(dt) {
+    const g = this.cfg.gold
+    const px = this.player.x
+    const py = this.player.y
+    const pick = this.stats.player.pickupRadius
+    const pick2 = pick * pick
+    const grab = this.stats.player.radius + 6 // 이 안에 들어오면 획득
+    const despawn2 = DESPAWN_DIST * DESPAWN_DIST
+
+    for (let i = this.coins.length - 1; i >= 0; i--) {
+      const c = this.coins[i]
+      c.life -= dt
+      c.spin += dt * 7
+
+      const dx = px - c.x
+      const dy = py - c.y
+      const d2 = dx * dx + dy * dy
+
+      // 획득 범위에 들어오면 빨려온다. 한번 걸리면 범위를 벗어나도 계속 따라온다
+      // (안 그러면 경계에서 붙었다 떨어졌다 하며 어색하다)
+      if (d2 <= pick2) c.pull = true
+
+      if (c.pull) {
+        const d = Math.sqrt(d2) || 1
+        c.x += (dx / d) * g.magnetSpeed * dt
+        c.y += (dy / d) * g.magnetSpeed * dt
+        if (d2 <= grab * grab) {
+          // 골드 획득 배율(상점)은 소수라, 내부는 소수로 누적하고 표시만 내림한다.
+          // 동전 개수를 늘리는 방식은 +10% 에서 대부분 +0개가 되어 체감이 없다.
+          this._goldAcc += this.goldMul
+          this.gold = Math.floor(this._goldAcc)
+          this.refreshGoldHud()
+          this.spawnParticles(c.x, c.y, 3, 0xf9d75c, 90, 2, 0.25)
+          this.removeSwap(this.coins, i, this.coinPool)
+          continue
+        }
+      } else {
+        // 튀어나온 뒤 마찰로 멈춘다
+        c.x += c.vx * dt
+        c.y += c.vy * dt
+        c.vx *= 0.88
+        c.vy *= 0.88
+      }
+
+      if (c.life <= 0 || d2 > despawn2) this.removeSwap(this.coins, i, this.coinPool)
+    }
+  }
+
+  refreshGoldHud() {
+    if (this.goldText) this.goldText.setText(String(this.gold))
   }
 
   // 엘리트 등장 — 시간 기반. 룬 드랍이 여기에 묶여 있으므로
@@ -2202,6 +2340,19 @@ class GameScene extends Phaser.Scene {
     this.killText.setText('Kills: ' + this.kills)
     this.gainXp(e.gems * this.cfg.xp.gemValue)
 
+    // 골드 — 엘리트/보스는 확정, 일반몹은 확률.
+    // ⚠️ gainXp 뒤에 둔다. gainXp 가 레벨업 모달을 열 수 있는데, 그 전에
+    //    동전을 만들어두면 모달 뒤에서 자석이 돌아 이상하게 보인다.
+    const gc = this.cfg.gold
+    if (gc) {
+      if (wasBoss) this.spawnCoin(ex, ey, gc.bossAmount)
+      else if (wasElite) this.spawnCoin(ex, ey, gc.eliteAmount)
+      else if (Math.random() < gc.dropChance) {
+        const n = gc.min + ((Math.random() * (gc.max - gc.min + 1)) | 0)
+        this.spawnCoin(ex, ey, n)
+      }
+    }
+
     // 룬 드랍 — 보스와 **엘리트**만. 일반몹 %드랍은 폐기(킬 비례 폭주 때문).
     // normalDropChance 는 기본 0이지만 되돌리고 싶을 때를 위해 경로는 남겨둔다.
     if (wasBoss) {
@@ -2439,6 +2590,10 @@ class GameScene extends Phaser.Scene {
   endGame() {
     this.gameOver = true
     this.player.setVisible(false)
+
+    // 이번 판 골드를 금고에 넣는다. **여기서 한 번만** 더해야 한다 —
+    // buildResult() 는 결과 화면이 여러 번 그려질 수 있으므로 거기서 하면 중복된다.
+    this.bankedGold = addGold(this.gold)
     // 사망 애니 재생 (스프라이트)
     if (this.playerSprite) {
       this.animKey = 'death'
@@ -2486,6 +2641,8 @@ class GameScene extends Phaser.Scene {
       //    (예전엔 등장 수를 '보스 처치'로 표시해 실제보다 부풀려 나왔다).
       bossKills: this.bossKills,
       eliteKills: this.eliteKills,
+      gold: this.gold, // 이번 판 획득
+      goldTotal: this.bankedGold ?? loadGold(), // 금고 누적 (업그레이드 예정)
       runes,
       skills,
     }
@@ -2599,6 +2756,7 @@ class GameScene extends Phaser.Scene {
 
     this.updateSkills(dt)
     this.updateBursts(dt)
+    this.updateCoins(dt)
     this.updateExplosions(dt)
     this.updateGrenades(dt)
     this.updatePopups(dt)
@@ -3202,6 +3360,25 @@ class GameScene extends Phaser.Scene {
       ge.fillEllipse(e.x, e.y + e.r * 0.9, e.r * 1.9, e.r * 0.9)
     }
 
+    // 1-a) 골드 동전 — 바닥 레이어(적 스프라이트 아래)에 그린다.
+    //   회전은 가로 폭을 진동시켜 표현한다(스프라이트 없이 동전처럼 보이는 가장 싼 방법).
+    //   사라질 때(마지막 1.5초)는 깜빡여서 "곧 없어진다"를 알린다.
+    for (let i = 0; i < this.coins.length; i++) {
+      const c = this.coins[i]
+      if (Math.abs(c.x - px) > cullX || Math.abs(c.y - py) > cullY) continue
+      const blink = c.life < 1.5 && Math.floor(c.life * 8) % 2 === 0
+      if (blink) continue
+      const w = 4 + Math.abs(Math.cos(c.spin)) * 5 // 회전에 따라 납작해진다
+      ge.fillStyle(0x000000, 0.3)
+      ge.fillEllipse(c.x, c.y + 4, w * 1.6, 4)
+      ge.fillStyle(0x8a6a1a, 1) // 테두리(어두운 금)
+      ge.fillEllipse(c.x, c.y, w * 2 + 2, 13)
+      ge.fillStyle(0xf9d75c, 1) // 몸통
+      ge.fillEllipse(c.x, c.y, w * 2, 11)
+      ge.fillStyle(0xfff3c4, 1) // 반사광 — 이게 있어야 금속으로 읽힌다
+      ge.fillEllipse(c.x - w * 0.25, c.y - 2, w * 0.8, 4)
+    }
+
     // 1-b) 수호자 오라 — 바닥에 그린다(스프라이트 아래). 이 원 안의 적이 강해지므로
     //      "원을 지우려면 중심을 죽여야 한다"가 그림만으로 읽혀야 한다.
     const auraR = this.cfg.elite.wardenRadius
@@ -3639,6 +3816,38 @@ function saveMuted(m) {
   } catch {
     /* 저장 실패는 무시 */
   }
+}
+
+// --- 골드 금고 -------------------------------------------------------------
+// 판이 끝나도 남는 유일한 재화. 다음 단계에서 시작 스탯 업그레이드에 쓸 예정이라
+// 지금부터 누적해 둔다(그때 가서 0부터 시작하면 첫 플레이어가 아무것도 못 산다).
+const GOLD_KEY = 'wg_gold_v1'
+
+export function loadGold() {
+  try {
+    const v = parseInt(localStorage.getItem(GOLD_KEY) || '0', 10)
+    return Number.isFinite(v) && v > 0 ? v : 0
+  } catch {
+    return 0
+  }
+}
+
+function setGold(total) {
+  try {
+    localStorage.setItem(GOLD_KEY, String(Math.max(0, total | 0)))
+  } catch {
+    /* 저장 실패해도 이번 세션 표시는 정상 */
+  }
+  return Math.max(0, total | 0)
+}
+
+function addGold(n) {
+  return setGold(loadGold() + Math.max(0, n | 0))
+}
+
+// 상점에서 차감. 남은 골드를 돌려준다.
+function spendGold(n) {
+  return setGold(loadGold() - Math.max(0, n | 0))
 }
 
 // Phaser 보다 먼저 띄운다 — 로딩 진행률을 처음부터 보여주기 위해.

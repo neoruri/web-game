@@ -48,7 +48,7 @@ function fmtTime(sec) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function createResultScreen({ onRetry }) {
+export function createResultScreen({ onRetry, onShop }) {
   let open = false
 
   // scene.restart()로 create()가 다시 돌 때 오버레이가 DOM에 쌓이는 것을 막는다
@@ -62,7 +62,10 @@ export function createResultScreen({ onRetry }) {
     if (e.target.closest('[data-act="retry"]')) {
       hide()
       onRetry()
+      return
     }
+    // 상점은 결과 화면을 **닫지 않는다** — 사고 나서 돌아와 "다시 하기"를 누르는 흐름
+    if (e.target.closest('[data-act="shop"]')) onShop && onShop()
   })
 
   function show(r) {
@@ -128,6 +131,18 @@ export function createResultScreen({ onRetry }) {
             ${stat('엘리트', elite, `최고 ${best.eliteKills}`, isNewElite)}
           </div>
 
+          ${
+            r.gold != null
+              ? `<div class="rz-gold">
+                   <span class="rz-coin"></span>
+                   <span class="rz-gnum">+${r.gold}</span>
+                   <span class="rz-glbl">획득 골드</span>
+                   <span class="rz-gtot">보유 <b>${r.goldTotal ?? r.gold}</b></span>
+                 </div>
+                 <div class="rz-gnote">골드는 판이 끝나도 남습니다 — <b>상점</b>에서 시작 스탯을 영구 강화하세요</div>`
+              : ''
+          }
+
           <div class="rz-sechd"><span>최종 빌드</span><span class="rz-ln"></span></div>
           <div class="rz-skills">${skillHTML}</div>
 
@@ -136,6 +151,7 @@ export function createResultScreen({ onRetry }) {
         </div>
 
         <div class="rz-foot">
+          ${onShop ? '<button class="rz-btn s" data-act="shop">🛒 상점</button>' : ''}
           <button class="rz-btn p" data-act="retry">다시 하기</button>
         </div>
       </div>`
@@ -149,9 +165,16 @@ export function createResultScreen({ onRetry }) {
     open = false
   }
 
+  // 상점에서 골드를 쓰면 결과 화면의 '보유' 숫자가 어긋난다 → 외부에서 갱신해준다
+  function setGold(total) {
+    const el = root.querySelector('.rz-gtot b')
+    if (el) el.textContent = String(total)
+  }
+
   return {
     show,
     hide,
+    setGold,
     get isOpen() {
       return open
     },

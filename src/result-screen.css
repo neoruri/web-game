@@ -78,6 +78,50 @@
 .rz-ric { font-size: 18px; flex: 0 0 auto; }
 .rz-rnm { font-size: 12.5px; font-weight: 700; flex: 0 0 auto; }
 .rz-rds { font-size: 11px; color: #8395a6; margin-left: auto; }
+/* --- 골드: 판이 끝나도 남는 유일한 재화라 시선을 먼저 끌게 강조한다 --- */
+.rz-gold {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: linear-gradient(90deg, rgba(249, 215, 92, 0.14), rgba(249, 215, 92, 0.04));
+  border: 1px solid #6b5420;
+}
+.rz-coin {
+  width: 20px;
+  height: 16px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: radial-gradient(circle at 35% 32%, #fff3c4 0%, #f9d75c 55%, #c79a25 100%);
+  border: 1px solid #8a6a1a;
+}
+.rz-gnum {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f9d75c;
+}
+.rz-glbl {
+  font-size: 12.5px;
+  color: #b9a97e;
+}
+.rz-gtot {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: #9a8fb0;
+}
+.rz-gtot b {
+  color: #f0dfa8;
+  font-size: 15px;
+}
+.rz-gnote {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: #7d7291;
+  line-height: 1.5;
+}
+
 .rz-none { font-size: 11.5px; color: #5b6b7d; padding: 6px 2px; }
 
 .rz-foot { flex: 0 0 auto; display: flex; gap: 9px; }
@@ -87,3 +131,13 @@
   font-family: inherit; font-weight: 600;
 }
 .rz-btn.p { background: #e7c15a; border-color: #e7c15a; color: #1a130a; font-weight: 700; }
+
+/* 상점 버튼 — '다시 하기'가 주버튼이므로 이쪽은 보조 톤으로 둔다 */
+.rz-btn.s {
+  flex: 0 0 auto;
+  background: linear-gradient(#2c2338, #1c1526);
+  border: 1px solid #7a5f2e;
+  color: #f0e2bb;
+}
+.rz-foot { display: flex; gap: 9px; align-items: center; }
+.rz-btn.p { flex: 1; }

@@ -119,8 +119,16 @@ function makeSfx(agg) {
 }
 
 // runeSlots: { basic|multishot|... : [ {id,tier,v} | null, ... ] }  (스킬당 N슬롯)
-export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeSlots = {}) {
+// meta: 상점(영구 성장) 보너스 { damagePct, maxHpPct, regenFlat, speedPct, goldPct }
+//   판 밖에서 산 강화라 **가장 마지막에** 곱한다(런 내 성장과 독립적으로 읽히게).
+export function deriveStats(
+  cfg, attr, skills, specs = {}, cardBonus = {}, runeSlots = {}, meta = null
+) {
   const A = cfg.attr
+  const M = meta || { damagePct: 0, maxHpPct: 0, regenFlat: 0, speedPct: 0, goldPct: 0 }
+  const mDmg = 1 + (M.damagePct || 0) / 100
+  const mHp = 1 + (M.maxHpPct || 0) / 100
+  const mSpd = 1 + (M.speedPct || 0) / 100
 
   // 카드 패시브 배율 (뱀서 표준 진행)
   const cDmg = 1 + (cardBonus.dmg || 0)
@@ -152,7 +160,7 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
 
   // 기본 활 — 힘(전체 피해) + 궁술숙련 + 힘20 모든피해 + 카드 데미지
   s.weapon.damage =
-    cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct) * (1 + tb.allDmgPct) * cDmg
+    cfg.weapon.damage * dmgMul * (1 + p.basicDmgPct) * (1 + tb.allDmgPct) * cDmg * mDmg
   s.weapon.cooldown = cfg.weapon.cooldown / (1 + atkSpd) / cAtk
   s.weapon.speed = cfg.weapon.speed * (1 + p.projSpeedPct)
   s.weapon.pierce = cfg.weapon.pierce + p.pierce + tb.pierceAdd
@@ -170,8 +178,8 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
   s.weapon.sfx = makeSfx(bagg) // 화상·독·냉기·취약 묶음 (없으면 null)
 
   // 이동/체력 — 능력치 + 카드 패시브
-  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove
-  s.player.maxHp = (cfg.player.maxHp + hpAdd) * cHp
+  s.player.speed = cfg.player.speed * (1 + moveAttr + p.movePct + tb.movePct) * cMove * mSpd
+  s.player.maxHp = (cfg.player.maxHp + hpAdd) * cHp * mHp
 
   // 확률/런타임 전투 수치 (game/sim 이 매 판정마다 참조)
   s.combat = {
@@ -179,7 +187,7 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
     critDmg: tb.critDmg,
     dodge: Math.min(tb.dodge, 0.75),
     dmgTakenMul: tb.dmgTakenMul,
-    regen: tb.regen,
+    regen: tb.regen + (M.regenFlat || 0), // 상점 회복은 절대값(기본이 0이라 %가 무의미)
     killExplodeChance: tb.killExplodeChance,
     cdRefundChance: tb.cdRefundChance,
     revive: tb.revive,
@@ -254,6 +262,9 @@ export function deriveStats(cfg, attr, skills, specs = {}, cardBonus = {}, runeS
 
     s.skillStats[id] = st
   }
+
+  // 골드 획득 배율 — 전투 수치는 아니지만 한곳(stats)에서 읽게 두면 실수가 줄어든다
+  s.goldMul = 1 + (M.goldPct || 0) / 100
 
   s.derived = {
     dmgPct: round1((dmgMul * (1 + p.basicDmgPct) - 1) * 100),

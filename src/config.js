@@ -70,6 +70,19 @@ export const DEFAULTS = {
   rune: {
     normalDropChance: 0,
   },
+  // 골드 — 판이 끝나도 **남는** 유일한 재화. 다음 판 시작 스탯 업그레이드에 쓴다.
+  // ⚠️ 룬과 달리 골드는 킬 수 비례여도 괜찮다. 룬은 슬롯이 3칸뿐이라 개수가
+  //    폭주하면 UI가 무너지지만, 골드는 그냥 숫자라 많아도 문제가 없다.
+  //    (다만 업그레이드 가격은 후반 킬 수를 기준으로 정해야 한다)
+  gold: {
+    dropChance: 0.12, // 일반몹 드랍 확률
+    min: 1, // 드랍 시 최소 개수
+    max: 2, // 최대 개수
+    eliteAmount: 10, // 엘리트 확정 드랍
+    bossAmount: 25, // 보스 확정 드랍
+    magnetSpeed: 460, // 획득 범위 안에서 빨려오는 속도(px/s)
+    life: 14, // 이 시간(초) 뒤 사라진다 — 화면에 무한히 쌓이지 않게
+  },
   // 엘리트 몹 — 예고가 있는 공격 패턴 4종. 시간 기반 등장 + 룬 확정 드랍.
   // 능력치만 바꾸는 접두어(이속/체력)가 아니라 **플레이어가 할 행동을 바꾸는** 설계:
   //   돌격자=측면 회피 / 포격수=자리 비우기 / 산탄사수=각도 이탈 / 수호자=우선순위 처치
@@ -170,7 +183,7 @@ export const SCHEMA = [
       { key: 'speed', label: '이동 속도', min: 40, max: 500, step: 5, effect: '↑ 빨리 움직여 도망·젬줍기 쉬움  ·  ↓ 느려서 포위당하기 쉬움' },
       { key: 'maxHp', label: '최대 체력', min: 20, max: 500, step: 10, effect: '↑ 더 오래 버팀  ·  ↓ 몇 대에 사망' },
       { key: 'invuln', label: '피격 후 무적(초)', min: 0, max: 2, step: 0.05, effect: '↑ 맞은 뒤 잠깐 무적이라 연속피해 덜함  ·  ↓ 떼에 갇히면 순삭' },
-      { key: 'pickupRadius', label: '젬 획득 범위', min: 20, max: 400, step: 5, effect: '↑ 멀리서도 젬이 빨려와 성장 빠름  ·  ↓ 직접 주우러 가야 함' },
+      { key: 'pickupRadius', label: '골드 획득 범위', min: 20, max: 400, step: 5, effect: '↑ 멀리서도 동전이 빨려옴  ·  ↓ 직접 주우러 가야 함' },
     ],
   },
   {
@@ -247,6 +260,17 @@ export const SCHEMA = [
       { key: 'rampPerMin', label: '분당 스폰 배율', min: 1, max: 3, step: 0.05, effect: '↑ 1분마다 스폰량 급증(난이도 급상승)  ·  ↓ 완만' },
       { key: 'rampCap', label: '스폰 배율 상한', min: 1, max: 60, step: 1, effect: '↑ 후반 물량 상한이 높아 극한까지  ·  ↓ 상한이 낮아 관리 가능' },
       { key: 'maxEnemies', label: '동시 적 수 상한', min: 20, max: 1500, step: 20, effect: '↑ 화면에 적 많음(성능 부담↑)  ·  ↓ 덜 붐빔' },
+    ],
+  },
+  {
+    key: 'gold',
+    label: '골드 (영구 재화)',
+    fields: [
+      { key: 'dropChance', label: '일반몹 드랍 확률', min: 0, max: 1, step: 0.01, effect: '↑ 동전이 자주 떨어짐(업그레이드 빠름)  ·  ↓ 드물게' },
+      { key: 'max', label: '드랍 시 최대 개수', min: 1, max: 10, step: 1, effect: '↑ 한 번에 여러 개  ·  ↓ 한 개씩' },
+      { key: 'eliteAmount', label: '엘리트 드랍량', min: 0, max: 100, step: 1, effect: '↑ 엘리트를 잡을 이유가 커짐' },
+      { key: 'bossAmount', label: '보스 드랍량', min: 0, max: 200, step: 5, effect: '↑ 보스 보상 상향' },
+      { key: 'life', label: '동전 유지 시간(초)', min: 3, max: 60, step: 1, effect: '↑ 오래 남아 나중에 주울 수 있음(화면 복잡)  ·  ↓ 빨리 사라짐' },
     ],
   },
   {

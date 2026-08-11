@@ -1,0 +1,187 @@
+/* 상점 — 결과 화면 위에 뜬다 */
+#shop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 130; /* 결과 화면(120)보다 위 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 4, 9, 0.92);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+  color: #e6e0f0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#shop-modal.sh-hidden { display: none; }
+#shop-modal * { box-sizing: border-box; }
+
+.sh-panel {
+  width: min(94vw, 470px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(#1a1524, #120e1a);
+  border: 1px solid #3a2f4b;
+  border-radius: 18px;
+  padding: 16px 14px 14px;
+  gap: 10px;
+}
+
+.sh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sh-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.sh-gold {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(249, 215, 92, 0.1);
+  border: 1px solid #6b5420;
+  font-size: 16px;
+  color: #f9d75c;
+}
+
+/* 동전 — 이미지 없이 CSS로. HUD/결과화면과 같은 색을 쓴다 */
+.sh-coin {
+  width: 15px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: radial-gradient(circle at 35% 32%, #fff3c4 0%, #f9d75c 55%, #c79a25 100%);
+  border: 1px solid #8a6a1a;
+}
+.sh-coin.big { width: 18px; height: 14px; }
+
+.sh-hint {
+  font-size: 12px;
+  color: #8d7fa6;
+  line-height: 1.5;
+}
+.sh-hint b { color: #f0dfa8; }
+
+/* ⚠️ body { touch-action: none } 때문에 스크롤이 죽는다 — 되돌려야 한다 */
+.sh-scroll {
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px;
+}
+
+.sh-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: #1d1729;
+  border: 1px solid #322a44;
+  transition: 0.15s;
+}
+.sh-row.poor { opacity: 0.62; }
+.sh-row.maxed { border-color: #5a4a22; background: #1f1a26; }
+.sh-row.sh-bought {
+  border-color: #f9d75c;
+  box-shadow: 0 0 18px rgba(249, 215, 92, 0.35);
+}
+
+.sh-ic {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  background: #120d1c;
+  border: 1px solid #3a2f4b;
+}
+.sh-body { flex: 1; min-width: 0; }
+.sh-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sh-nm { font-size: 15px; font-weight: 700; }
+.sh-lv { font-size: 12px; color: #9a8fb0; margin-left: auto; }
+.sh-lvmax { color: #6b6280; }
+
+.sh-eff { font-size: 13px; color: #cbbfe0; margin-top: 2px; }
+.sh-eff b { color: #a6e3a1; }
+.sh-arrow { color: #6b6280; margin: 0 2px; }
+.sh-max { color: #f9d75c; font-size: 11.5px; }
+
+/* 레벨 점 — 진행도를 한눈에 */
+.sh-pips {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+}
+.sh-pips i {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #2e2740;
+}
+.sh-pips i.on { background: linear-gradient(90deg, #b08a4a, #f9d75c); }
+
+.sh-desc { font-size: 11.5px; color: #7d7291; margin-top: 5px; line-height: 1.45; }
+
+.sh-buy {
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid #7a5f2e;
+  background: linear-gradient(#2c2338, #1c1526);
+  color: #f0e2bb;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: 0.12s;
+}
+.sh-buy:active { transform: scale(0.96); }
+.sh-buy:disabled {
+  cursor: default;
+  opacity: 0.45;
+  border-color: #3a3448;
+  color: #9a8fb0;
+}
+.sh-cost { font-variant-numeric: tabular-nums; }
+
+.sh-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+.sh-inv { font-size: 12px; color: #7d7291; }
+.sh-close {
+  margin-left: auto;
+  padding: 13px 26px;
+  border-radius: 13px;
+  border: 1px solid #4a3f60;
+  background: #241d33;
+  color: #e6e0f0;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sh-close:active { transform: scale(0.97); }
