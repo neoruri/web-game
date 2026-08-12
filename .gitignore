@@ -27,3 +27,10 @@ dist-ssr
 public/audio/_*.wav
 public/audio/_*.png
 public/sprites/**/_*.png
+
+# 스프라이트 생성 중간 산출물 (미리보기·후보 — 15MB, 스크립트로 재생성 가능)
+tools/sprites/_*.png
+tools/sprites/tileset_iso_dark_*.png
+tools/sprites/tileset_iso_gemini_*.png
+tools/sprites/props_iso_N*.png
+tools/sprites/props_iso_P*.png
