@@ -1,0 +1,70 @@
+ATTACH: gem_N2_c.png  (the reference character)
+
+THE CHARACTER
+Use the EXACT character in the attached image. Same hood, same armor, same
+quiver, same colors, same proportions, same violet-magenta rune glow.
+Do not redesign anything. Do not change the outfit.
+
+*** THE BOW IS NOT IN THIS IMAGE ***
+In the reference, the bow is a SEPARATE object standing beside the character.
+Do NOT draw the bow at all. His hands are EMPTY.
+The bow is handled separately in the game engine.
+Empty hands are required so the arms can swing freely.
+
+*** KEEP THE VIOLET-MAGENTA GLOW - THIS WAS LOST LAST TIME ***
+Removing the bow does NOT mean removing the glow. The arcane light must stay
+exactly as bright and as large as it is in the reference image:
+  - the glowing runes and etched lines on the SHOULDER, BRACERS and FOREARMS
+  - the glow around the BELT and hip
+  - the rune bands on the greaves and boots
+  - the glowing arrowheads in the quiver
+  - the glowing eyes inside the hood
+Keep the SAME glow color (#e05cff violet-magenta), the SAME brightness, and the
+SAME amount of glowing area as the reference. Do not dim it, do not shrink it,
+do not turn the runes into plain dark engraving.
+The character reads at a very small size in the game, and this glow is the only
+thing the eye can follow - if it fades, the character becomes an unreadable
+dark blob.
+
+FORMAT
+- STRICT SIDE VIEW, facing RIGHT, in every frame. Never front, back, or 3/4.
+- EXACTLY 4 FRAMES. Not 5, not 3. Count them before finishing.
+- All frames in ONE horizontal row, in a single image, left to right.
+- Leave at least 40 pixels of empty green between frames. Frames must not touch.
+- Background: FLAT PURE GREEN (#00FF00), completely empty.
+- NO ground line, NO shadow, NO floor, NO horizon, NO text, NO frame borders,
+  NO numbers, NO grid lines.
+- Same character size in every frame. Do not zoom in or out between frames.
+- The feet rest on the SAME invisible ground height in every frame.
+- Painterly 2D game art, matching the reference exactly.
+
+WHAT TO DRAW: 4 FRAMES OF AN IDLE / BREATHING LOOP
+
+The character stands in place and breathes. This is a LOOP - frame 4 must lead
+smoothly back into frame 1.
+
+The feet DO NOT MOVE AT ALL. They stay in exactly the same place in all 4 frames.
+Only the upper body breathes.
+
+FRAME 1  Neutral. Shoulders at rest, chest neutral.
+FRAME 2  Inhale. Chest and shoulders rise very slightly - about 1% of body
+         height. The hip cloth lifts a hair.
+FRAME 3  Top of the breath. Highest point, still only about 1.5% of body height
+         above frame 1. Head tilts a few degrees.
+FRAME 4  Exhale. Settling back down toward frame 1.
+
+KEEP THE MOTION TINY. The head must never move more than 2% of body height
+between frames. This is breathing, not bobbing, not swaying, not walking.
+
+The arms hang relaxed at the sides and barely move.
+
+DO NOT DRAW ANY OF THESE
+- The bow. Hands stay empty.
+- A long cloak or robe covering the legs. The legs must stay visible in every
+  frame - this is why this character was chosen.
+- A ground line, a shadow, or a horizon under the feet.
+- Frame numbers, labels, borders, or a grid.
+- Smoke, mist, aura, or glow rings. These are drawn by code later.
+- A different character. Every frame must be the SAME person as the reference.
+- Front view, back view, or three-quarter view.
+- Text, watermark, signature.

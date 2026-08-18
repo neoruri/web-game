@@ -1,0 +1,54 @@
+ATTACH: gem_N2_c.png  (the reference character)
+
+Draw ONE single character. One figure only, filling the image.
+
+THE CHARACTER
+Use the EXACT character in the attached image. Same hood, same armor, same
+quiver, same colors, same proportions, same violet-magenta rune glow.
+Do not redesign anything.
+
+*** DO NOT DRAW THE BOW ***
+In the reference the bow is a SEPARATE object beside the character.
+Do NOT draw the bow. His hands are EMPTY and closed into loose fists,
+so the arms can swing freely. The bow is added by the game engine later.
+
+*** KEEP THE VIOLET-MAGENTA GLOW ***
+Removing the bow does NOT mean removing the glow. Keep the arcane light exactly
+as bright and as large as the reference: the runes on the SHOULDER, BRACERS and
+FOREARMS, the glow at the BELT, the rune bands on greaves and boots, the glowing
+arrowheads, and the glowing eyes in the hood. Same color #e05cff. Do not dim it.
+
+FORMAT
+- STRICT SIDE VIEW, facing RIGHT. Not front, not back, not three-quarter.
+- ONE character only. Do not draw a second figure, a shadow twin, or a sequence.
+- The figure fills about 90% of the image height, centered.
+- Background: FLAT PURE GREEN (#00FF00), completely empty.
+- NO ground line, NO shadow, NO floor, NO horizon, NO text, NO borders.
+- Painterly 2D game art, matching the reference exactly.
+
+THE POSE FOR THIS IMAGE - FRAME 6 of 6: PUSH OFF FROM THE LEFT FOOT
+
+- The LEFT leg is BEHIND, extending as the foot pushes off. Heel lifted,
+  only the toe in contact.
+- The RIGHT knee is driving FORWARD and UP, the lower right leg hanging down.
+- The horizontal gap between the feet is about 30% of body height.
+- The body is rising and driving forward.
+- The RIGHT arm swings BACK, the LEFT arm swings FORWARD.
+
+He still faces RIGHT.
+
+UPPER BODY - the same in every frame of this set
+- The torso leans FORWARD. The head sits about 10% of body height ahead of
+  the hips. He is running, so he is always leaning into it.
+- The arms are bent about 90 degrees at the elbow and swing OPPOSITE to the legs.
+- Head height stays within 3% of body height of a normal standing pose.
+  He is RUNNING, not jumping. Do not lift him off the ground.
+
+DO NOT DRAW
+- The bow. Hands stay empty.
+- More than one character. Exactly one figure.
+- A ground line, shadow, or horizon.
+- Smoke, mist, aura, or glow rings around the body.
+- A long cloak covering the legs. The legs must be fully visible.
+- Front, back, or three-quarter view.
+- Text, frame borders, watermark.

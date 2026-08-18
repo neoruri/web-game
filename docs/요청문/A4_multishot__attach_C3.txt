@@ -1,0 +1,43 @@
+Using the EXACT SAME character as the attached image, draw an animation
+strip.
+
+ANIMATION: firing MULTIPLE arrows at once — a bigger, more dramatic version
+of a normal shot. Side view.
+FRAMES: 6 frames in ONE horizontal row, evenly spaced, left to right.
+
+ Frame 1  bow raised, several arrows being pulled from the quiver together
+ Frame 2  three to five arrows nocked side by side, string starting back
+ Frame 3  drawing back, the arrows visibly FANNED APART like a hand of cards
+ Frame 4  FULL DRAW — body leaning into it, arrows spread wide, the
+          soul-fire climbing along every arrow shaft
+ Frame 5  RELEASE — all arrows leaving at once, strong recoil, cloak flung
+          back hard, the glow FLARES at its brightest
+ Frame 6  recovering, bow lowering
+
+GLOW — violet-magenta #e05cff:
+  - eyes, flaming hand, bow grip and string
+  - the arrow shafts glow while nocked (frames 2-4), brightest at frame 5
+  - THE TORN HEM OF THE CLOAK — glowing ragged bottom edge. REQUIRED.
+  ✕ NO smoke, NO rising wisps, NO aura, NO chest sigil.
+
+FRAME ALIGNMENT: feet planted on the same ground line in all 6 frames.
+Same height, same camera distance, body horizontally centered, no drifting.
+
+VIEW: side view, facing RIGHT.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients. Light from the UPPER LEFT. 5-6 brightness steps pushed FAR APART.
+
+DO NOT DRAW: no outline stroke, no rim light ring, no ground shadow, no
+floor, no arrows in flight past the bow, no impact effects, no text.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not an arrow, not the bow,
+not the cloak, not a wisp of flame. Each frame must be a fully separated
+island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 2304x512.

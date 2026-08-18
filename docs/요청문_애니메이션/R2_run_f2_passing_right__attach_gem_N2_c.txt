@@ -1,0 +1,64 @@
+ATTACH: gem_N2_c.png  (the reference character)
+
+Draw ONE single character. One figure only, filling the image.
+
+THE CHARACTER
+Use the EXACT character in the attached image. Same hood, same armor, same
+quiver, same colors, same proportions, same violet-magenta rune glow.
+Do not redesign anything.
+
+*** DO NOT DRAW THE BOW ***
+In the reference the bow is a SEPARATE object beside the character.
+Do NOT draw the bow. His hands are EMPTY and closed into loose fists,
+so the arms can swing freely. The bow is added by the game engine later.
+
+*** KEEP THE VIOLET-MAGENTA GLOW ***
+Removing the bow does NOT mean removing the glow. Keep the arcane light exactly
+as bright and as large as the reference: the runes on the SHOULDER, BRACERS and
+FOREARMS, the glow at the BELT, the rune bands on greaves and boots, the glowing
+arrowheads, and the glowing eyes in the hood. Same color #e05cff. Do not dim it.
+
+FORMAT
+- STRICT SIDE VIEW, facing RIGHT. Not front, not back, not three-quarter.
+- ONE character only. Do not draw a second figure, a shadow twin, or a sequence.
+- The figure fills about 90% of the image height, centered.
+- Background: FLAT PURE GREEN (#00FF00), completely empty.
+- NO ground line, NO shadow, NO floor, NO horizon, NO text, NO borders.
+- Painterly 2D game art, matching the reference exactly.
+
+THE POSE FOR THIS IMAGE - FRAME 2 of 6: MID-STRIDE, WEIGHT ON THE RIGHT LEG
+
+The previous version of this frame had the two feet almost touching -
+a stride of only 10% of body height. Next to the other frames (43%) that reads
+as the character STOPPING and then lurching forward. It looks like hopping on
+one knee, not running.
+
+*** MAKE THE STRIDE MEDIUM, NOT TINY ***
+- The horizontal gap between the two feet is about 26% of body height.
+  Not 10%. The legs are clearly apart, just less than in the wide contact pose.
+- The LEFT leg is the swinging leg, moving FORWARD past the right leg.
+- Its knee is bent and raised to about mid-thigh height, and its foot is lifted
+  a little off the ground - about 8% of body height. Visible gap under the boot,
+  but not a high knee lift.
+- The RIGHT leg is the standing leg.
+- The other leg is under the body carrying the weight, foot on the ground,
+  knee slightly bent.
+
+The point of this frame is to sit BETWEEN the wide stride and the closed stride.
+It should look like the middle of a stride, not a pause.
+
+UPPER BODY - the same in every frame of this set
+- The torso leans FORWARD. The head sits about 10% of body height ahead of
+  the hips. He is running, so he is always leaning into it.
+- The arms are bent about 90 degrees at the elbow and swing OPPOSITE to the legs.
+- Head height stays within 3% of body height of a normal standing pose.
+  He is RUNNING, not jumping. Do not lift him off the ground.
+
+DO NOT DRAW
+- The bow. Hands stay empty.
+- More than one character. Exactly one figure.
+- A ground line, shadow, or horizon.
+- Smoke, mist, aura, or glow rings around the body.
+- A long cloak covering the legs. The legs must be fully visible.
+- Front, back, or three-quarter view.
+- Text, frame borders, watermark.

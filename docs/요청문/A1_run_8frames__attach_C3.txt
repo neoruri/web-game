@@ -1,0 +1,100 @@
+Draw an 8-frame RUN CYCLE sprite strip for a 2D game character.
+
+The attached image is a COSTUME AND COLOR reference ONLY — use it for the
+hood, the tattered cloak, the quiver, the armor, the violet-magenta soul-fire
+and the proportions. Its STANDING POSTURE MUST NOT BE COPIED. Every frame of
+this strip is a sprinting pose. No frame may look like the character is
+standing still.
+
+FRAMES: 8 frames in ONE horizontal row, evenly spaced, left to right.
+This is ONE COMPLETE run cycle = TWO full steps (4 frames per step).
+
+=== THE MOST IMPORTANT RULE: THE FEET NEVER LEAVE THE GROUND ===
+All 8 frames share ONE horizontal ground level. The lowest foot touches that
+same level in every single frame. NEVER draw the character airborne or
+hopping. Do not raise the whole body. The top of the head must stay at almost
+exactly the same height in all 8 frames — vary it by no more than 3% of the
+body height. Running is sold by the LEGS SPREADING, not by bouncing up.
+
+=== WHAT ACTUALLY CHANGES: STRIDE WIDTH ===
+The horizontal distance between the two feet must swing between nearly zero
+and about HALF THE BODY HEIGHT:
+
+ Frame 1  PASSING — feet almost together, RIGHT knee lifted and driving
+          forward, left leg straight under the body.        stride ~0
+ Frame 2  REACHING — right leg swings forward, left leg pushing back.
+                                                            stride ~30%
+ Frame 3  CONTACT — RIGHT foot plants forward, LEFT leg stretched far
+          behind, heel up. WIDEST SPLIT of the cycle.        stride ~50%
+ Frame 4  PUSH — body passes over the planted right foot, left leg folding
+          forward underneath.                                stride ~20%
+ Frame 5  PASSING — feet almost together, LEFT knee lifted and driving
+          forward, right leg straight under the body.
+          This is the MIRROR of frame 1 — opposite leg.       stride ~0
+ Frame 6  REACHING — left leg swings forward, right leg pushing back.
+                                                            stride ~30%
+ Frame 7  CONTACT — LEFT foot plants forward, RIGHT leg stretched far
+          behind, heel up. WIDEST SPLIT.                     stride ~50%
+ Frame 8  PUSH — body passes over the planted left foot, right leg folding
+          forward underneath. Leads cleanly back into frame 1. stride ~20%
+
+Frames 5-8 are frames 1-4 with the LEGS SWAPPED. They must NOT be copies.
+
+=== THE CLOAK MUST NOT HIDE THE LEGS ===
+The long tattered cloak is swept BACKWARD AND UPWARD by the wind of running,
+streaming out behind the character like a banner. It must CLEAR THE LEGS
+COMPLETELY — both legs are fully visible from hip to boot in every frame,
+so the stride can be seen. Do NOT let the cloak hang down over the thighs or
+shins. The ragged hem trails behind, not below.
+
+=== TORSO AND ARMS MUST MOVE TOO ===
+- The torso is PITCHED FORWARD in every frame, leaning into the run. The
+  head is clearly AHEAD of the hips, by roughly 10% of the body height.
+- Both arms are BENT about 90 degrees at the elbow and PUMP back and forth,
+  OPPOSITE to the legs: when the right leg is forward, the LEFT arm is
+  forward. The arms swing visibly — this is a main signal of running.
+- The bow is gripped in one hand and held LOW, angled DOWN and BACK so it
+  does not block the body. It swings with that arm. Do NOT hold the bow
+  raised or aimed forward — this is running, not shooting.
+- The shoulders rotate slightly with the arm swing.
+
+Every one of the 8 frames must be clearly DIFFERENT from every other frame,
+in the legs AND in the arms AND in the torso angle.
+
+=== GLOW ===
+Violet-magenta soul-fire #e05cff, in exactly these places:
+  - the two eyes inside the hood
+  - one hand / forearm wrapped in drifting cold flame (it pumps with the arm)
+  - the bow grip and the bowstring
+  - THE TORN HEM OF THE CLOAK — the ragged trailing edge glows clearly and
+    streaks backward. REQUIRED, plainly visible.
+  NO smoke, NO rising wisps, NO aura around the body. NO glowing chest sigil.
+
+=== FRAME ALIGNMENT ===
+- Same body height and same distance from camera in all 8 frames. No zoom.
+- The single shared ground level is identical in all 8 frames.
+- Each character stays HORIZONTALLY CENTERED inside its own frame. The
+  character must NOT travel across the strip.
+
+VIEW: side view, facing RIGHT, in all 8 frames.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients, no soft blur. Light from the UPPER LEFT. Use a SMALL number of
+brightness steps (5 or 6) pushed FAR APART — this is displayed at only
+64 pixels tall, so soft mid-tones disappear.
+
+DO NOT DRAW: no outline stroke, no rim light, no glow ring, no ground shadow,
+NO GROUND LINE OR FLOOR (do not draw a horizon line at the bottom of the
+image), no motion-blur streaks, no speed lines, no dust clouds, no text,
+no watermark.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not the bow, not the cloak,
+not a wisp of flame. Each frame must be a fully separated island of pixels
+surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 4096x512.

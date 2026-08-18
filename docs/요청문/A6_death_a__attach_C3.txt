@@ -1,0 +1,46 @@
+Using the EXACT SAME character as the attached image, draw an animation
+strip.
+
+ANIMATION: collapsing and dying, side view. This is the FIRST HALF of an
+8-frame death. The FALL MUST BE SHOWN, never skipped.
+FRAMES: 4 frames in ONE horizontal row, evenly spaced, left to right.
+
+ Frame 1  staggering, still upright, head dropping, bow arm going slack
+ Frame 2  knees starting to buckle, body sinking, the bow slipping from the
+          hand
+ Frame 3  knees fully buckled, body low and tilting forward off balance
+ Frame 4  MID-FALL — body tilted about 45 degrees, arms loose, cloak
+          starting to spread, no longer supported by the legs
+
+The soul-fire is DYING OUT across these frames: bright at frame 1, clearly
+dimmer by frame 4. The eyes fade first.
+
+GLOW — violet-magenta #e05cff, fading:
+  - eyes (fading fastest), flaming hand (shrinking), bow grip
+  - THE TORN HEM OF THE CLOAK — still glowing but dimming. REQUIRED.
+  ✕ NO smoke, NO aura, NO chest sigil, NO soul leaving the body, NO
+    explosion or burst.
+
+FRAME ALIGNMENT: frames 1-3 stand on the same ground line. Frame 4 is
+mid-fall and may leave it. Same height, same camera distance, body
+horizontally centered, no zooming. The character must stay fully inside its
+frame.
+
+VIEW: side view, facing RIGHT.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients. Light from the UPPER LEFT. 5-6 brightness steps pushed FAR APART.
+
+DO NOT DRAW: no outline stroke, no rim light ring, no ground shadow, no
+floor, no blood, no text.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not an arrow, not the bow,
+not the cloak, not a wisp of flame. Each frame must be a fully separated
+island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 1536x512.

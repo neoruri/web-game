@@ -1,0 +1,63 @@
+Create ONE character design image.
+
+FORMAT
+- A single character, standing straight, full body.
+- STRICT SIDE VIEW, facing RIGHT. Not front, not back, not three-quarter.
+- The character fills about 90% of the image height, centered.
+- Background: FLAT PURE GREEN (#00FF00), completely empty.
+- NO ground line, NO shadow, NO floor, NO horizon, NO text, NO border.
+- Painterly 2D game art with soft shading. Not flat vector, not photo, not 3D render.
+
+CHARACTER
+A LIVING human arcane archer - a spellbow ranger. Not undead, not a ghost,
+not a skeleton. A living person under the gear.
+
+The bow is an ENCHANTED weapon: violet-magenta runes are carved along the limbs
+of the bow and the bowstring itself glows faintly with arcane light (#e05cff).
+That same arcane light shows in three places and nowhere else:
+  - a soft glow deep inside the hood where the eyes are
+  - thin rune lines on the gear
+  - a small wisp of arcane energy around the bow hand
+Everything else is dark grey-green: weathered armor, leather and cloth.
+
+The hood is deep and pointed, and the face inside it is IN SHADOW - only the
+faint arcane glow is visible. Do not draw a detailed face.
+A quiver of arrows on the back, the arrowheads faintly glowing.
+
+*** THE TWO MOST IMPORTANT RULES ***
+
+1. LEGS FULLY VISIBLE.
+   Both legs must be completely exposed from the hip down.
+   NOTHING may hang below the hip - no cloak, no robe, no coat, no skirt.
+   I must be able to see two separate legs with a clear gap between them.
+   This is the single most important requirement in this request.
+
+2. THE BOW IS HELD LOWERED.
+   The bow hangs down at the side, pointing toward the ground.
+   It is NOT raised, NOT drawn, NOT aimed. No arrow is nocked.
+   The arms hang relaxed so they could swing freely.
+
+OUTFIT FOR THIS VERSION
+NO cape at all. Layered leather pauldrons on the shoulders, and a short torn
+tabard that hangs only over the hip, no lower.
+Lean armored legs with knee guards, light boots, leather straps across the shins.
+Small rune-etched buckles catch the arcane light.
+This is the leanest, fastest-looking version - the legs should read clearly
+even from far away.
+
+DO NOT DRAW ANY OF THESE
+- A long cloak, long robe, floor-length cape, ankle-length coat, or anything
+  that covers or hides the legs. This is the most common mistake - avoid it.
+- A dress, skirt, or gown.
+- Undead features of any kind: skeleton, exposed bones, skull face, rotting
+  flesh, zombie skin, wraith or ghost body, floating or transparent legs.
+  This character is ALIVE.
+- A female figure.
+- A scythe, staff, wand, sword, spear, or wings.
+- The bow raised, drawn, or aimed.
+- Bright saturated purple covering the whole outfit - the violet-magenta arcane
+  light belongs ONLY inside the hood, on the bow runes, and on the bow hand.
+- Smoke, mist, aura, magic circles, or glow rings around the body. These are
+  drawn by code later; if you draw them in they cannot be animated.
+- A ground shadow or a line under the feet.
+- Multiple characters, extra limbs, cropped body, text, watermark.

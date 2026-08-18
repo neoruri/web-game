@@ -1,0 +1,47 @@
+Using the EXACT SAME character as the attached image, draw an animation
+strip.
+
+ANIMATION: firing the bow, side view. This animation plays constantly, so
+the wind-up must feel weighty.
+FRAMES: 6 frames in ONE horizontal row, evenly spaced, left to right.
+
+ Frame 1  bow raised into position, hand reaching for an arrow
+ Frame 2  arrow nocked, string starting to draw back
+ Frame 3  half draw, body beginning to brace, weight shifting back
+ Frame 4  FULL DRAW — string at maximum tension, body braced, the most
+          extreme pose of the animation
+ Frame 5  RELEASE — string snapped forward, hood and cloak kick back from
+          the recoil, the soul-fire on the hand and bow FLARES brighter
+ Frame 6  recovering, bow lowering, arm relaxing
+
+GLOW — violet-magenta #e05cff:
+  - the two eyes inside the hood
+  - the flaming hand / forearm — brightest on frames 4 and 5
+  - the bow grip and the bowstring — the string should look like a line of
+    burning magenta light, brightest at full draw and at release
+  - THE TORN HEM OF THE CLOAK — glowing ragged bottom edge. REQUIRED.
+  ✕ NO smoke, NO rising wisps, NO aura, NO chest sigil.
+
+FRAME ALIGNMENT: THE FEET STAY PLANTED on the same ground line in all 6
+frames. Same height, same distance from camera, body horizontally centered,
+no drifting, no zooming.
+
+VIEW: side view, facing RIGHT.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients. Light from the UPPER LEFT. 5-6 brightness steps pushed FAR APART.
+
+DO NOT DRAW: no outline stroke, no rim light ring, no ground shadow, no
+floor, no arrow trail or projectile in flight (the game draws arrows),
+no impact effects, no text.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not an arrow, not the bow,
+not the cloak, not a wisp of flame. Each frame must be a fully separated
+island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 2304x512.

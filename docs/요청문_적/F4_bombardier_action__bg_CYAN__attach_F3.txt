@@ -1,0 +1,36 @@
+Using the EXACT SAME character as the attached image — same armor, same
+equipment, same accent color, same proportions, same palette — draw the same
+unit in a different pose.
+
+POSE: crouched down with the mortar tube tilted up high, one hand steadying it, about to fire
+
+Keep the character IDENTICAL in every other way. Same height, same distance
+from camera, same silhouette rules (narrow torso, one dominant piece of
+equipment: a short thick mortar tube mounted on its back, pointing up and back). Same single accent color orange #f29840 on dark iron armor.
+
+VIEW: side view, facing RIGHT. A slight 3/4 angle is fine. The whole body
+must be visible from the side. NO front view, NO back view, NO isometric.
+
+SILHOUETTE (most important): this sprite will be displayed at only about
+58 pixels tall. Arms, legs and equipment must clearly SEPARATE from the
+torso with visible gaps so the shape reads at that size. Bold chunky forms.
+No thin details, no small trinkets, no clutter.
+
+HIGH LOCAL CONTRAST (critical): because it is shown so small, soft mid-tones
+disappear. Use a SMALL number of brightness steps (5 or 6) and push them FAR
+APART, so neighbouring surfaces differ sharply. Every plate, strap and limb
+should be a distinct flat step against the one next to it. Avoid smooth
+blending and avoid crowding many similar mid-tones together.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients, no soft blur. Single light source from the UPPER LEFT.
+Grim, damp, underworld dungeon.
+
+DO NOT DRAW: no outline stroke, no rim light, no glow, no ground shadow, no
+floor, no pedestal, no background objects, no text, no watermark.
+(The game adds its own bright rim light and draws shadows separately.)
+
+BACKGROUND: solid pure CYAN #00FFFF, completely flat, nothing else.
+No frame, no vignette, no gradient.
+
+Output a single image, 512x512.

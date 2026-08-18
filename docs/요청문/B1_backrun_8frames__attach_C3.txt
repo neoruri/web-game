@@ -1,0 +1,95 @@
+Draw an 8-frame RUN CYCLE sprite strip for a 2D game character, seen FROM
+BEHIND.
+
+The attached image is a COSTUME AND COLOR reference ONLY — use it for the
+hood, the tattered cloak, the quiver, the armor, the violet-magenta soul-fire
+and the proportions. Its STANDING POSTURE MUST NOT BE COPIED. Every frame of
+this strip is a sprinting pose. No frame may look like the character is
+standing still.
+
+=== REAR VIEW ===
+The character is seen FROM BEHIND, running AWAY from the viewer, into the
+scene. We see the BACK of the hood, the BACK of the cloak, and the quiver
+from behind. The face is NOT visible. This must read instantly as "running
+away from the camera". As each foot kicks up behind, its SOLE is visible —
+that is what sells running away.
+
+FRAMES: 8 frames in ONE horizontal row, evenly spaced, left to right.
+ONE COMPLETE run cycle = TWO full steps (4 frames per step).
+
+=== THE MOST IMPORTANT RULE: THE FEET NEVER LEAVE THE GROUND ===
+All 8 frames share ONE horizontal ground level. The lowest foot touches that
+same level in every single frame. NEVER draw the character airborne or
+hopping. The top of the head stays at almost exactly the same height in all
+8 frames — vary it by no more than 3% of the body height.
+
+=== WHAT CHANGES: THE LEGS ===
+Seen from behind, the legs cross and separate. One foot is planted while the
+other kicks up behind, showing its sole.
+
+ Frame 1  PASSING — feet close together, RIGHT knee driving forward,
+          left leg straight under the body.
+ Frame 2  REACHING — right leg forward, LEFT foot kicking up behind,
+          sole starting to show.
+ Frame 3  CONTACT — right foot planted, LEFT foot kicked HIGHEST behind,
+          sole clearly visible. Widest separation.
+ Frame 4  PUSH — body over the planted right foot, left leg folding forward.
+ Frame 5  PASSING — feet close together, LEFT knee driving forward.
+          MIRROR of frame 1 — opposite leg.
+ Frame 6  REACHING — left leg forward, RIGHT foot kicking up behind.
+ Frame 7  CONTACT — left foot planted, RIGHT foot kicked HIGHEST behind,
+          sole clearly visible.
+ Frame 8  PUSH — body over the planted left foot, right leg folding forward.
+          Leads cleanly back into frame 1.
+
+Frames 5-8 are frames 1-4 with the LEGS SWAPPED. They must NOT be copies.
+
+=== THE CLOAK MUST NOT HIDE THE LEGS ===
+The long tattered cloak is swept UPWARD AND OUTWARD by the wind of running,
+lifting away from the legs and streaming toward the viewer. It must CLEAR THE
+LEGS COMPLETELY — both legs are visible from hip to boot in every frame. Do
+NOT let the cloak hang down over the thighs or shins.
+
+=== TORSO AND ARMS MUST MOVE TOO ===
+- The torso is PITCHED FORWARD, leaning away from the viewer into the run.
+- Both arms are BENT about 90 degrees and PUMP, OPPOSITE to the legs. Seen
+  from behind, the elbows swing out and back visibly.
+- The bow is gripped in one hand and held LOW, angled DOWN and BACK.
+- The shoulders rotate slightly with the arm swing.
+
+Every one of the 8 frames must be clearly DIFFERENT from every other frame,
+in the legs AND in the arms AND in the torso angle.
+
+=== GLOW ===
+Violet-magenta soul-fire #e05cff:
+  - a faint magenta rim leaking around the edges of the hood (the eyes are on
+    the far side, so only a hint of light escapes)
+  - the flaming hand, visible pumping at the side
+  - the bow grip
+  - THE TORN HEM OF THE CLOAK — the ragged trailing edge glows clearly.
+    REQUIRED, plainly visible.
+  NO smoke, NO rising wisps, NO aura. NO glowing chest sigil.
+
+=== FRAME ALIGNMENT ===
+- Same body height and same distance from camera in all 8 frames. No zoom.
+- The single shared ground level is identical in all 8 frames.
+- Each character stays HORIZONTALLY CENTERED inside its own frame.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients, no soft blur. Light from the UPPER LEFT. Use a SMALL number of
+brightness steps (5 or 6) pushed FAR APART — displayed at only 64 pixels
+tall, so soft mid-tones disappear.
+
+DO NOT DRAW: no outline stroke, no rim light, no glow ring, no ground shadow,
+NO GROUND LINE OR FLOOR (do not draw a horizon line at the bottom of the
+image), no speed lines, no dust clouds, no text, no watermark.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame. Each frame must be a fully
+separated island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 4096x512.

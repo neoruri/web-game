@@ -1,0 +1,38 @@
+Using the EXACT SAME character as the attached image, draw an animation
+strip.
+
+ANIMATION: taking damage, side view. Short and sharp.
+FRAMES: 3 frames in ONE horizontal row, evenly spaced, left to right.
+
+ Frame 1  sharp flinch — head snapping back, shoulders hunching up
+ Frame 2  pushed backward — body bent, one foot sliding back, off balance
+ Frame 3  recovering back toward the neutral standing pose
+
+GLOW — violet-magenta #e05cff: eyes, flaming hand, bow grip and string, and
+THE TORN HEM OF THE CLOAK (required, plainly visible).
+The eyes may flare brighter on frame 1 as a reaction.
+  ✕ NO smoke, NO aura, NO chest sigil.
+  ✕ NO blood, NO wound, NO red flash, NO impact burst — the game handles
+    the hit flash in code.
+
+FRAME ALIGNMENT: same ground line, same height, same camera distance, body
+horizontally centered in each frame, no zooming.
+
+VIEW: side view, facing RIGHT.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients. Light from the UPPER LEFT. 5-6 brightness steps pushed FAR APART.
+
+DO NOT DRAW: no outline stroke, no rim light ring, no ground shadow, no
+floor, no text.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not an arrow, not the bow,
+not the cloak, not a wisp of flame. Each frame must be a fully separated
+island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 1152x512.

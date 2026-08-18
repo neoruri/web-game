@@ -1,0 +1,36 @@
+A single side-view enemy character sprite for a 2D top-down dungeon game.
+
+CHARACTER: an upright goblin archer holding a wooden shortbow. He wears a
+dull mustard-yellow hood #b08e42. Skin is muted olive green #6c9c4a with
+glowing yellow eyes.
+Standing in a neutral walking pose, bow held at his side.
+
+IMPORTANT — the bow must be clearly SEPARATED from the body with a visible
+gap, so its curve reads as a distinct shape at small size.
+
+VIEW: side view, facing RIGHT. A slight 3/4 angle is fine. The whole body
+must be visible from the side. NO front view, NO back view, NO isometric.
+
+SILHOUETTE (most important): this sprite will be displayed at only about
+35 pixels tall. Arms, legs and equipment must clearly SEPARATE from the
+torso with visible gaps so the shape reads at that size. Bold chunky forms.
+No thin details, no small trinkets, no clutter.
+
+HIGH LOCAL CONTRAST (critical): because it is shown so small, soft mid-tones
+disappear. Use a SMALL number of brightness steps (5 or 6) and push them FAR
+APART, so neighbouring surfaces differ sharply. Every plate, strap and limb
+should be a distinct flat step against the one next to it. Avoid smooth
+blending and avoid crowding many similar mid-tones together.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients, no soft blur. Single light source from the UPPER LEFT.
+Grim, damp, underworld dungeon.
+
+DO NOT DRAW: no outline stroke, no rim light, no glow, no ground shadow, no
+floor, no pedestal, no background objects, no text, no watermark.
+(The game adds its own bright rim light and draws shadows separately.)
+
+BACKGROUND: solid pure BLUE #0000FF, completely flat, nothing else.
+No frame, no vignette, no gradient.
+
+Output a single image, 512x512.

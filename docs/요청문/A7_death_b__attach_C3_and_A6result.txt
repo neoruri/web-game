@@ -1,0 +1,41 @@
+Continue the SAME death animation from the attached strip, same character,
+same art style. The attached frames end MID-FALL at about 45 degrees.
+
+ANIMATION: the SECOND HALF — hitting the ground and going still.
+FRAMES: 4 frames in ONE horizontal row, evenly spaced, left to right.
+
+ Frame 5  IMPACT — the body hits the ground, cloak spreading out from the
+          impact, dust of the collapse
+ Frame 6  lying face down on the ground, limbs still settling
+ Frame 7  almost still, cloak draping down over the body
+ Frame 8  completely motionless, lying flat, cloak fully settled
+
+The soul-fire CONTINUES TO DIE: by frame 8 only the faintest last embers
+remain on the hem. The eyes are fully dark from frame 5 onward.
+
+GLOW — violet-magenta #e05cff, nearly gone:
+  - frame 5: dim embers on the hand and hem
+  - frame 8: only a few faint embers on the torn hem, nothing else
+  ✕ NO smoke, NO aura, NO soul escaping, NO burst, NO blood.
+
+FRAME ALIGNMENT: frames 5-8 lie on the ground. The BODY'S CONTACT WITH THE
+GROUND must be at the same height in all four frames. Same camera distance,
+body horizontally centered, no zooming. Keep the character fully inside its
+frame — a lying body is wide, so leave room on both sides.
+
+STYLE: hand-painted 16-bit game art. Hard edges, no anti-aliasing, no
+gradients. Light from the UPPER LEFT. 5-6 brightness steps pushed FAR APART.
+
+DO NOT DRAW: no outline stroke, no rim light ring, no ground shadow, no
+floor, no blood, no text.
+
+FRAME SPACING — critical for slicing:
+Leave a clear EMPTY GAP of at least 40 pixels of pure background between
+every pair of frames, and at the left and right edges of the image.
+NOTHING may cross into a neighbouring frame — not an arrow, not the bow,
+not the cloak, not a wisp of flame. Each frame must be a fully separated
+island of pixels surrounded by background on both sides.
+
+BACKGROUND: solid pure GREEN #00FF00, completely flat, nothing else.
+
+Output 1536x512.
