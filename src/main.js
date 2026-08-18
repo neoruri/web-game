@@ -1049,14 +1049,17 @@ class GameScene extends Phaser.Scene {
     //   전체 6프레임 순서대로: 보폭 79→10→43→80→10→44 (인접 최대변화 70) = 뚝뚝 끊김
     //   [0,2,3,5,3,2]:        보폭 79→43→80→44→80→43 (인접 최대변화 37) = 매끄러움
     //   뒤의 3,2 는 되감기. 열1·4는 안 쓰지만 8프레임 확장 대비해 시트엔 남겨둔다.
+    // ⚠️ 현재 시트는 행0(idle 4프레임)·행1(run 6프레임)만 채워져 있다(알파 실측).
+    //    back_run / attack / multishot / hit / death 는 **빈 셀**이라 등록해서 재생하면
+    //    캐릭터가 투명해져 사라진다. 낱장이 채워지면 그때 다시 등록한다.
+    //
+    // run fps: 이동 속도와 맞춰 발 스케이팅을 막는다.
+    //    보폭 50px(화면) · 이동 100px/s · order 6프레임 = 걸음 2회
+    //    fps12 → 걸음당 25px(보폭의 0.51배, 발이 2배 헛돎) / fps8 → 37.5px(0.76배)
+    //    계산상 정확한 값은 6이지만 굼떠 보여 8이 절충점이다.
     const defs = {
       idle: { row: 0, frames: 4, fps: 6, loop: true },
-      run: { row: 1, frames: 6, fps: 12, loop: true, order: [0, 2, 3, 5, 3, 2] },
-      back_run: { row: 2, frames: 8, fps: 12, loop: true, skip: 1 },
-      attack: { row: 3, frames: 4, fps: 14, loop: false },
-      multishot: { row: 4, frames: 5, fps: 14, loop: false },
-      hit: { row: 5, frames: 2, fps: 10, loop: false },
-      death: { row: 6, frames: 5, fps: 10, loop: false },
+      run: { row: 1, frames: 6, fps: 8, loop: true, order: [0, 2, 3, 5, 3, 2] },
     }
     for (const key in defs) {
       if (this.anims.exists(key)) continue
@@ -1221,7 +1224,9 @@ class GameScene extends Phaser.Scene {
       return
     }
     const moving = Math.abs(vx) + Math.abs(vy) > 0.05
-    const key = !moving ? 'idle' : vy < -0.35 ? 'back_run' : 'run'
+    // back_run 시트가 비어 있다. 위로 갈 때도 run 을 쓴다.
+    // 뒷모습이 없을 뿐 어색하지 않다 — 뱀서류에서 흔한 처리다.
+    const key = !moving ? 'idle' : 'run'
     if (Math.abs(vx) > 0.05) sp.setFlipX(vx < 0) // 왼쪽 이동 시 미러
     if (this.animKey !== key) {
       this.animKey = key
@@ -2796,10 +2801,12 @@ class GameScene extends Phaser.Scene {
     // 이번 판 골드를 금고에 넣는다. **여기서 한 번만** 더해야 한다 —
     // buildResult() 는 결과 화면이 여러 번 그려질 수 있으므로 거기서 하면 중복된다.
     this.bankedGold = addGold(this.gold)
-    // 사망 애니 재생 (스프라이트)
+    // 사망 애니 — 시트 행6이 비어 있어 재생하면 캐릭터가 투명해진다.
+    // animKey 만 바꿔 이동 애니 갱신을 멈추고, 그림은 마지막 프레임 그대로 둔다.
+    // (death 낱장이 채워지면 defs 에 등록하고 play('death') 를 되살린다)
     if (this.playerSprite) {
       this.animKey = 'death'
-      this.playerSprite.play('death')
+      this.playerSprite.anims.stop()
     }
     this.releaseStick()
 
