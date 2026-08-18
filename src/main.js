@@ -1059,7 +1059,7 @@ class GameScene extends Phaser.Scene {
     //    계산상 정확한 값은 6이지만 굼떠 보여 8이 절충점이다.
     const defs = {
       idle: { row: 0, frames: 4, fps: 6, loop: true },
-      run: { row: 1, frames: 6, fps: 8, loop: true, order: [0, 2, 3, 5, 3, 2] },
+      run: { row: 1, frames: 6, fps: 6, loop: true, order: [0, 2, 3, 5, 3, 2] },
     }
     for (const key in defs) {
       if (this.anims.exists(key)) continue
@@ -1100,11 +1100,9 @@ class GameScene extends Phaser.Scene {
       .sprite(this.player.x, this.player.y, 'archer', 0)
       .setOrigin(0.5, 0.8) // 발끝 하단 정렬
       .setScale(scale)
-    // 림라이트(외곽선) — 어두운 바닥에 캐릭터가 묻히지 않게 실루엣만 살짝 띄운다.
-    // 얇고 옅은 회색(흰색·큰 발광은 과함). Phaser 내장 GPU FX, WebGL 전용 가드.
-    if (this.playerSprite.postFX) {
-      this.playerSprite.postFX.addGlow(0xaab2bd, 2, 0, false, 0.05, 4)
-    }
+    // 림라이트(외곽 발광)는 제거했다 — 옛 캐릭터가 어두운 바닥에 묻혀서 넣었던 것인데,
+    // 새 시트는 자체 대비가 충분하고 발광이 **흰 테두리**로 보여 지저분했다.
+    // 다시 필요하면: this.playerSprite.postFX?.addGlow(색, 강도, 0, false, 0.05, 거리)
     this.worldLayer.add(this.playerSprite)
     this.animKey = 'idle'
     this.playerSprite.play('idle')
