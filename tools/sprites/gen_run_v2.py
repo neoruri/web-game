@@ -121,7 +121,7 @@ def main():
         pose = os.path.join(POSE_DIR, f"pose_run_f{f}.png")
         units = [{
             "enabled": True, "module": none_mod, "model": pose_model,
-            "weight": 1.25, "image": b64(pose),
+            "weight": 1.6, "image": b64(pose),
             "resize_mode": "Just Resize",
             "control_mode": "ControlNet is more important",
             "guidance_start": 0.0, "guidance_end": 0.9,
@@ -129,9 +129,9 @@ def main():
         if ip_model and ip_mod:
             units.append({
                 "enabled": True, "module": ip_mod, "model": ip_model,
-                "weight": 0.8, "image": ref,
+                "weight": 0.45, "image": ref,
                 "resize_mode": "Crop and Resize", "control_mode": "Balanced",
-                "guidance_start": 0.2, "guidance_end": 1.0,
+                "guidance_start": 0.45, "guidance_end": 1.0,
             })
         payload = {
             "prompt": POSITIVE, "negative_prompt": NEGATIVE,
