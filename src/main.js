@@ -236,11 +236,46 @@ const MAX_PARTICLES = 200 // 파편 상한 (fillRect라 저렴)
 // 외형 크기는 반지름(히트박스)에 비례시킨다 — 튜너의 '크기' 슬라이더 하나로
 // 캐릭터/몬스터 스프라이트·히트박스·그림자가 함께 바뀐다.
 const PLAYER_SPRITE_K = 0.055 // 배율 = player.radius × 이것 (기본 r10 → 0.55)
+
+// --- 연기 오라 (플레이어 어깨·후드에서 피어오르는 영혼불 연기) ---------------
+// 캐릭터 발광색과 같은 값. 시트에 굽지 않고 코드로 그린다(setupSmokeAura 주석 참고).
+// 아래 5개는 테스트 페이지(_idle_test.html)에서 1× 확대로 눈으로 맞춘 값이다.
+// 초기값(15 / 0.85 / 34 / 0.50 / 1.0)보다 **적고 느리고 옅고 크게** 조정됐다 —
+// 파티클이 적고 크면 연기 덩어리로 읽히고, 느리고 옅으면 캐릭터를 덜 가린다.
+const SMOKE_COLOR = 0xe05cff
+const SMOKE_MAX = 18 // 동시 파티클 상한 (방출 10 × 수명 0.8 → 실제 약 8개)
+const SMOKE_RATE = 10 // 초당 방출 수
+const SMOKE_LIFE = 0.8 // 수명(초)
+const SMOKE_RISE = 20 // 상승 속도(px/s)
+const SMOKE_ALPHA = 0.4 // 최대 불투명도 (ADD 합성이라 낮게)
+const SMOKE_SIZE = 1.4 // 반경 배율
 const ENEMY_SPRITE_K = 0.11 // 배율 = enemy.radius × 이것 (기본 r10 → 1.1, 셀 32px)
 // 엘리트는 셀이 48px(일반 32px)이라 배율 계수가 다르다.
 // r16 × 0.075 = 1.2 → 화면상 약 58px (일반 몹 35px 대비 확실히 크다)
 const ELITE_SPRITE_K = 0.075
 const SPRITE_H = 116 // 스프라이트 셀 높이. 화살 발사(활) 높이 = 배율×높이×0.4
+
+// 활 스프라이트의 프레임별 배치 — [x, y, 각도(도)] × 시트 열.
+//   y 는 **발끝(접지선) 기준**, 음수가 위. x 는 캐릭터 중심 기준, 양수가 앞(바라보는 쪽).
+//   애니마다 손 위치가 달라 표를 나눈다(idle 은 서 있고 run 은 팔이 크게 스윙).
+//   run 은 6프레임이라 열1·4가 order 에서 안 쓰여도 **인덱스가 어긋나지 않게** 채워둔다.
+//   표에 없는 애니(back_run/hit/death)는 활을 감춘다 — 엉뚱한 위치보다 낫다.
+const BOW_OFF = {
+  idle: [
+    [3, -40, 50],
+    [6, -40, 50],
+    [4, -41, 50],
+    [4, -40, 50],
+  ],
+  run: [
+    [-22, -39, 70], // 열0  CONTACT 오른발
+    [15, -51, 63], // 열1  (현재 order 에서 미사용)
+    [28, -46, 22], // 열2  PUSH 오른발
+    [-28, -36, 50], // 열3  CONTACT 왼발
+    [14, -51, 51], // 열4  (현재 order 에서 미사용)
+    [28, -46, 20], // 열5  PUSH 왼발
+  ],
+}
 
 // 배경 시차(parallax) 계수. 카메라가 플레이어를 따라가는 무한 월드에서
 // 배경만 살짝 다른 속도로 흘러 깊이감을 준다.
@@ -285,6 +320,8 @@ class GameScene extends Phaser.Scene {
       '/sprites/dungeon/deliverables/player_spritesheet.png',
       { frameWidth: 96, frameHeight: 116 }
     )
+    // 활 — 별도 스프라이트(등에 멘 배치). 손에 들면 팔이 스윙을 못 한다.
+    this.load.image('playerbow', '/sprites/dungeon/deliverables/player_bow.png')
     // 바닥 타일/데칼 — 로딩 화면에서 미리 디코딩해 둔다. new Image() 로 플레이
     // 시작 후 디코딩하면 첫 몇 초 캔버스 그리기에서 메인스레드가 튄다(초기 버벅).
     this.load.image('isotileset', '/sprites/dungeon/tileset_iso_stone.png')
@@ -995,13 +1032,26 @@ class GameScene extends Phaser.Scene {
     if (!this.textures.exists('archer')) return
     const tex = this.textures.get('archer')
     if (tex.frameTotal < 50) return // 로드 실패(플레이스홀더) 방어 — 정상은 56+
-    if (tex.setFilter) tex.setFilter(Phaser.Textures.FilterMode.NEAREST) // 픽셀 또렷하게
+    // 필터: LINEAR.  NEAREST 는 픽셀아트를 **정수배 확대**할 때 쓰는 필터다.
+    // 플레이어는 게임 내 유일하게 **축소**된다 — 96×116 셀 × 0.55 = 53×64px.
+    // 축소에 NEAREST 를 쓰면 픽셀이 불규칙하게 버려지고, 버려지는 픽셀이 캐릭터
+    // 위치에 따라 달라져 **움직일 때 외곽이 반짝인다**(밝은 고립 픽셀 814개 실측).
+    // 시트가 12,898색 페인팅이라 부드럽게 축소되는 편이 프롭·바닥과도 어울린다.
+    // 적(420행)·엘리트(429행)는 NEAREST 를 유지한다 — 그쪽은 **확대**라서 맞다:
+    //   플레이어 셀96 × 0.55 = 53px (축소)  ← LINEAR
+    //   일반몹  셀32 × 1.10 = 35px (확대)  ← NEAREST
+    //   엘리트  셀48 × 1.20 = 58px (확대)  ← NEAREST
+    if (tex.setFilter) tex.setFilter(Phaser.Textures.FilterMode.LINEAR)
 
-    // skip: 루프 첫 프레임 제외. run·back_run은 0번이 "정지 포즈"라 빼야
-    // 루프가 매번 서는 것처럼 안 보인다.
+    // skip: 루프 첫 프레임 제외 (0번이 "정지 포즈"인 행).
+    // order: 행 안의 **열 번호**를 재생 순서대로. 순서대로 돌리면 멈칫하는 행에 쓴다.
+    //   run 은 열1·4가 두 발이 모이는 passing 자세라 보폭이 10%로 떨어진다.
+    //   전체 6프레임 순서대로: 보폭 79→10→43→80→10→44 (인접 최대변화 70) = 뚝뚝 끊김
+    //   [0,2,3,5,3,2]:        보폭 79→43→80→44→80→43 (인접 최대변화 37) = 매끄러움
+    //   뒤의 3,2 는 되감기. 열1·4는 안 쓰지만 8프레임 확장 대비해 시트엔 남겨둔다.
     const defs = {
       idle: { row: 0, frames: 4, fps: 6, loop: true },
-      run: { row: 1, frames: 6, fps: 12, loop: true, skip: 1 },
+      run: { row: 1, frames: 6, fps: 12, loop: true, order: [0, 2, 3, 5, 3, 2] },
       back_run: { row: 2, frames: 8, fps: 12, loop: true, skip: 1 },
       attack: { row: 3, frames: 4, fps: 14, loop: false },
       multishot: { row: 4, frames: 5, fps: 14, loop: false },
@@ -1014,10 +1064,15 @@ class GameScene extends Phaser.Scene {
       const rowStart = d.row * 8 // 프레임 = 행*8 + 열
       this.anims.create({
         key,
-        frames: this.anims.generateFrameNumbers('archer', {
-          start: rowStart + (d.skip || 0),
-          end: rowStart + d.frames - 1,
-        }),
+        frames: d.order
+          ? // 임의 순서 — frames 옵션에 배열을 넘기면 그 순서로 재생된다
+            this.anims.generateFrameNumbers('archer', {
+              frames: d.order.map((c) => rowStart + c),
+            })
+          : this.anims.generateFrameNumbers('archer', {
+              start: rowStart + (d.skip || 0),
+              end: rowStart + d.frames - 1,
+            }),
         frameRate: d.fps,
         repeat: d.loop ? -1 : 0,
       })
@@ -1025,7 +1080,19 @@ class GameScene extends Phaser.Scene {
 
     // 외형 배율은 반지름(히트박스)에 비례 — 튜너 '크기' 슬라이더 하나로 함께 조정됨
     const scale = (this.cfg.player.radius || 10) * PLAYER_SPRITE_K
+    this._spriteScale = scale // 활 오프셋 계산에 재사용
     this._bowOffsetY = SPRITE_H * scale * 0.4 // 화살 발사(활) 높이
+
+    // 활 — 플레이어보다 **먼저** add 해야 뒤에 깔린다(등에 멘 배치).
+    this.bowSprite = null
+    if (this.textures.exists('playerbow')) {
+      this.bowSprite = this.add
+        .image(this.player.x, this.player.y, 'playerbow')
+        .setOrigin(0.5, 0.52) // 활 중앙보다 살짝 아래가 손잡이
+        .setScale(scale)
+      this.worldLayer.add(this.bowSprite)
+    }
+
     this.playerSprite = this.add
       .sprite(this.player.x, this.player.y, 'archer', 0)
       .setOrigin(0.5, 0.8) // 발끝 하단 정렬
@@ -1038,11 +1105,121 @@ class GameScene extends Phaser.Scene {
     this.worldLayer.add(this.playerSprite)
     this.animKey = 'idle'
     this.playerSprite.play('idle')
+    this.setupSmokeAura()
+  }
+
+  // --- 연기 오라 -----------------------------------------------------------
+  // 캐릭터 컨셉의 서명. 어깨·후드 위에서 자마젠타 연기가 피어오른다.
+  //
+  // ⚠️ 스프라이트 시트에 굽지 않는 이유: 애니메이션 4프레임은 한 자세를 ±1px
+  //    흔들어 만들기 때문에 굽힌 연기는 **얼어붙는다.** 멈춘 연기는 연기로 안 읽히고
+  //    64px 에서는 외곽의 지저분한 얼룩이 된다. 횃불 불꽃(gfxFlames)과 같은 판단.
+  //
+  // ⚠️ Graphics.fillCircle 로 그리지 않는 이유: Phaser 의 fillCircle 은 매 호출마다
+  //    Ellipse + Vector2 32개를 새로 할당한다. 파티클 10개면 프레임당 수백 개다.
+  //    → 작은 텍스처 하나 + **풀링 스프라이트**로 그린다. 워밍업 후 할당 0.
+  setupSmokeAura() {
+    // 부드러운 퍼프 텍스처 1장을 런타임에 만든다 (에셋 파일 불필요)
+    if (!this.textures.exists('smokepuff')) {
+      const S = 32
+      const cv = this.textures.createCanvas('smokepuff', S, S)
+      const ctx = cv.getContext()
+      const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2)
+      g.addColorStop(0, 'rgba(255,255,255,0.85)')
+      g.addColorStop(0.45, 'rgba(255,255,255,0.32)')
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, S, S)
+      cv.refresh()
+    }
+    this.smokeLayer = this.add.container(0, 0)
+    this.worldLayer.add(this.smokeLayer) // playerSprite 다음 → 캐릭터 위에 그려진다
+    this.smoke = [] // 활성 파티클
+    this.smokePool = [] // 데이터 객체 풀 (매 프레임 할당 방지)
+    this.smokeSprites = [] // 스프라이트 풀
+    this.smokeAcc = 0
+  }
+
+  // 방출 지점 — 스프라이트 셀 좌표(96×116)를 월드로 환산한다.
+  // 셀 기준: 후드 위 y≈6, 어깨 y≈32, 등 y≈40.  origin(0.5,0.8) → 기준선 y=92.8
+  smokeAnchor(i, s, flip) {
+    const CELL = [
+      [-6, 6], // 후드 위
+      [-8, 32], // 왼쪽 어깨
+      [6, 34], // 오른쪽 어깨
+    ][i]
+    const ox = (flip ? -CELL[0] : CELL[0]) * s
+    const oy = (CELL[1] - 116 * 0.8) * s
+    return [ox, oy]
+  }
+
+  updateSmokeAura(dt) {
+    const sp = this.playerSprite
+    if (!sp || !this.smoke) return
+    const s = sp.scaleX < 0 ? -sp.scaleX : sp.scaleX
+    const dying = this.animKey === 'death'
+
+    // --- 방출 (죽으면 멈춘다. 이미 뜬 것은 그대로 사그라든다) ---
+    if (!dying) {
+      this.smokeAcc += dt * SMOKE_RATE
+      while (this.smokeAcc >= 1 && this.smoke.length < SMOKE_MAX) {
+        this.smokeAcc -= 1
+        const [ox, oy] = this.smokeAnchor((Math.random() * 3) | 0, s, sp.flipX)
+        const p = this.smokePool.pop() || {}
+        p.x = this.player.x + ox + (Math.random() - 0.5) * 5
+        p.y = this.player.y + oy + (Math.random() - 0.5) * 4
+        p.vx = (Math.random() - 0.5) * 9
+        p.life = SMOKE_LIFE * (0.75 + Math.random() * 0.5)
+        p.max = p.life
+        p.r0 = 2.2 + Math.random() * 1.6 // 시작 반경
+        p.phase = Math.random() * Math.PI * 2 // 좌우 흔들림 위상
+        this.smoke.push(p)
+      }
+      if (this.smokeAcc > 2) this.smokeAcc = 2 // 탭 복귀 등 dt 폭주 방어
+    }
+
+    // --- 갱신 ---
+    for (let i = this.smoke.length - 1; i >= 0; i--) {
+      const p = this.smoke[i]
+      p.life -= dt
+      if (p.life <= 0) {
+        this.removeSwap(this.smoke, i, this.smokePool)
+        continue
+      }
+      const k = 1 - p.life / p.max // 0 → 1 진행도
+      p.y -= SMOKE_RISE * dt * (1 - k * 0.45) // 위로 갈수록 느려진다
+      p.x += (p.vx + Math.sin(p.phase + k * 5) * 7) * dt
+    }
+
+    // --- 스프라이트에 반영 (풀 재사용) ---
+    for (let i = 0; i < this.smoke.length; i++) {
+      const p = this.smoke[i]
+      let spr = this.smokeSprites[i]
+      if (!spr) {
+        spr = this.add.image(0, 0, 'smokepuff').setBlendMode(Phaser.BlendModes.ADD)
+        spr.setTint(SMOKE_COLOR)
+        this.smokeLayer.add(spr)
+        this.smokeSprites[i] = spr
+      }
+      const k = 1 - p.life / p.max
+      // 알파: 초반에 빠르게 올라오고 길게 사그라든다
+      const a = k < 0.18 ? k / 0.18 : 1 - (k - 0.18) / 0.82
+      spr.setPosition(p.x, p.y)
+      spr.setScale(((p.r0 + k * 3.4) * SMOKE_SIZE * 2) / 32) // 32px 텍스처 기준
+      spr.setAlpha(Math.max(0, a) * SMOKE_ALPHA)
+      spr.visible = true
+    }
+    for (let i = this.smoke.length; i < this.smokeSprites.length; i++) {
+      this.smokeSprites[i].visible = false
+    }
   }
 
   updatePlayerAnim(vx, vy) {
     const sp = this.playerSprite
-    if (!sp || this.animKey === 'death') return
+    if (!sp || this.animKey === 'death') {
+      this.updateBowSprite()
+      return
+    }
     const moving = Math.abs(vx) + Math.abs(vy) > 0.05
     const key = !moving ? 'idle' : vy < -0.35 ? 'back_run' : 'run'
     if (Math.abs(vx) > 0.05) sp.setFlipX(vx < 0) // 왼쪽 이동 시 미러
@@ -1050,6 +1227,31 @@ class GameScene extends Phaser.Scene {
       this.animKey = key
       sp.play(key, true)
     }
+    this.updateBowSprite()
+  }
+
+  // 활을 현재 프레임의 손 위치에 맞춰 옮긴다(등에 멘 배치).
+  // dir 을 x·각도에 **둘 다** 곱해야 왼쪽을 볼 때 활이 반대로 눕지 않는다.
+  updateBowSprite() {
+    const bow = this.bowSprite
+    if (!bow) return
+    const sp = this.playerSprite
+    const table = sp && this.animKey !== 'death' ? BOW_OFF[this.animKey] : null
+    if (!table) {
+      bow.setVisible(false) // back_run / hit / death 는 아직 값이 없다
+      return
+    }
+    const scale = this._spriteScale
+    const col = sp.frame.name % 8 // 행 안의 열 번호
+    const off = table[col] || table[0] // 값이 없는 열은 첫 값으로 버틴다
+    const dir = sp.flipX ? -1 : 1
+    bow.setPosition(
+      this.player.x + off[0] * scale * dir,
+      this.player.y + off[1] * scale
+    )
+    bow.setScale(scale * dir, scale)
+    bow.setAngle(off[2] * dir)
+    bow.setVisible(true)
   }
 
   // --- HUD ---------------------------------------------------------------
@@ -2743,6 +2945,7 @@ class GameScene extends Phaser.Scene {
     if (this.playerSprite) {
       this.playerSprite.setPosition(this.player.x, this.player.y)
       this.updatePlayerAnim(vx, vy)
+      this.updateSmokeAura(dt)
     }
 
     this.fireAcc += dt

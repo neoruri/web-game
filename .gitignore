@@ -34,3 +34,6 @@ tools/sprites/tileset_iso_dark_*.png
 tools/sprites/tileset_iso_gemini_*.png
 tools/sprites/props_iso_N*.png
 tools/sprites/props_iso_P*.png
+
+# MCP 설정 (API 키 포함 — 절대 커밋 금지)
+.mcp.json
