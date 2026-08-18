@@ -83,7 +83,7 @@ def main():
             "alwayson_scripts": {"controlnet": {"args": [{
                 "enabled": True, "module": "None",
                 "model": "control_v11p_sd15_openpose_fp16",
-                "weight": 1.25,
+                "weight": 1.5,
                 "image": b64(os.path.join(POSE_DIR, f"pose_run_f{f}.png")),
                 "resize_mode": "Just Resize",
                 "control_mode": "ControlNet is more important",
