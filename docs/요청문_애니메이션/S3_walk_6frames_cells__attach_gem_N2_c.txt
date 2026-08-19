@@ -1,0 +1,91 @@
+Create ONE image: a 6-frame WALK CYCLE SPRITE SHEET.
+Use the attached reference character as the design source.
+
+Same hood, same armor, same quiver on the back, same dark grey-green palette,
+same localized violet-magenta rune glow (#e05cff) on shoulder, bracers, belt,
+greaves, and inside the hood.
+
+DO NOT DRAW THE BOW. The quiver is allowed, the bow is forbidden.
+Both hands are empty, closed into loose relaxed fists.
+
+CANVAS AND LAYOUT
+- A WIDE image, roughly 3 times wider than it is tall.
+- Flat pure green background: #00FF00.
+- Divide the image into SIX EQUAL INVISIBLE CELLS side by side.
+- Exactly ONE small figure centred in each cell. Six figures total.
+- Each figure is only about ONE THIRD of the image height. They are SMALL.
+- Wide empty green space between figures. No character part may cross into
+  the space between cells.
+- A previous attempt drew the figures large, so they overlapped each other and
+  could not be cut apart. Drawing them small inside equal cells prevents that.
+- No visible grid, no borders, no frame numbers, no text.
+
+STYLE
+- Clean readable 2D game sprite, simplified painterly shading, clear silhouette.
+- HARD CLEAN EDGES with no green spill or green fringe around the character.
+- The image will be scaled down to a tiny game sprite. Clear silhouettes and
+  clear foot positions matter far more than fine detail.
+- No shadow, no ground line, no floor, no horizon, no aura, no smoke, no glow ring.
+
+VIEW
+- Strict side view, facing RIGHT in all 6 frames.
+- Same character, same size, same costume, same proportions in every frame.
+- All feet align to the SAME invisible ground line.
+
+*** THIS IS A WALK, NOT A RUN ***
+At least one foot ALWAYS touches the ground. There is never a moment with both
+feet in the air. No jumping, no floating, no hopping.
+The stride stays small and calm.
+
+FRAME POSES
+"Stride" = horizontal distance between the two feet, as a % of body height.
+
+  Frame 1  CONTACT, right foot forward, stride 30%.
+           BOTH FEET FLAT ON THE GROUND. Front sole flat, back sole flat.
+  Frame 2  PASSING, stride 8%.
+           Right leg vertical, right sole FLAT on the ground carrying weight.
+           Left leg swings forward, left toe SKIMS the ground.
+  Frame 3  PUSH, stride 18%.
+           Right foot behind, heel lifted, RIGHT TOE STILL TOUCHING the ground.
+           Left leg reaches forward, left heel about to land.
+  Frame 4  CONTACT, left foot forward, stride 30%. Mirror of frame 1.
+           BOTH FEET FLAT ON THE GROUND.
+  Frame 5  PASSING, stride 8%. Mirror of frame 2.
+           Left sole flat and weight-bearing, right toe skims the ground.
+  Frame 6  PUSH, stride 18%. Mirror of frame 3.
+           Left toe still touching behind, right leg reaching forward.
+
+The rhythm is 30 -> 8 -> 18 -> 30 -> 8 -> 18.
+
+*** DO NOT MAKE THE STRIDE BIGGER THAN 30% ***
+A previous attempt drew 83%. The legs were split so far apart that it looked
+like a lunge or a jump, not walking. Keep the feet close together.
+
+*** THE FEET MUST LOOK PLANTED ***
+- Frames 1 and 4: BOTH soles flat on the ground.
+- Frames 2, 3, 5, 6: at least one foot FLAT on the ground, the other touching
+  or skimming it.
+- The lifted foot NEVER rises more than 4% of body height.
+- No frame has both feet in the air.
+- A previous attempt had the feet floating, which made the character look like
+  it was trembling in the air instead of walking.
+
+ARMS
+- Relaxed, slightly bent, small swing opposite to the legs.
+- Do NOT pump the arms up and down like a runner.
+
+BODY
+- Torso nearly upright, only a very slight forward lean.
+- Head bob no more than 2% of body height across the whole cycle.
+- Body lowest in frames 1 and 4, highest in frames 3 and 6, but keep it subtle.
+
+DO NOT DRAW
+- The bow. Hands stay empty.
+- Large figures. Six must fit in a row with wide gaps.
+- Figures touching or overlapping each other.
+- A running or sprinting pose: wide splits, high knees, both feet airborne.
+- A long cloak covering the legs. The legs stay visible in every frame.
+- A ground line, shadow, or horizon.
+- Smoke, mist, aura, or glow rings around the body.
+- Front, back, or three-quarter view.
+- Text, frame numbers, borders, watermark.

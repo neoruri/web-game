@@ -1,0 +1,104 @@
+ATTACH: gem_N2_c.png  (the reference character)
+
+Draw ONE image that is a WALK CYCLE SPRITE SHEET: 6 small figures in a single
+horizontal row.
+
+*** THIS IS A WALK, NOT A RUN ***
+The most important difference: in a walk, AT LEAST ONE FOOT IS ALWAYS TOUCHING
+THE GROUND. There is no moment where both feet are in the air. The character
+never jumps, never floats, never hops.
+
+*** DRAW THE FIGURES SMALL ***
+- Each figure is about 1/9 of the image width and about 1/3 of the image height.
+  They are SMALL. Do not fill the canvas with big characters.
+- All 6 must fit in one row with clear empty space between them.
+- Leave at least 50 pixels of EMPTY GREEN between figures - a clean vertical
+  strip of pure background crossing the whole image height, with nothing in it.
+  No arm, no leg, no cloth may cross into a gap.
+- A previous attempt drew them too large, so they overlapped each other.
+  Drawing them small is what prevents that.
+
+The image will be scaled down to a tiny game sprite, so fine detail is not
+needed. Clear silhouettes and clear foot positions matter far more.
+
+THE CHARACTER
+Use the character in the attached image. Same hood, same armor, same quiver,
+same dark grey-green colors, same violet-magenta rune glow (#e05cff) on the
+shoulder, bracers, belt, greaves and inside the hood.
+The same person in all 6 frames.
+
+*** NO BOW ***
+In the reference the bow is a separate object beside the character.
+Do NOT draw the bow. His hands are EMPTY, closed into loose fists, so the
+arms can swing freely.
+
+FORMAT
+- STRICT SIDE VIEW, facing RIGHT, in all 6 frames.
+- Background: FLAT PURE GREEN (#00FF00), completely empty.
+- NO ground line, NO shadow, NO floor, NO horizon, NO text, NO frame borders,
+  NO numbers, NO grid lines.
+- All 6 figures are the SAME SIZE and stand on the SAME invisible ground line.
+- Painterly 2D game art.
+
+*** THE WALK CYCLE - FOLLOW THESE FOOT POSITIONS ***
+"Stride" = the horizontal distance between the two feet, as a percentage of
+the character's body height.
+
+  frame 1   stride 30%   CONTACT, right foot forward
+            *** BOTH FEET FLAT ON THE GROUND ***
+            The front heel has just landed and the whole front sole is down.
+            The back foot is still flat behind. Both soles touch the ground.
+
+  frame 2   stride  8%   PASSING
+            The right leg is straight and vertical, its sole FLAT on the ground,
+            carrying all the weight. The left leg swings forward beside it, and
+            the left toe SKIMS the ground - lifted no more than 4% of body
+            height. It nearly brushes the floor.
+
+  frame 3   stride 18%   PUSH
+            The right foot is still on the ground behind, heel lifting but the
+            TOE STILL TOUCHING. The left leg reaches forward, heel about to land.
+
+  frame 4   stride 30%   CONTACT, left foot forward
+            *** BOTH FEET FLAT ON THE GROUND *** - mirror of frame 1.
+
+  frame 5   stride  8%   PASSING - mirror of frame 2.
+            Left leg vertical and flat, right toe skims the ground.
+
+  frame 6   stride 18%   PUSH - mirror of frame 3.
+            Left toe still touching behind, right leg reaching forward.
+
+The rhythm is 30 -> 8 -> 18 -> 30 -> 8 -> 18.
+
+*** DO NOT MAKE THE STRIDE BIGGER THAN 30% ***
+A previous attempt drew 83%. The legs were split so far apart it looked like a
+lunge or a jump, not walking. Keep the feet close. This is a calm, grounded walk.
+
+*** THE FEET MUST LOOK PLANTED ***
+- In frames 1 and 4 BOTH soles are flat on the ground.
+- In frames 2, 3, 5 and 6 at least one foot is FLAT on the ground and the
+  other one is touching or skimming it.
+- No frame has both feet in the air.
+- The lifted foot never rises more than 4% of body height.
+
+ARMS
+- Hanging fairly relaxed with a slight bend, swinging gently OPPOSITE to the legs.
+- The swing is SMALL - this is walking, not sprinting. Do not pump the arms
+  up and down like a runner.
+
+UPPER BODY
+- The torso is nearly upright, leaning forward only very slightly.
+- The head rises and falls by no more than 2% of body height across the cycle.
+- The body is lowest in frames 1 and 4 (weight landing) and highest in
+  frames 3 and 6 (pushing off). Keep this bob tiny.
+
+DO NOT DRAW
+- The bow. Hands stay empty.
+- Large figures. They must be small enough that 6 fit in a row with wide gaps.
+- Figures touching or overlapping each other.
+- A running or sprinting pose. Wide splits, high knees, both feet airborne.
+- A long cloak covering the legs. The legs stay visible in every frame.
+- A ground line, shadow, or horizon.
+- Smoke, mist, aura, or glow rings around the body.
+- Front, back, or three-quarter view.
+- Text, frame numbers, borders, watermark.

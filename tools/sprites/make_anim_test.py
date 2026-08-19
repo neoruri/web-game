@@ -21,11 +21,15 @@ from PIL import Image
 HERE = pathlib.Path(__file__).resolve().parent
 PUB = HERE.parent.parent / 'public' / 'sprites' / 'dungeon'
 CW, CH = 96, 116
-SHEET = HERE / '_player_sheet_new.png'
+# 실제 배포 시트를 본다. 예전엔 _player_sheet_new.png 를 봤는데, 조립 스크립트가
+# deliverables 쪽에 바로 쓰기 시작하면서 테스트가 옛 시트를 보는 사고가 났다.
+SHEET = PUB / 'deliverables' / 'player_spritesheet.png'
 
 # (라벨, 행, 프레임수, fps, 이동속도px/s)  ← 프레임수는 실제 시트를 보고 자동 축소
 ANIMS = [
     ('idle', 0, 4, 6, 0),
+    # 내용은 walk 다. 4프레임(열 0,1,3,5)에 fps 12 면 걸음당 16.7px / 보폭 17.9px
+    # → 발 미끄러짐 0.93. 14 로 올리면 0.80 이라 발이 끌린다.
     ('run', 1, 8, 12, 100),
     ('back_run', 2, 8, 12, 100),
     ('attack', 3, 6, 14, 0),
@@ -116,10 +120,10 @@ HTML = """<!doctype html>
   <button id="bowclear">프레임별 해제</button>
   <textarea id="bowout" rows="2" style="width:100%;font:11px monospace;
     background:#14151a;color:#cfe;border:1px solid #333;margin-top:6px"></textarea>
+  <button class="preset" data-o="1,2,4,6">1,2,4,6 ★확정</button>
   <button class="preset" data-o="1,3,4,6">1,3,4,6</button>
   <button class="preset" data-o="2,3,5,6">2,3,5,6</button>
-  <button class="preset" data-o="3,6">3,6 (2프레임)</button>
-  <button class="preset" data-o="1,3,4,6,4,3,1">1,3,4,6,4,3,1</button>
+  <button class="preset" data-o="1,2,3,4,5,6">전체 6장</button>
   <label><input type="checkbox" id="smooth" checked> LINEAR</label>
   <label><input type="checkbox" id="smoke" checked> 연기</label>
   <label><input type="checkbox" id="scroll" checked> 바닥 흐름</label>

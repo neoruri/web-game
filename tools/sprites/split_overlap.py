@@ -66,10 +66,20 @@ def find_cuts(fg, n):
 name = sys.argv[1] if len(sys.argv) > 1 else 'run'
 n = int(sys.argv[2]) if len(sys.argv) > 2 else 8
 write = '--write' in sys.argv
+even = '--even' in sys.argv     # 균등 셀 분할 — "6등분 셀에 한 명씩" 으로 받았을 때
 
 src = STRIPS / f'{name}.png'
 a, fg = foreground(src)
-x0, x1, cuts, qual = find_cuts(fg, n)
+if even:
+    # 프롬프트에서 '균등한 셀 6개' 로 요청했고 실제로 그렇게 왔을 때.
+    # 인물 탐색 없이 이미지 폭을 그냥 n 등분한다. 겹침 판정이 필요 없다.
+    W = a.shape[1]
+    x0, x1 = 0, W - 1
+    cuts = [round(W * k / n) for k in range(1, n)]
+    qual = [0.0] * (n - 1)
+    print('균등 분할 모드 — 이미지 폭을 그대로 n 등분한다')
+else:
+    x0, x1, cuts, qual = find_cuts(fg, n)
 print(f'{src.name}  {a.shape[1]}×{a.shape[0]}   인물 {x0}~{x1}   프레임 {n}개로 분리')
 for i, (c, q) in enumerate(zip(cuts, qual)):
     flag = '  ⚠️ 겹침 깊음' if q > 0.45 else ''
