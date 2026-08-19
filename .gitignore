@@ -37,3 +37,29 @@ tools/sprites/props_iso_P*.png
 
 # MCP 설정 (API 키 포함 — 절대 커밋 금지)
 .mcp.json
+
+# ── AI 에셋 실험 산출물 (2026-08-19) ──
+# 스크립트(.py)는 커밋하고 '생성물'만 제외한다. 스크립트로 언제든 재생성 가능.
+# 3D 메시(.obj)는 텍스트라 파일 하나가 7만 줄이 넘어 저장소를 크게 부풀린다.
+tools/sprites/creatures/
+tools/sprites/to3d/
+tools/sprites/mixamo/
+tools/sprites/run_v2/
+tools/sprites/newchar/
+tools/sprites/lora_test/
+tools/sprites/lora_fixed/
+tools/sprites/lora_final/
+tools/sprites/lora/dataset/
+tools/sprites/_diag/
+tools/sprites/_diag2/
+tools/sprites/_diag3/
+tools/sprites/_dp/
+tools/sprites/_seed_scan/
+tools/sprites/_pose_refs/
+tools/sprites/pose_detected/
+tools/sprites/refs/frames/
+tools/sprites/refs/cycle/
+
+# 3D·모션 원본 파일 (용량 큼)
+*.fbx
+*.obj
