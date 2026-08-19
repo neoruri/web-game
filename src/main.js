@@ -1068,7 +1068,7 @@ class GameScene extends Phaser.Scene {
     //    ⚠️ config.player.speed 를 바꾸면 비율이 깨진다: fps ≈ 4 × speed / (2 × 17.9)
     const defs = {
       idle: { row: 0, frames: 4, fps: 6, loop: true },
-      run: { row: 1, frames: 6, fps: 12, loop: true, order: [0, 1, 3, 5] },
+      run: { row: 1, frames: 6, fps: 6, loop: true, order: [0, 1, 3, 5] },
     }
     for (const key in defs) {
       if (this.anims.exists(key)) continue
