@@ -60,8 +60,12 @@ tools/sprites/pose_detected/
 tools/sprites/refs/frames/
 tools/sprites/refs/cycle/
 
-# 뼈대 랩 진단 이미지 (shoot_lab.mjs 로 언제든 재생성)
+# 뼈대 랩 진단 이미지 (shoot_lab.mjs / shoot_creature.mjs 로 언제든 재생성)
 tools/sprites/rig/_*.png
+
+# 잘라낸 파츠의 작업본. 게임이 쓰는 사본은 public/sprites/creatures/ 에 있고
+# 이쪽은 cut_parts.py 를 다시 돌리면 나온다
+tools/sprites/rig/parts_m3/
 
 # 3D·모션 원본 파일 (용량 큼)
 *.fbx

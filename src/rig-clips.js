@@ -1,66 +1,107 @@
 // 자동 생성 파일 — 직접 고치지 말 것.
 // tools/sprites/rig/make_run_clip.py 를 고치고 다시 실행한다.
 export const RIG = {
+  "unit": 1,
   "bones": [
     {
       "name": "torso",
       "parent": null,
       "length": 0.36,
-      "at": 0
+      "rest": 0,
+      "attach": [
+        0,
+        0
+      ]
     },
     {
       "name": "head",
       "parent": "torso",
       "length": 0.16,
-      "at": 1.0
+      "rest": 0,
+      "attach": [
+        0.36,
+        0
+      ]
     },
     {
       "name": "armF_up",
       "parent": "torso",
       "length": 0.17,
-      "at": 0.94
+      "rest": 0,
+      "attach": [
+        0.3384,
+        0
+      ]
     },
     {
       "name": "armF_lo",
       "parent": "armF_up",
       "length": 0.16,
-      "at": 1.0
+      "rest": 0,
+      "attach": [
+        0.17,
+        0
+      ]
     },
     {
       "name": "legF_thigh",
       "parent": null,
       "length": 0.28,
-      "at": 0
+      "rest": 0,
+      "attach": [
+        0,
+        0
+      ]
     },
     {
       "name": "legF_shin",
       "parent": "legF_thigh",
       "length": 0.28,
-      "at": 1.0
+      "rest": 0,
+      "attach": [
+        0.28,
+        0
+      ]
     },
     {
       "name": "legN_thigh",
       "parent": null,
       "length": 0.28,
-      "at": 0
+      "rest": 0,
+      "attach": [
+        0,
+        0
+      ]
     },
     {
       "name": "legN_shin",
       "parent": "legN_thigh",
       "length": 0.28,
-      "at": 1.0
+      "rest": 0,
+      "attach": [
+        0.28,
+        0
+      ]
     },
     {
       "name": "armN_up",
       "parent": "torso",
       "length": 0.17,
-      "at": 0.94
+      "rest": 0,
+      "attach": [
+        0.3384,
+        0
+      ]
     },
     {
       "name": "armN_lo",
       "parent": "armN_up",
       "length": 0.16,
-      "at": 1.0
+      "rest": 0,
+      "attach": [
+        0.17,
+        0
+      ]
     }
   ],
   "drawOrder": [

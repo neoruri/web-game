@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>크리처 뼈대 랩 — Survivor</title>
+    <style>
+      body { margin: 0; background: #14171c; color: #dfe4ea;
+             font-family: system-ui, 'Malgun Gothic', sans-serif; }
+      #wrap { max-width: 1080px; margin: 0 auto; padding: 20px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .lead { color: #93a0b0; font-size: 13px; margin: 0 0 16px; line-height: 1.6; }
+      #game { border: 1px solid #2b313a; border-radius: 6px; overflow: hidden; }
+      .row { display: flex; flex-wrap: wrap; gap: 18px; margin: 14px 0; align-items: center; }
+      label { font-size: 12px; color: #b8c2ce; display: flex; align-items: center; gap: 7px; }
+      input[type=range] { width: 120px; }
+      output { color: #7fd6a5; font-variant-numeric: tabular-nums; min-width: 34px; }
+      button { background: #2b323c; color: #dfe4ea; border: 1px solid #3b434f;
+               border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+      button:hover { background: #353d49; }
+      button.on { background: #2f5c46; border-color: #47876a; }
+      .note { color: #7d8794; font-size: 12px; line-height: 1.7;
+              border-left: 2px solid #3b434f; padding-left: 12px; margin-top: 18px; }
+      b { color: #dfe4ea; }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <h1>크리처 뼈대 랩 — 불꽃 임프</h1>
+      <p class="lead">
+        그림 <b>한 장</b>을 파츠 7개로 잘라 뼈로 움직입니다.
+        모든 프레임이 같은 그림이므로 캐릭터가 달라질 수가 없습니다.<br />
+        <b>오프셋이 전부 0이면 원본과 픽셀 단위로 동일</b>합니다 — 절대 망가지지 않는 바닥이 있는 셈입니다.
+      </p>
+
+      <div id="game"></div>
+
+      <div class="row">
+        <button id="idleBtn" class="on">idle (호흡)</button>
+        <button id="castBtn">cast (시전)</button>
+        <button id="restBtn">rest (원본 포즈)</button>
+        <label><input type="checkbox" id="bones" /> 뼈·관절 표시</label>
+        <label><input type="checkbox" id="ghost" /> 원본 겹쳐보기</label>
+      </div>
+
+      <div class="row">
+        <label>속도
+          <input type="range" id="speed" min="0.2" max="2" step="0.1" value="1" />
+          <output id="speedV">1</output>
+        </label>
+        <label>크기
+          <input type="range" id="scale" min="120" max="520" step="20" value="380" />
+          <output id="scaleV">380</output>
+        </label>
+      </div>
+
+      <p class="note">
+        <b>무엇을 봐야 하나</b><br />
+        ① 관절에서 <b>구멍이나 이음선</b>이 드러나지 않는가 — 파츠를 겹쳐서 잘랐습니다<br />
+        ② 꼬리가 몸통보다 <b>늦게, 크게</b> 흔들리는가 (관성)<br />
+        ③ 모든 부위가 <b>같은 박자로</b> 움직이지 않는가 — 그러면 기계처럼 보입니다<br />
+        ④ 'rest' 를 눌렀을 때 원본과 같은가 — 다르면 피벗이 틀린 것입니다
+      </p>
+    </div>
+    <script type="module" src="/src/creature-lab.js"></script>
+  </body>
+</html>

@@ -28,9 +28,16 @@ from scipy import ndimage
 
 HERE = pathlib.Path(__file__).resolve().parent
 PUB = HERE.parent.parent / 'public' / 'sprites' / 'dungeon'
-NAME = next((a for a in sys.argv[1:] if not a.startswith('-')), 'monster')
-SRC = HERE / 'monster_strips' / f'{NAME}_walk.png'
-TAG = '_monster_' if NAME == 'monster' else f'_{NAME}_'
+ARGS = [a for a in sys.argv[1:] if not a.startswith('-')]
+NAME = ARGS[0] if ARGS else 'monster'
+# 파일 이름 규칙이 흔들린다(monster_walk / most_walk2-1 / most_walk3). 둘 다 받는다.
+SRC = next((p for p in (HERE / 'monster_strips' / f'{NAME}_walk.png',
+                        HERE / 'monster_strips' / f'{NAME}.png') if p.exists()), None)
+if SRC is None:
+    raise SystemExit(f'없는 파일: monster_strips/{NAME}_walk.png (또는 {NAME}.png)')
+TAG = f'_{NAME}_'
+# 비교 레인에 띄울 **현재 시트의 행**. 궁수 대체본이면 --row 2 로 궁수와 나란히 본다.
+CUR_ROW = int(ARGS[1]) if len(ARGS) > 1 else 0
 
 CELLS = [32, 40, 48]          # 만들어볼 셀 크기. 32=현행 잡몹, 48=엘리트
 FOOT = 0.94                   # 셀 안에서 발끝이 놓일 높이 비율
@@ -130,6 +137,12 @@ def tail_mask(sub):
     tail = lab == k
     if tail.sum() < 400:
         return None, None
+    # ⚠️ 바닥까지 닿으면 그건 꼬리가 아니라 **다리**다. 두 발로 선 몹에서 실제로 그랬다.
+    #    그대로 회전시키면 다리가 뜯겨나간다. 잘못 잡았으면 아예 포기한다.
+    ys_all = np.nonzero(sub)[0]
+    ground = ys_all.max() - (ys_all.max() - ys_all.min()) * 0.06
+    if np.nonzero(tail)[0].max() > ground:
+        return None, None
     # 부착점 = 꼬리 중 **몸통에 맞닿은 부분**. 꼬리 끝을 축으로 잡으면 뿌리가 휘둘린다.
     touch = tail & ndimage.binary_dilation(core, _disk(3))
     ys, xs = np.nonzero(touch if touch.sum() > 20 else tail)
@@ -190,7 +203,9 @@ def build(cell, plan):
     prepped, xmin, xmax = [], 1e9, -1e9
     for src, deg in plan:
         arr, tail, pivot = frame_rgba(src)
-        body_x = float(np.nonzero((arr[..., 3] > 90) & ~tail)[1].mean())
+        solid_f = arr[..., 3] > 90
+        # 꼬리를 못 잡았으면 실루엣 전체를 몸통으로 본다 (회전도 어차피 안 한다)
+        body_x = float(np.nonzero(solid_f if tail is None else solid_f & ~tail)[1].mean())
         arr = swing_tail(arr, tail, pivot, deg)
         xs = np.nonzero(arr[..., 3] > 90)[1]
         xmin, xmax = min(xmin, xs.min()), max(xmax, xs.max())
@@ -228,6 +243,15 @@ PLANS = {
 #    wag 시안은 f3·f4 두 장만 번갈아 담으므로 0·2 열과 1·3 열이 같은 원본이다.
 #    그건 첫 번째 몹에서 눈으로 골라 내린 결론이지 새 몹의 출발점이 아니다.
 PLAN_ORDER = ['raw', 'wag0', 'wag8', 'wag14']       # 페이지 버튼 순서. 첫 개가 기본
+
+# 꼬리를 못 잡는 몹(두 발로 서서 꼬리가 짧은 종류)은 회전 시안을 아예 뺀다.
+# 남겨두면 눌렀을 때 아무것도 안 변해서 "고장났나" 싶어진다.
+TAIL_OK = all(frame_rgba(i)[1] is not None for i in range(4))
+if not TAIL_OK:
+    PLAN_ORDER = ['raw', 'wag0']
+    PLANS = {k: v for k, v in PLANS.items() if k in PLAN_ORDER}
+    print('\n※ 꼬리를 안정적으로 못 잡는다 — 꼬리 회전 시안은 뺐다.'
+          ' _<이름>_tailmask.png 를 보면 이유가 보인다')
 
 sheets = {}
 for c in CELLS:
@@ -541,8 +565,8 @@ function drawMob(ctx, sheetKey, cell, frame, cx, cy, scale, flip) {
 }
 
 const LANES = [
-  { label: '옛 고블린 32px', key: 'now', cell: 32, row: 0 },
-  { label: '현재 시트 몹', key: 'cur', cell: __CUR_CELL__, row: 0 },
+  { label: '옛 32px 그림', key: 'now', cell: 32, row: __CUR_ROW__ },
+  { label: '현재 시트 행__CUR_ROW__', key: 'cur', cell: __CUR_CELL__, row: __CUR_ROW__ },
   { label: '새 40px', cell: 40 },
   { label: '새 48px', cell: 48 },
   { label: '플레이어', key: 'player', cell: 96 },
@@ -652,6 +676,7 @@ out = (HTML.replace('__IMG__', json.dumps(IMG))
                                             ensure_ascii=False))
            .replace('__PLAN_ORDER__', json.dumps(PLAN_ORDER))
            .replace('__CUR_CELL__', str(CUR_CELL))
+           .replace('__CUR_ROW__', str(CUR_ROW))
            .replace('__SIM__', json.dumps(SIM))
            .replace('__DUP__', json.dumps(DUP))
            .replace('__NAME__', NAME))

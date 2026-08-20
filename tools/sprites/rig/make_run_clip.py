@@ -193,9 +193,18 @@ DRAW_ORDER = ["armF_up", "armF_lo", "legF_thigh", "legF_shin",
 
 def main():
     frames = [build(i) for i in range(FRAMES)]
+    L = {n: l for n, _p, l, _a in BONES}
+    bones = []
+    for n, p, l, a in BONES:
+        # attach = 부모 관절에서 이 관절까지, **부모의 rest 좌표계** 기준.
+        # 막대기는 +x 를 향해 그리므로 rest=0 이고, 사슬 뼈는 [부모길이*비율, 0] 이 된다
+        bones.append({
+            "name": n, "parent": p, "length": round(l, 4), "rest": 0,
+            "attach": [round(L[p] * a, 4), 0] if p else [0, 0],
+        })
     data = {
-        "bones": [{"name": n, "parent": p, "length": round(l, 4), "at": a}
-                  for n, p, l, a in BONES],
+        "unit": 1,                       # 길이가 이미 몸높이 비율이라 배율 1
+        "bones": bones,
         "drawOrder": DRAW_ORDER,
         "clips": {"run": {"fps": FPS, "loop": True, "frames": frames}},
     }

@@ -11,14 +11,22 @@
  * 뼈를 Container 로 중첩하지 **않는다**.
  * 중첩하면 자식이 항상 부모 위에 그려지는데, 측면 뷰에서는
  * "먼 쪽 팔은 몸통 뒤, 가까운 쪽 팔은 몸통 앞"이라 계층과 원근이 어긋난다.
- * 그래서 변환은 코드로 직접 계산하고(뼈 10개뿐이라 부담 없음),
+ * 그래서 변환은 코드로 직접 계산하고(뼈가 10개 안팎이라 부담 없음),
  * 화면에는 전부 형제로 눕혀 drawOrder 순서대로 붙인다.
  * 덤으로 나중에 스프라이트시트로 렌더링하기도 쉬워진다.
  *
- * ── 좌표 규약 (make_run_clip.py 와 반드시 일치) ──
- *   뼈는 +x 를 향한다 (회전 0 = 오른쪽). 화면 y 가 아래라 시계방향이 양수.
- *   클립에 저장된 각도는 **월드 각도**다. 부모 대비 로컬이 아니다.
- *   길이·좌표는 몸높이 비율이라 scale 만 바꾸면 어떤 크기로도 쓴다.
+ * ── 좌표 규약 (클립 생성 스크립트와 반드시 일치) ──
+ *   화면 y 가 아래라 시계방향이 양수. 각도는 도(degree).
+ *   클립에 저장된 각도는 **월드 각도**다 (부모 대비 로컬이 아니다).
+ *   뼈 def:
+ *     rest   : 그림에서 그 뼈가 원래 향하던 각도. 파츠 회전 = 월드각 - rest.
+ *              rest 를 두는 이유는 **클립이 비어 있을 때 원본 그림 그대로**가 되게 하려는 것.
+ *              막대기 프로토타입은 +x 를 향해 그리므로 rest = 0 이다.
+ *     attach : 부모 관절에서 이 관절까지의 오프셋. **부모의 rest 좌표계** 기준.
+ *              사슬 뼈(정강이-허벅지)면 그냥 [부모길이, 0] 이고,
+ *              크리처처럼 몸통 아무 데나 붙는 경우도 같은 식으로 표현된다.
+ *     unit   : def 전체의 길이 단위. 원본 이미지 픽셀을 그대로 쓰면 unit = 캐릭터 높이.
+ *              런타임은 scale/unit 배율 하나로 전부 맞춘다.
  */
 
 const DEG = Math.PI / 180
@@ -34,19 +42,20 @@ function lerpAngle(a, b, t) {
 export class Rig {
   /**
    * @param {Phaser.Scene} scene
-   * @param {object} def   rig-clips.js 의 RIG (bones / drawOrder / clips)
-   * @param {object} opts  { x, y, scale, bob }
-   *   scale : 몸높이(픽셀). 비율 데이터에 곱해진다
-   *   bob   : 골반 상하 흔들림 **추가분**. 기본 0 을 권장한다.
-   *           진짜 흔들림은 이미 클립에 구워져 있다(IK 가 접지발을 지면에 붙인 채 계산).
-   *           여기서 더 흔들면 root 를 통째로 올리는 것이라 **발이 땅에서 뜬다.**
-   *           과장된 만화적 연출이 필요할 때만 쓴다
+   * @param {object} def   bones / drawOrder / clips (+ unit, parts)
+   * @param {object} opts  { x, y, scale, bob, textures }
+   *   scale    : 캐릭터 높이(픽셀). def.unit 에 대한 배율로 환산된다
+   *   bob      : 상하 흔들림 **추가분**. 기본 0 을 권장한다.
+   *              진짜 흔들림은 클립에 구워져 있다(IK 가 접지발을 지면에 붙인 채 계산).
+   *              여기서 더 주면 root 를 통째로 올리는 것이라 **발이 땅에서 뜬다**
+   *   textures : {뼈이름: 텍스처키}. 주면 막대기 대신 그림으로 만든다
    */
   constructor(scene, def, opts = {}) {
     this.scene = scene
     this.def = def
     this.scale = opts.scale ?? 100
     this.bob = opts.bob ?? 0
+    this.k = this.scale / (def.unit || 1) // def 단위 -> 화면 픽셀
 
     this.bones = new Map()
     for (const b of def.bones) this.bones.set(b.name, b)
@@ -56,7 +65,8 @@ export class Rig {
 
     // drawOrder 는 뒤에서 앞 순서다. Container 는 add 순서대로 그리므로 그대로 넣는다
     for (const name of def.drawOrder) {
-      const part = this._placeholder(name)
+      const tex = opts.textures && opts.textures[name]
+      const part = tex ? this._image(name, tex) : this._placeholder(name)
       this.parts.set(name, part)
       this.root.add(part)
     }
@@ -69,7 +79,7 @@ export class Rig {
 
   /** 파츠 그림이 아직 없을 때 쓰는 색 막대기. 움직임부터 검증하려는 것이다. */
   _placeholder(name) {
-    const len = this.bones.get(name).length * this.scale
+    const len = (this.bones.get(name).length || 0.2) * this.scale
     const thick = Math.max(3, this.scale * (name === 'torso' ? 0.11 : 0.055))
     const color = {
       torso: 0x8899aa, head: 0xffddaa,
@@ -84,33 +94,15 @@ export class Rig {
   }
 
   /**
-   * 막대기를 진짜 그림으로 교체한다. 3단계에서 쓴다.
-   * @param {string} name    뼈 이름
-   * @param {string} texture 텍스처 키
-   * @param {object} o  { pivot:[px,py], lengthPx, angle }
-   *   pivot    : 그림 안에서 관절이 있는 위치 (0~1 비율). 여기가 회전 중심이 된다
-   *   lengthPx : 그림 원본에서 이 뼈의 길이(px). 뼈 길이에 맞춰 자동 축소된다
-   *   angle    : 그림이 그려진 방향(도). 아래를 향해 그렸으면 90
+   * 잘라낸 파츠 그림. 회전 중심을 그림 안의 관절 위치에 맞춘다.
+   * def.parts 의 pivot(0~1 비율)이 그 관절이다 — cut_parts.py 가 계산해 넣는다.
    */
-  setPart(name, texture, o = {}) {
-    const old = this.parts.get(name)
-    if (old) { this.root.remove(old); old.destroy() }
-
-    const img = this.scene.add.image(0, 0, texture)
-    const [px, py] = o.pivot ?? [0, 0.5]
+  _image(name, texKey) {
+    const meta = (this.def.parts || []).find((p) => p.name === name) || {}
+    const img = this.scene.add.image(0, 0, texKey)
+    const [px, py] = meta.pivot ?? [0, 0.5]
     img.setOrigin(px, py)
-    const boneLen = this.bones.get(name).length * this.scale
-    const artLen = o.lengthPx ?? img.width
-    img.setScale(boneLen / artLen)
-    img.__artAngle = o.angle ?? 0 // 회전할 때 이만큼 빼줘야 그림 방향이 맞는다
-
-    this.parts.set(name, img)
-    // drawOrder 위치를 지켜서 다시 넣는다. 안 지키면 앞뒤가 뒤집힌다
-    this.root.add(img)
-    for (const n of this.def.drawOrder) {
-      const p = this.parts.get(n)
-      if (p) this.root.bringToTop(p)
-    }
+    img.setScale(this.k)
     return img
   }
 
@@ -147,9 +139,9 @@ export class Rig {
     const t = this.time - Math.floor(this.time)
     const A = f[i0], B = f[i1]
 
-    // 골반 위치. 접지선이 root 원점이라 root[1] 은 음수(위쪽)다
-    let rx = (A.root[0] + (B.root[0] - A.root[0]) * t) * this.scale
-    let ry = (A.root[1] + (B.root[1] - A.root[1]) * t) * this.scale
+    // 루트 위치. 클립 단위이므로 k 를 곱한다
+    let rx = (A.root[0] + (B.root[0] - A.root[0]) * t) * this.k
+    let ry = (A.root[1] + (B.root[1] - A.root[1]) * t) * this.k
     if (this.bob) {
       // 한 사이클에 두 번 오르내린다. 접지 순간이 가장 낮다
       ry -= Math.cos((this.time / n) * 4 * Math.PI) * this.bob * this.scale
@@ -158,7 +150,9 @@ export class Rig {
     // 월드 각도를 먼저 다 구하고, 그 다음 부모를 따라가며 관절 위치를 잡는다
     const ang = {}
     for (const b of this.def.bones) {
-      ang[b.name] = lerpAngle(A.angles[b.name], B.angles[b.name], t)
+      const a = A.angles[b.name] ?? b.rest ?? 0
+      const bb = B.angles[b.name] ?? b.rest ?? 0
+      ang[b.name] = lerpAngle(a, bb, t)
     }
 
     const start = {}
@@ -167,10 +161,15 @@ export class Rig {
       if (!b.parent) { start[b.name] = { x: rx, y: ry } } else {
         const p = this.bones.get(b.parent)
         const ps = resolve(p)
-        // at = 부모 뼈의 몇 % 지점에 붙는가. 팔은 목이 아니라 어깨(몸통 94%)에 달린다
-        const pl = p.length * this.scale * (b.at ?? 1)
+        // attach 는 **부모의 rest 좌표계** 기준이므로 부모의 월드각으로 돌려준다.
+        // 사슬 뼈면 attach = [부모길이, 0] 이라 결국 부모 끝점이 된다
+        const [ax, ay] = b.attach ?? [(p.length || 0) * (b.at ?? 1), 0]
         const pa = ang[p.name] * DEG
-        start[b.name] = { x: ps.x + Math.cos(pa) * pl, y: ps.y + Math.sin(pa) * pl }
+        const c = Math.cos(pa), s = Math.sin(pa)
+        start[b.name] = {
+          x: ps.x + (ax * c - ay * s) * this.k,
+          y: ps.y + (ax * s + ay * c) * this.k,
+        }
       }
       return start[b.name]
     }
@@ -181,7 +180,8 @@ export class Rig {
       if (!part) continue
       part.x = s.x
       part.y = s.y
-      part.rotation = (ang[b.name] - (part.__artAngle ?? 0)) * DEG
+      // rest 를 빼야 그림이 원래 향하던 방향이 기준이 된다
+      part.rotation = (ang[b.name] - (b.rest ?? 0)) * DEG
     }
   }
 
