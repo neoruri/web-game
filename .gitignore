@@ -67,3 +67,8 @@ tools/sprites/refs/cycle/
 # 파이썬 캐시(자동생성)
 __pycache__/
 *.pyc
+
+# Playwright 산출물
+test-results/
+playwright-report/
+tests/__screenshots__/

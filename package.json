@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:ui": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "vite": "^8.1.1"
   },
   "dependencies": {
