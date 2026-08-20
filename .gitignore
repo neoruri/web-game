@@ -60,6 +60,9 @@ tools/sprites/pose_detected/
 tools/sprites/refs/frames/
 tools/sprites/refs/cycle/
 
+# 뼈대 랩 진단 이미지 (shoot_lab.mjs 로 언제든 재생성)
+tools/sprites/rig/_*.png
+
 # 3D·모션 원본 파일 (용량 큼)
 *.fbx
 *.obj

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>뼈대 애니메이션 랩 — Survivor</title>
+    <style>
+      body { margin: 0; background: #14171c; color: #dfe4ea;
+             font-family: system-ui, 'Malgun Gothic', sans-serif; }
+      #wrap { max-width: 1080px; margin: 0 auto; padding: 20px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .lead { color: #93a0b0; font-size: 13px; margin: 0 0 16px; line-height: 1.6; }
+      #game { border: 1px solid #2b313a; border-radius: 6px; overflow: hidden; }
+      .row { display: flex; flex-wrap: wrap; gap: 18px; margin: 14px 0; align-items: center; }
+      label { font-size: 12px; color: #b8c2ce; display: flex; align-items: center; gap: 7px; }
+      input[type=range] { width: 130px; }
+      output { color: #7fd6a5; font-variant-numeric: tabular-nums; min-width: 40px; }
+      button { background: #2b323c; color: #dfe4ea; border: 1px solid #3b434f;
+               border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+      button:hover { background: #353d49; }
+      .note { color: #7d8794; font-size: 12px; line-height: 1.7;
+              border-left: 2px solid #3b434f; padding-left: 12px; margin-top: 18px; }
+      b { color: #dfe4ea; }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <h1>뼈대 애니메이션 랩</h1>
+      <p class="lead">
+        그림 없이 <b>움직임만</b> 먼저 검증합니다. 막대기 달리기가 어색하면
+        그림을 붙여도 어색합니다 — 여기서 고치면 그림 작업이 0원입니다.<br />
+        <span style="color:#dd8855">주황 = 가까운 쪽 팔·다리</span> ·
+        <span style="color:#6688aa">파랑 = 먼 쪽</span> ·
+        아래는 비교용 <b>기존 스프라이트시트 달리기</b>입니다.
+      </p>
+
+      <div id="game"></div>
+
+      <div class="row">
+        <button id="playBtn">⏸ 정지</button>
+        <button id="prevBtn">◀ 이전 프레임</button>
+        <button id="nextBtn">다음 프레임 ▶</button>
+        <label><input type="checkbox" id="joints" checked /> 관절 표시</label>
+        <label><input type="checkbox" id="trail" /> 발 궤적</label>
+      </div>
+
+      <div class="row">
+        <label>속도(fps)
+          <input type="range" id="fps" min="4" max="24" step="1" value="12" />
+          <output id="fpsV">12</output>
+        </label>
+        <label title="진짜 흔들림은 이미 클립에 구워져 있다. 여기서 더 주면 발이 뜬다">
+          추가 흔들림(연출용)
+          <input type="range" id="bob" min="0" max="0.06" step="0.005" value="0" />
+          <output id="bobV">0</output>
+        </label>
+        <label>크기
+          <input type="range" id="scale" min="60" max="260" step="10" value="180" />
+          <output id="scaleV">180</output>
+        </label>
+      </div>
+
+      <p class="note">
+        <b>무엇을 봐야 하나</b><br />
+        ① 발이 땅에 닿은 순간 <b>미끄러지지 않는가</b> — 접지발은 뒤로 흘러야 합니다<br />
+        ② 공중에 <b>붕 뜨는 프레임</b>이 없는가 — 뜨면 깡충거려 보입니다<br />
+        ③ 팔이 다리와 <b>반대로</b> 흔들리는가<br />
+        ④ 골반 흔들림은 한 사이클에 <b>두 번</b> — 0이면 로봇, 과하면 말춤입니다
+      </p>
+    </div>
+    <script type="module" src="/src/rig-lab.js"></script>
+  </body>
+</html>
