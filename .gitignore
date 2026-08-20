@@ -63,3 +63,7 @@ tools/sprites/refs/cycle/
 # 3D·모션 원본 파일 (용량 큼)
 *.fbx
 *.obj
+
+# 파이썬 캐시(자동생성)
+__pycache__/
+*.pyc
