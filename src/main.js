@@ -3620,7 +3620,10 @@ class GameScene extends Phaser.Scene {
     //    크기는 반지름 비례(setScale) → 튜너 '크기'로 조정됨. 피격/화상은 tint.
     //    화면 밖은 이미 컬링됐으므로 활성 스프라이트 = 화면 내 적 수뿐.
     const sprites = this.enemySprites
-    const walk = Math.floor(this.elapsed * 8)
+    // 걷기 프레임 진행 속도(초당 프레임). 일반몹과 엘리트를 따로 둔다 —
+    // 몹 그림은 보폭이 커서 8이면 다리가 헛돌아 보인다.
+    const walk = Math.floor(this.elapsed * 4) // 일반몹(몹/사냥개/궁수)
+    const walkElite = Math.floor(this.elapsed * 8) // 엘리트
     let bi = 0
     for (let i = 0; i < es.length; i++) {
       const e = es[i]
@@ -3665,7 +3668,9 @@ class GameScene extends Phaser.Scene {
       }
       // 예고/돌진 중이면 프레임 2~3(장전·돌진 자세)을 쓴다
       const acting = e.windup > 0 || e.charging > 0
-      const fr = acting ? 2 + (Math.floor(this.elapsed * 12) & 1) : (walk + e.animOff) & 3
+      const fr = acting
+        ? 2 + (Math.floor(this.elapsed * 12) & 1)
+        : (walkElite + e.animOff) & 3
       spr.setFrame(e.eliteRow * 4 + fr)
       spr.setPosition(e.x, e.y)
       spr.setScale(e.r * ELITE_SPRITE_K)
