@@ -249,7 +249,9 @@ const SMOKE_LIFE = 0.8 // 수명(초)
 const SMOKE_RISE = 20 // 상승 속도(px/s)
 const SMOKE_ALPHA = 0.4 // 최대 불투명도 (ADD 합성이라 낮게)
 const SMOKE_SIZE = 1.4 // 반경 배율
-const ENEMY_SPRITE_K = 0.11 // 배율 = enemy.radius × 이것 (기본 r10 → 1.1, 셀 32px)
+// 배율 = enemy.radius × 이것 (기본 r10 → 1.1). 셀은 48px 이지만 사냥개·궁수는
+// 32px 그림을 그대로 48px 셀에 옮겨 담았으므로 이 값을 내리면 그 둘이 같이 작아진다.
+const ENEMY_SPRITE_K = 0.11
 // 엘리트는 셀이 48px(일반 32px)이라 배율 계수가 다르다.
 // r16 × 0.075 = 1.2 → 화면상 약 58px (일반 몹 35px 대비 확실히 크다)
 const ELITE_SPRITE_K = 0.075
@@ -339,10 +341,14 @@ class GameScene extends Phaser.Scene {
       frameWidth: 96,
       frameHeight: 112,
     })
-    // 적 스프라이트 (32×32, 3행[고블린/사냥개/궁수]×4프레임)
+    // 적 스프라이트 (48×48, 3행[몹/사냥개/궁수]×4프레임)
+    // 셀을 32→48 로 올렸다. 새 몹 그림 원본이 400px 라 32px 로 담으면 12배 축소가 되어
+    // 뿔·발톱이 사라진다. 48px 면 화면 53px 에서 1.1배라 거의 원본 크기다.
+    // ⚠️ ENEMY_SPRITE_K 는 0.11 그대로 둔다 — 사냥개·궁수는 그림을 원래 픽셀 크기
+    //    그대로 48px 셀에 옮겨 담아서, 배율을 내리면 그 둘이 같이 작아진다.
     this.load.spritesheet('enemies', '/sprites/dungeon/enemies_sheet.png', {
-      frameWidth: 32,
-      frameHeight: 32,
+      frameWidth: 48,
+      frameHeight: 48,
     })
     // 엘리트 스프라이트 (48×48, 4행[돌격자/포격수/산탄사수/수호자]×4프레임)
     // 셀이 일반 몹보다 크다 — 갑옷·장비를 그려 실루엣으로 구분하기 위함.
