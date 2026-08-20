@@ -41,6 +41,22 @@ def char_bbox(im):
     return xs.min(), ys.min(), xs.max(), ys.max()
 
 
+def segment_box(im, box):
+    """box: (x0,y0,x1,y1) 절대좌표.
+    점 프롬프트는 배경을 통째로 집거나 팔다리를 놓치는 일이 잦다.
+    피사체를 감싸는 박스를 주면 훨씬 안정적이다."""
+    model, proc = load()
+    inputs = proc(im, input_boxes=[[list(box)]], return_tensors="pt")
+    with torch.no_grad():
+        out = model(**inputs)
+    masks = proc.image_processor.post_process_masks(
+        out.pred_masks.cpu(), inputs["original_sizes"].cpu(),
+        inputs["reshaped_input_sizes"].cpu())[0][0]
+    scores = out.iou_scores[0][0]
+    best = int(torch.argmax(scores))
+    return masks[best].numpy(), float(scores[best])
+
+
 def segment(im, points, labels=None):
     """points: [(x,y), ...] 절대좌표. labels: 1=포함, 0=제외."""
     model, proc = load()
