@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>스프라이트 리거 — 자르고 뼈 붙이기</title>
+    <link rel="stylesheet" href="/src/rigger/rigger.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>스프라이트 리거</h1>
+        <span class="sub" id="srcName">이미지 없음</span>
+        <span class="spacer"></span>
+        <button id="btnNew">새로 시작</button>
+        <button id="btnLoad">작업 불러오기</button>
+        <button id="btnSaveProj">작업 저장</button>
+        <button id="btnExport" class="primary">내보내기</button>
+      </header>
+
+      <main>
+        <!-- 왼쪽: 파츠 목록 -->
+        <aside id="left">
+          <div class="panel">
+            <div class="ph">
+              <span>파츠</span>
+              <button id="btnAdd" class="mini">+ 추가</button>
+            </div>
+            <ul id="partList"></ul>
+            <p class="hint">
+              위가 <b>뒤</b>, 아래가 <b>앞</b>입니다. ↑↓로 앞뒤를 바꿉니다.<br />
+              관절에서는 <b>부모를 앞에</b> 두는 게 안전합니다 — 부모의 여분이 회전 틈을 메웁니다.
+            </p>
+          </div>
+
+          <div class="panel" id="propPanel">
+            <div class="ph"><span>선택한 파츠</span></div>
+            <div class="rows" id="props"></div>
+          </div>
+        </aside>
+
+        <!-- 가운데: 편집 캔버스 -->
+        <section id="center">
+          <div class="toolbar">
+            <button id="mEdit" class="tool on">편집</button>
+            <button id="mDraw" class="tool">점 찍기</button>
+            <button id="mJoint" class="tool">관절 놓기</button>
+            <button id="mTip" class="tool" title="끝 뼈(머리·손·꼬리)가 향하는 방향">방향점</button>
+            <span class="sep"></span>
+            <button id="btnFit" class="mini">화면 맞춤</button>
+            <span class="spacer"></span>
+            <span class="coord" id="coord">–</span>
+          </div>
+          <canvas id="edit" width="980" height="720"></canvas>
+          <p class="hint">
+            휠 = 확대 · 가운데 버튼(또는 Space+드래그) = 이동 · 우클릭 = 점 삭제 ·
+            변을 클릭하면 점이 끼워집니다
+          </p>
+        </section>
+
+        <!-- 오른쪽: 결과 · 진단 -->
+        <aside id="right">
+          <div class="panel">
+            <div class="ph">
+              <span>미리보기</span>
+              <label class="mini"><input type="checkbox" id="pvBones" /> 뼈</label>
+            </div>
+            <canvas id="preview" width="330" height="330"></canvas>
+            <div class="rows">
+              <label>포즈
+                <select id="poseMode">
+                  <option value="rest">rest (원본과 같아야 함)</option>
+                  <option value="idle">idle (자동 생성)</option>
+                  <option value="manual">직접 돌리기</option>
+                </select>
+              </label>
+              <div id="boneSliders"></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="ph"><span>진단</span><span id="diagSum" class="mini"></span></div>
+            <div id="diag" class="diag"></div>
+            <p class="hint">
+              <b>떨어진 조각</b>은 폴리곤이 놓쳤거나 남의 것을 물어온 흔적입니다.
+              원본부터 떨어져 있는 그림(불티 등)은 오탐이니 좌표를 보고 판단하세요.<br />
+              <b>중복 소유</b>가 25%를 넘으면 두 파츠가 다르게 움직일 때 둘로 보입니다.
+            </p>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <input type="file" id="filePick" accept="image/*" hidden />
+    <input type="file" id="projPick" accept="application/json" hidden />
+    <script type="module" src="/src/rigger/main.js"></script>
+  </body>
+</html>

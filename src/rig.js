@@ -29,15 +29,9 @@
  *              런타임은 scale/unit 배율 하나로 전부 맞춘다.
  */
 
-const DEG = Math.PI / 180
-
-/** 각도를 최단 경로로 보간한다. 179° -> -179° 를 358° 돌지 않게. */
-function lerpAngle(a, b, t) {
-  let d = (b - a) % 360
-  if (d > 180) d -= 360
-  if (d < -180) d += 360
-  return a + d * t
-}
+// 뼈 계산 자체는 rig-core.js 에 있다. 리거 도구(/rigger.html)와 **같은 코드**를 써야
+// "도구에서는 맞는데 게임에서는 틀린" 상황이 안 생긴다. 여기는 그리기만 담당한다.
+import { DEG, sampleClip, solvePose } from './rig-core.js'
 
 export class Rig {
   /**
@@ -132,61 +126,28 @@ export class Rig {
 
   /** 현재 시간의 포즈를 화면에 반영한다. */
   apply() {
-    const f = this.clip.frames
-    const n = f.length
-    const i0 = Math.floor(this.time) % n
-    const i1 = (i0 + 1) % n
-    const t = this.time - Math.floor(this.time)
-    const A = f[i0], B = f[i1]
+    const { angles, root } = sampleClip(this.def, this.clip, this.time)
 
     // 루트 위치. 클립 단위이므로 k 를 곱한다
-    let rx = (A.root[0] + (B.root[0] - A.root[0]) * t) * this.k
-    let ry = (A.root[1] + (B.root[1] - A.root[1]) * t) * this.k
+    let ry = root[1] * this.k
     if (this.bob) {
       // 한 사이클에 두 번 오르내린다. 접지 순간이 가장 낮다
+      const n = this.clip.frames.length
       ry -= Math.cos((this.time / n) * 4 * Math.PI) * this.bob * this.scale
     }
 
-    // 월드 각도를 먼저 다 구하고, 그 다음 부모를 따라가며 관절 위치를 잡는다
-    const ang = {}
-    for (const b of this.def.bones) {
-      const a = A.angles[b.name] ?? b.rest ?? 0
-      const bb = B.angles[b.name] ?? b.rest ?? 0
-      ang[b.name] = lerpAngle(a, bb, t)
-    }
-
-    const start = {}
-    const resolve = (b) => {
-      if (start[b.name]) return start[b.name]
-      if (!b.parent) { start[b.name] = { x: rx, y: ry } } else {
-        const p = this.bones.get(b.parent)
-        const ps = resolve(p)
-        // attach 는 **부모의 rest 좌표계** 기준이므로 부모의 월드각으로 돌려준다.
-        // 사슬 뼈면 attach = [부모길이, 0] 이라 결국 부모 끝점이 된다
-        const [ax, ay] = b.attach ?? [(p.length || 0) * (b.at ?? 1), 0]
-        const pa = ang[p.name] * DEG
-        const c = Math.cos(pa), s = Math.sin(pa)
-        start[b.name] = {
-          x: ps.x + (ax * c - ay * s) * this.k,
-          y: ps.y + (ax * s + ay * c) * this.k,
-        }
-      }
-      return start[b.name]
-    }
+    const pose = solvePose(this.def, angles, { x: root[0] * this.k, y: ry }, this.k)
 
     // 관절 위치를 밖에서도 쓸 수 있게 남긴다.
-    // 그림 없는 뼈(치마에 가려 자를 그림이 없는 허벅지 등)도 여기엔 들어 있으므로
+    // 그림 없는 뼈(자를 그림이 없어 변환만 담당하는 뼈)도 여기엔 들어 있으므로
     // 디버그 표시는 parts 가 아니라 이걸 봐야 한다
-    this.jointPos = new Map()
-    for (const b of this.def.bones) {
-      const s = resolve(b)
-      this.jointPos.set(b.name, s)
-      const part = this.parts.get(b.name)
+    this.jointPos = pose
+    for (const [name, p] of pose) {
+      const part = this.parts.get(name)
       if (!part) continue
-      part.x = s.x
-      part.y = s.y
-      // rest 를 빼야 그림이 원래 향하던 방향이 기준이 된다
-      part.rotation = (ang[b.name] - (b.rest ?? 0)) * DEG
+      part.x = p.x
+      part.y = p.y
+      part.rotation = p.rot
     }
   }
 
