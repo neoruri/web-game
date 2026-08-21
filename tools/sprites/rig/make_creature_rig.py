@@ -36,6 +36,16 @@ BONES = [
     ("armL_up", "body",    "shoL",   "elbL"),
     ("armL_lo", "armL_up", "elbL",   "handL"),
     ("tail",    "body",    "tail0",  "tailTip"),
+
+    # 역관절 다리 3마디. legL_thigh 는 **그림이 없는 변환 전용 뼈**다 —
+    # 왼쪽 허벅지는 치마에 완전히 가려서 자를 그림 자체가 없다(cut_parts.py 참고).
+    # 뼈만 두면 정강이가 허벅지 회전을 물려받아 제대로 흔들리고, 화면에는 치마 밑만 보인다.
+    ("legR_thigh", "body",       "hipR",  "kneeR"),
+    ("legR_shin",  "legR_thigh", "kneeR", "hockR"),
+    ("legR_foot",  "legR_shin",  "hockR", "toeR"),
+    ("legL_thigh", "body",       "hipL",  "kneeL"),
+    ("legL_shin",  "legL_thigh", "kneeL", "hockL"),
+    ("legL_foot",  "legL_shin",  "hockL", "toeL"),
 ]
 
 
@@ -72,10 +82,72 @@ CAST = {
 }
 CAST_FRAMES, CAST_FPS = 16, 20      # 0.8초
 
+# ── walk: 걷기 ────────────────────────────────────────────────────────
+# 다리는 **IK 로 푼다**. 회전 오프셋을 먼저 시도했다가 버렸다:
+#   각 뼈를 사인파로 흔들면 발이 접지선 위로 35px(키의 9%) 떠올라
+#   공중을 걷는 꼴이 됐다. 허벅지를 24° 돌리면 발끝은 480px×sin24° = 196px 움직이는데,
+#   그게 전부 '위로' 갈 수도 있기 때문이다. 회전만으로는 발을 땅에 붙일 방법이 없다.
+#
+# 3/4 뷰라 IK 가 안 된다고 판단했었는데 그건 과한 결론이었다.
+# 지면을 **화면상의 (거의) 수평선**으로 근사하면 그만이고, 2D 컷아웃 리그는 다 그렇게 한다.
+# 다리마다 자기 발의 쉬는 위치에서 출발하므로 원근으로 높이가 달라도 상관없다.
+STRIDE = 230.0       # 보폭(원본 px). 키 1090 의 21%
+SWING_H = 75.0       # 스윙발 최고 높이
+DUTY = 0.6           # 접지 비율. 걷기는 달리기보다 길다(양발 접지 구간이 있다)
+STEP_DIR = (1.0, 0.10)   # 진행 방향. 3/4 뷰라 화면 아래로 살짝 기운다
+FOOT_LIFT = -14.0    # 스윙 중 발끝 들기(도)
+
+WALK_UPPER = {                    # 상체는 다리와 반대로, 작게
+    "head":    (2.2, 0.4),
+    "armL_up": (6.0, math.pi), "armL_lo": (8.0, math.pi + 0.5),
+    "armR_up": (3.0, math.pi), "armR_lo": (3.0, math.pi + 0.4),   # 불꽃은 덜 흔든다
+    "tail":    (7.0, 0.8),
+    "body":    (1.2, 1.6),
+}
+WALK_BOB = 5.0                    # 골반 상하(원본 px). 한 사이클에 두 번
+WALK_FRAMES, WALK_FPS = 16, 14    # 16f / 14fps = 한 사이클 1.14초
+
 
 def ease(v):
     """0 -> 1 -> 0. 앞은 빠르게 들고 뒤는 천천히 내린다 (시전 동작의 리듬)."""
     return math.sin(math.pi * (v ** 0.7))
+
+
+def ik2(hip, target, l1, l2):
+    """2링크 IK. 무릎은 +x 쪽으로 굽는다 (이 크리처는 양쪽 다 그 방향이다).
+    닿지 않는 목표는 뻗은 자세로 클램프한다 — 안 하면 sqrt 가 터진다."""
+    hx, hy = hip
+    dx, dy = target[0] - hx, target[1] - hy
+    d = math.hypot(dx, dy)
+    if d < 1e-6:
+        return (hx + l1, hy)
+    if d > l1 + l2 - 1e-4:
+        d = l1 + l2 - 1e-4
+    a = (l1 * l1 - l2 * l2 + d * d) / (2 * d)
+    h = math.sqrt(max(l1 * l1 - a * a, 0.0))
+    ux, uy = dx / math.hypot(dx, dy), dy / math.hypot(dx, dy)
+    mx, my = hx + a * ux, hy + a * uy
+    px, py = -uy, ux
+    if px < 0:
+        px, py = -px, -py
+    return (mx + h * px, my + h * py)
+
+
+def toe_at(u, t0):
+    """발끝의 목표 위치. u 는 그 다리 고유 위상(0~1).
+
+    u < DUTY : 접지. 발은 땅에 붙은 채 **뒤로만** 흐른다 (미끄러지면 안 된다)
+    u >= DUTY: 스윙. 뒤에서 앞으로 호를 그리며 돌아온다
+    """
+    n = math.hypot(*STEP_DIR)
+    dx, dy = STEP_DIR[0] / n, STEP_DIR[1] / n
+    if u < DUTY:
+        s = STRIDE / 2 - STRIDE * (u / DUTY)
+        return (t0[0] + s * dx, t0[1] + s * dy), 0.0
+    v = (u - DUTY) / (1 - DUTY)
+    s = -STRIDE / 2 + STRIDE * (1 - math.cos(math.pi * v)) / 2
+    h = SWING_H * math.sin(math.pi * v)
+    return (t0[0] + s * dx, t0[1] + s * dy - h), FOOT_LIFT * math.sin(math.pi * v)
 
 
 def main():
@@ -117,6 +189,47 @@ def main():
         angles = {n: round(rest[n] + CAST.get(n, 0) * e, 2) for n in rest}
         cast.append({"root": [root0[0], round(root0[1] - 8 * e, 2)], "angles": angles})
 
+    # walk — 다리는 IK, 상체는 회전 오프셋
+    seg_len = {}
+    for name, parent, j0, j1 in BONES:
+        seg_len[name] = math.dist(J[j0], J[j1])
+
+    walk = []
+    for i in range(WALK_FRAMES):
+        u = i / WALK_FRAMES
+        angles = {n: rest[n] for n in rest}
+        for n, (amp, ph) in WALK_UPPER.items():
+            angles[n] = rest[n] + amp * math.cos(2 * math.pi * u + ph)
+
+        # 몸통은 걸음마다 한 번씩 내려앉는다 -> 한 사이클에 두 번
+        dy = -WALK_BOB * math.cos(4 * math.pi * u)
+        pelvis = (J["pelvis"][0], J["pelvis"][1] + dy)
+        body_off = angles["body"] - rest["body"]
+
+        for side, hip_j, toe_j, ph in (("legR", "hipR", "toeR", 0.0),
+                                       ("legL", "hipL", "toeL", 0.5)):
+            # 엉덩이는 몸통에 붙어 있으므로 몸통의 회전·상하를 그대로 따라간다
+            d = (J[hip_j][0] - J["pelvis"][0], J[hip_j][1] - J["pelvis"][1])
+            d = rot(d, body_off)
+            hip = (pelvis[0] + d[0], pelvis[1] + d[1])
+
+            toe, lift = toe_at((u + ph) % 1.0, J[toe_j])
+            fa = rest[side + "_foot"] + lift
+            fl = seg_len[side + "_foot"]
+            hock = (toe[0] - math.cos(math.radians(fa)) * fl,
+                    toe[1] - math.sin(math.radians(fa)) * fl)
+            knee = ik2(hip, hock, seg_len[side + "_thigh"], seg_len[side + "_shin"])
+
+            angles[side + "_thigh"] = ang(hip, knee)
+            angles[side + "_shin"] = ang(knee, hock)
+            angles[side + "_foot"] = fa
+
+        walk.append({
+            "root": [round(pelvis[0] - GROUND[0], 2), round(pelvis[1] - GROUND[1], 2)],
+            "angles": {n: round(v, 2) for n, v in angles.items()},
+            "_dbg": {"toeR_y": round(toe_at(u, J["toeR"])[0][1], 1)},
+        })
+
     data = {
         "unit": UNIT,
         "bones": bones,
@@ -125,6 +238,7 @@ def main():
                   for p in meta["parts"]],
         "clips": {
             "idle": {"fps": IDLE_FPS, "loop": True, "frames": idle},
+            "walk": {"fps": WALK_FPS, "loop": True, "frames": walk},
             "cast": {"fps": CAST_FPS, "loop": False, "frames": cast},
         },
     }
@@ -137,7 +251,12 @@ def main():
     print("  뼈        부모       rest각    attach(부모 rest 기준)")
     for b in bones:
         print(f"    {b['name']:9s} {str(b['parent']):9s} {b['rest']:8.2f}°  {b['attach']}")
-    print(f"  클립: idle {IDLE_FRAMES}f@{IDLE_FPS}fps(loop) / cast {CAST_FRAMES}f@{CAST_FPS}fps")
+    print(f"  클립: idle {IDLE_FRAMES}f@{IDLE_FPS}fps(loop) / "
+          f"walk {WALK_FRAMES}f@{WALK_FPS}fps(loop) / cast {CAST_FRAMES}f@{CAST_FPS}fps")
+    noart = [b["name"] for b in bones
+             if not any(p["name"] == b["name"] for p in meta["parts"])]
+    if noart:
+        print(f"  그림 없는 변환 전용 뼈: {', '.join(noart)}")
     print("  * 모든 오프셋이 0이면 원본 그림과 픽셀 단위로 같아진다")
 
 

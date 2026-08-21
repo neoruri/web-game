@@ -65,10 +65,69 @@ export const CREATURE = {
         -260.84,
         -59.81
       ]
+    },
+    {
+      "name": "legR_thigh",
+      "parent": "body",
+      "rest": 46.24,
+      "attach": [
+        20.93,
+        94.8
+      ]
+    },
+    {
+      "name": "legR_shin",
+      "parent": "legR_thigh",
+      "rest": 112.16,
+      "attach": [
+        163.38,
+        -0.0
+      ]
+    },
+    {
+      "name": "legR_foot",
+      "parent": "legR_shin",
+      "rest": 40.6,
+      "attach": [
+        180.31,
+        -0.01
+      ]
+    },
+    {
+      "name": "legL_thigh",
+      "parent": "body",
+      "rest": 105.75,
+      "attach": [
+        -40.46,
+        -53.04
+      ]
+    },
+    {
+      "name": "legL_shin",
+      "parent": "legL_thigh",
+      "rest": 120.13,
+      "attach": [
+        202.61,
+        0.0
+      ]
+    },
+    {
+      "name": "legL_foot",
+      "parent": "legL_shin",
+      "rest": 81.71,
+      "attach": [
+        129.5,
+        -0.0
+      ]
     }
   ],
   "drawOrder": [
     "tail",
+    "legL_shin",
+    "legL_foot",
+    "legR_thigh",
+    "legR_shin",
+    "legR_foot",
     "armR_up",
     "armR_lo",
     "body",
@@ -126,10 +185,50 @@ export const CREATURE = {
       "file": "tail.png"
     },
     {
+      "name": "legR_thigh",
+      "pivot": [
+        0.2597,
+        0.2958
+      ],
+      "file": "legR_thigh.png"
+    },
+    {
+      "name": "legR_shin",
+      "pivot": [
+        0.85,
+        0.1862
+      ],
+      "file": "legR_shin.png"
+    },
+    {
+      "name": "legR_foot",
+      "pivot": [
+        0.2613,
+        0.2115
+      ],
+      "file": "legR_foot.png"
+    },
+    {
+      "name": "legL_shin",
+      "pivot": [
+        0.6122,
+        0.2366
+      ],
+      "file": "legL_shin.png"
+    },
+    {
+      "name": "legL_foot",
+      "pivot": [
+        0.5304,
+        0.1149
+      ],
+      "file": "legL_foot.png"
+    },
+    {
       "name": "body",
       "pivot": [
-        0.4722,
-        0.4535
+        0.6018,
+        0.4459
       ],
       "file": "body.png"
     }
@@ -501,6 +600,396 @@ export const CREATURE = {
         }
       ]
     },
+    "walk": {
+      "fps": 14,
+      "loop": true,
+      "frames": [
+        {
+          "root": [
+            -10,
+            -490.0
+          ],
+          "angles": {
+            "body": -65.7,
+            "head": -95.1,
+            "armR_up": 62.48,
+            "armR_lo": -54.52,
+            "armL_up": 118.16,
+            "armL_lo": 109.55,
+            "tail": 163.39,
+            "legR_thigh": 54.67,
+            "legR_shin": 68.9,
+            "legR_foot": 40.6,
+            "legL_thigh": 122.79,
+            "legL_shin": 122.87,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1096.4
+          }
+        },
+        {
+          "root": [
+            -10,
+            -488.54
+          ],
+          "angles": {
+            "body": -66.15,
+            "head": -95.59,
+            "armR_up": 62.71,
+            "armR_lo": -53.87,
+            "armL_up": 118.62,
+            "armL_lo": 111.55,
+            "tail": 161.09,
+            "legR_thigh": 47.13,
+            "legR_shin": 82.27,
+            "legR_foot": 40.6,
+            "legL_thigh": 126.25,
+            "legL_shin": 126.33,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1094.1
+          }
+        },
+        {
+          "root": [
+            -10,
+            -485.0
+          ],
+          "angles": {
+            "body": -66.53,
+            "head": -96.3,
+            "armR_up": 63.36,
+            "armR_lo": -52.89,
+            "armL_up": 119.92,
+            "armL_lo": 114.32,
+            "tail": 158.41,
+            "legR_thigh": 43.73,
+            "legR_shin": 92.1,
+            "legR_foot": 40.6,
+            "legL_thigh": 130.15,
+            "legL_shin": 130.23,
+            "legL_foot": 78.98
+          },
+          "_dbg": {
+            "toeR_y": 1091.7
+          }
+        },
+        {
+          "root": [
+            -10,
+            -481.46
+          ],
+          "angles": {
+            "body": -66.78,
+            "head": -97.15,
+            "armR_up": 64.33,
+            "armR_lo": -51.74,
+            "armL_up": 121.86,
+            "armL_lo": 117.43,
+            "tail": 155.74,
+            "legR_thigh": 42.48,
+            "legR_shin": 100.53,
+            "legR_foot": 40.6,
+            "legL_thigh": 131.96,
+            "legL_shin": 132.05,
+            "legL_foot": 72.83
+          },
+          "_dbg": {
+            "toeR_y": 1089.3
+          }
+        },
+        {
+          "root": [
+            -10,
+            -480.0
+          ],
+          "angles": {
+            "body": -66.86,
+            "head": -97.99,
+            "armR_up": 65.48,
+            "armR_lo": -50.59,
+            "armL_up": 124.16,
+            "armL_lo": 120.41,
+            "tail": 153.49,
+            "legR_thigh": 43.38,
+            "legR_shin": 107.79,
+            "legR_foot": 40.6,
+            "legL_thigh": 108.37,
+            "legL_shin": 161.7,
+            "legL_foot": 68.78
+          },
+          "_dbg": {
+            "toeR_y": 1086.9
+          }
+        },
+        {
+          "root": [
+            -10,
+            -481.46
+          ],
+          "angles": {
+            "body": -66.75,
+            "head": -98.7,
+            "armR_up": 66.63,
+            "armR_lo": -49.62,
+            "armL_up": 126.46,
+            "armL_lo": 122.8,
+            "tail": 152.0,
+            "legR_thigh": 46.24,
+            "legR_shin": 113.93,
+            "legR_foot": 40.6,
+            "legL_thigh": 92.32,
+            "legL_shin": 165.28,
+            "legL_foot": 67.78
+          },
+          "_dbg": {
+            "toeR_y": 1084.5
+          }
+        },
+        {
+          "root": [
+            -10,
+            -485.0
+          ],
+          "angles": {
+            "body": -66.48,
+            "head": -99.17,
+            "armR_up": 67.6,
+            "armR_lo": -48.98,
+            "armL_up": 128.4,
+            "armL_lo": 124.25,
+            "tail": 151.51,
+            "legR_thigh": 50.48,
+            "legR_shin": 119.15,
+            "legR_foot": 40.6,
+            "legL_thigh": 78.79,
+            "legL_shin": 154.14,
+            "legL_foot": 70.07
+          },
+          "_dbg": {
+            "toeR_y": 1082.1
+          }
+        },
+        {
+          "root": [
+            -10,
+            -488.54
+          ],
+          "angles": {
+            "body": -66.09,
+            "head": -99.33,
+            "armR_up": 68.25,
+            "armR_lo": -48.76,
+            "armL_up": 129.7,
+            "armL_lo": 124.52,
+            "tail": 152.08,
+            "legR_thigh": 55.31,
+            "legR_shin": 123.9,
+            "legR_foot": 40.6,
+            "legL_thigh": 73.12,
+            "legL_shin": 133.89,
+            "legL_foot": 75.11
+          },
+          "_dbg": {
+            "toeR_y": 1079.8
+          }
+        },
+        {
+          "root": [
+            -10,
+            -490.0
+          ],
+          "angles": {
+            "body": -65.62,
+            "head": -99.16,
+            "armR_up": 68.48,
+            "armR_lo": -49.0,
+            "armL_up": 130.16,
+            "armL_lo": 123.59,
+            "tail": 153.63,
+            "legR_thigh": 60.08,
+            "legR_shin": 128.71,
+            "legR_foot": 40.6,
+            "legL_thigh": 80.6,
+            "legL_shin": 107.36,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1077.4
+          }
+        },
+        {
+          "root": [
+            -10,
+            -488.54
+          ],
+          "angles": {
+            "body": -65.17,
+            "head": -98.67,
+            "armR_up": 68.25,
+            "armR_lo": -49.65,
+            "armL_up": 129.7,
+            "armL_lo": 121.59,
+            "tail": 155.93,
+            "legR_thigh": 64.65,
+            "legR_shin": 133.84,
+            "legR_foot": 40.6,
+            "legL_thigh": 83.68,
+            "legL_shin": 113.48,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1075.0
+          }
+        },
+        {
+          "root": [
+            -10,
+            -485.0
+          ],
+          "angles": {
+            "body": -64.79,
+            "head": -97.96,
+            "armR_up": 67.6,
+            "armR_lo": -50.63,
+            "armL_up": 128.4,
+            "armL_lo": 118.82,
+            "tail": 158.61,
+            "legR_thigh": 65.29,
+            "legR_shin": 140.63,
+            "legR_foot": 37.87,
+            "legL_thigh": 86.8,
+            "legL_shin": 119.8,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1059.1
+          }
+        },
+        {
+          "root": [
+            -10,
+            -481.46
+          ],
+          "angles": {
+            "body": -64.54,
+            "head": -97.11,
+            "armR_up": 66.63,
+            "armR_lo": -51.78,
+            "armL_up": 126.46,
+            "armL_lo": 115.71,
+            "tail": 161.28,
+            "legR_thigh": 56.14,
+            "legR_shin": 144.46,
+            "legR_foot": 31.72,
+            "legL_thigh": 90.87,
+            "legL_shin": 124.71,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1028.6
+          }
+        },
+        {
+          "root": [
+            -10,
+            -480.0
+          ],
+          "angles": {
+            "body": -64.46,
+            "head": -96.27,
+            "armR_up": 65.48,
+            "armR_lo": -52.93,
+            "armL_up": 124.16,
+            "armL_lo": 112.73,
+            "tail": 163.53,
+            "legR_thigh": 42.89,
+            "legR_shin": 138.73,
+            "legR_foot": 27.67,
+            "legL_thigh": 96.67,
+            "legL_shin": 126.55,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1011.3
+          }
+        },
+        {
+          "root": [
+            -10,
+            -481.46
+          ],
+          "angles": {
+            "body": -64.57,
+            "head": -95.56,
+            "armR_up": 64.33,
+            "armR_lo": -53.9,
+            "armL_up": 121.86,
+            "armL_lo": 110.34,
+            "tail": 165.02,
+            "legR_thigh": 31.36,
+            "legR_shin": 124.25,
+            "legR_foot": 26.67,
+            "legL_thigh": 105.73,
+            "legL_shin": 122.51,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1011.5
+          }
+        },
+        {
+          "root": [
+            -10,
+            -485.0
+          ],
+          "angles": {
+            "body": -64.84,
+            "head": -95.09,
+            "armR_up": 63.36,
+            "armR_lo": -54.54,
+            "armL_up": 119.92,
+            "armL_lo": 108.89,
+            "tail": 165.51,
+            "legR_thigh": 28.39,
+            "legR_shin": 106.38,
+            "legR_foot": 28.96,
+            "legL_thigh": 115.91,
+            "legL_shin": 115.99,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1029.0
+          }
+        },
+        {
+          "root": [
+            -10,
+            -488.54
+          ],
+          "angles": {
+            "body": -65.23,
+            "head": -94.93,
+            "armR_up": 62.71,
+            "armR_lo": -54.76,
+            "armL_up": 118.62,
+            "armL_lo": 108.62,
+            "tail": 164.94,
+            "legR_thigh": 35.53,
+            "legR_shin": 88.9,
+            "legR_foot": 34.0,
+            "legL_thigh": 119.37,
+            "legL_shin": 119.46,
+            "legL_foot": 81.71
+          },
+          "_dbg": {
+            "toeR_y": 1059.7
+          }
+        }
+      ]
+    },
     "cast": {
       "fps": 20,
       "loop": false,
@@ -517,7 +1006,13 @@ export const CREATURE = {
             "armR_lo": -51.76,
             "armL_up": 124.16,
             "armL_lo": 116.57,
-            "tail": 158.51
+            "tail": 158.51,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -532,7 +1027,13 @@ export const CREATURE = {
             "armR_lo": -60.85,
             "armL_up": 127.8,
             "armL_lo": 121.12,
-            "tail": 152.15
+            "tail": 152.15,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -547,7 +1048,13 @@ export const CREATURE = {
             "armR_lo": -65.63,
             "armL_up": 129.71,
             "armL_lo": 123.51,
-            "tail": 148.8
+            "tail": 148.8,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -562,7 +1069,13 @@ export const CREATURE = {
             "armR_lo": -68.78,
             "armL_up": 130.97,
             "armL_lo": 125.08,
-            "tail": 146.59
+            "tail": 146.59,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -577,7 +1090,13 @@ export const CREATURE = {
             "armR_lo": -70.71,
             "armL_up": 131.74,
             "armL_lo": 126.05,
-            "tail": 145.24
+            "tail": 145.24,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -592,7 +1111,13 @@ export const CREATURE = {
             "armR_lo": -71.63,
             "armL_up": 132.11,
             "armL_lo": 126.5,
-            "tail": 144.6
+            "tail": 144.6,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -607,7 +1132,13 @@ export const CREATURE = {
             "armR_lo": -71.69,
             "armL_up": 132.13,
             "armL_lo": 126.54,
-            "tail": 144.56
+            "tail": 144.56,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -622,7 +1153,13 @@ export const CREATURE = {
             "armR_lo": -71.03,
             "armL_up": 131.87,
             "armL_lo": 126.2,
-            "tail": 145.02
+            "tail": 145.02,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -637,7 +1174,13 @@ export const CREATURE = {
             "armR_lo": -69.75,
             "armL_up": 131.36,
             "armL_lo": 125.56,
-            "tail": 145.92
+            "tail": 145.92,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -652,7 +1195,13 @@ export const CREATURE = {
             "armR_lo": -67.96,
             "armL_up": 130.64,
             "armL_lo": 124.67,
-            "tail": 147.17
+            "tail": 147.17,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -667,7 +1216,13 @@ export const CREATURE = {
             "armR_lo": -65.77,
             "armL_up": 129.77,
             "armL_lo": 123.58,
-            "tail": 148.7
+            "tail": 148.7,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -682,7 +1237,13 @@ export const CREATURE = {
             "armR_lo": -63.27,
             "armL_up": 128.76,
             "armL_lo": 122.32,
-            "tail": 150.45
+            "tail": 150.45,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -697,7 +1258,13 @@ export const CREATURE = {
             "armR_lo": -60.54,
             "armL_up": 127.67,
             "armL_lo": 120.96,
-            "tail": 152.37
+            "tail": 152.37,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -712,7 +1279,13 @@ export const CREATURE = {
             "armR_lo": -57.66,
             "armL_up": 126.52,
             "armL_lo": 119.52,
-            "tail": 154.38
+            "tail": 154.38,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -727,7 +1300,13 @@ export const CREATURE = {
             "armR_lo": -54.71,
             "armL_up": 125.34,
             "armL_lo": 118.05,
-            "tail": 156.44
+            "tail": 156.44,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         },
         {
@@ -742,7 +1321,13 @@ export const CREATURE = {
             "armR_lo": -51.76,
             "armL_up": 124.16,
             "armL_lo": 116.57,
-            "tail": 158.51
+            "tail": 158.51,
+            "legR_thigh": 46.24,
+            "legR_shin": 112.16,
+            "legR_foot": 40.6,
+            "legL_thigh": 105.75,
+            "legL_shin": 120.13,
+            "legL_foot": 81.71
           }
         }
       ]

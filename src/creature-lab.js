@@ -81,7 +81,10 @@ class CreatureLab extends Phaser.Scene {
 
   _wireUI() {
     const $ = (id) => document.getElementById(id)
-    const btns = { idle: $('idleBtn'), cast: $('castBtn'), rest: $('restBtn') }
+    const btns = {
+      idle: $('idleBtn'), walk: $('walkBtn'),
+      cast: $('castBtn'), rest: $('restBtn'),
+    }
     const setMode = (m) => {
       this._mode = m
       for (const k in btns) btns[k].classList.toggle('on', k === m)
@@ -98,6 +101,7 @@ class CreatureLab extends Phaser.Scene {
       }
     }
     btns.idle.onclick = () => setMode('idle')
+    btns.walk.onclick = () => setMode('walk')
     btns.cast.onclick = () => setMode('cast')
     btns.rest.onclick = () => setMode('rest')
     setMode('idle')
