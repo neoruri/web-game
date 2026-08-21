@@ -50,30 +50,42 @@ J = {
 # ── 파츠 (이름, 폴리곤, 관절=회전중심) ─────────────────────────────────
 # 폴리곤은 넉넉하게. 관절 부근은 서로 겹쳐도 된다 — 오히려 회전할 때 틈이 덜 보인다.
 PARTS = [
-    ("head", [(425, 30), (720, 20), (810, 190), (838, 420), (795, 505),
+    # 오른쪽 경계를 x=838 까지 뒀더니 **불꽃의 어두운 후광**이 머리에 1038px 짜리
+    # 조각으로 딸려왔다. 머리를 돌리면 그 조각만 같이 돌아 불꽃 옆에서 어른거린다.
+    # 머리 그림 자체는 x=760(뿔 끝)에서 끝나므로 790 까지만 잡으면 충분하다
+    ("head", [(425, 30), (720, 20), (785, 190), (792, 420), (780, 505),
               (718, 534), (645, 516), (596, 470), (518, 398), (466, 348),
               (386, 292), (396, 246), (416, 110)], J["neck"]),
 
-    # 전완 + 손 + 불꽃을 한 덩어리로. 손이 불꽃을 감싸고 있어 분리하면 경계가 지저분하다
+    # 전완 + 손 + 불꽃을 한 덩어리로. 손이 불꽃을 감싸고 있어 분리하면 경계가 지저분하다.
+    # 왼쪽 경계를 (900,30)->(818,210) 으로 뒀더니 불꽃에서 **떨어져 나온 작은 불티**들이
+    # 폴리곤 밖으로 새어 body 에 남았다. 팔이 움직여도 그 불티만 제자리에 붙어 있어 눈에 띈다.
+    # x=838 까지 넓혀서 불티를 전부 담는다 (머리 뿔 끝이 x=760 이라 안 겹친다)
     ("armR_lo", [(752, 632), (800, 706), (884, 700), (1010, 566), (1075, 400),
-                 (1075, 40), (900, 30), (818, 210), (796, 430), (766, 528)],
-     J["elbR"]),
+                 (1075, 20), (838, 20), (815, 200), (800, 430), (766, 528)],
+     J["elbR"], "glow"),
     ("armR_up", [(676, 442), (736, 452), (800, 596), (824, 678), (782, 706),
                  (734, 648), (686, 546), (662, 486)], J["shoR"]),
 
-    ("armL_lo", [(392, 528), (398, 622), (372, 700), (392, 792), (330, 900),
-                 (240, 918), (150, 872), (168, 786), (222, 700), (250, 620),
-                 (268, 540)], J["elbL"]),
+    # 아래쪽 발톱 끝이 폴리곤 밖으로 삐져나가 body 에 1351px 짜리 조각으로 남았다.
+    # (--check 가 잡아준 것) 팔이 움직여도 그 발톱만 제자리에 남아 겹쳐 보인다.
+    # 왼쪽·아래를 넓혀 발톱을 전부 담되, 꼬리 폴리곤(위쪽 경계 y≈930)과는 안 닿게 한다
+    ("armL_lo", [(392, 528), (398, 622), (372, 700), (400, 798), (342, 900),
+                 (258, 928), (168, 900), (134, 856), (158, 778), (214, 700),
+                 (250, 620), (268, 540)], J["elbL"]),
     ("armL_up", [(500, 380), (516, 448), (420, 522), (392, 604), (312, 596),
                  (300, 520), (386, 434), (444, 386)], J["shoL"]),
 
     # 꼬리는 **깨끗한 아랫부분만** 가져간다.
     # 뿌리 쪽(x 370~500)은 왼쪽 다리와 겹쳐 있어 나누면 둘 다 망가진다.
     # 위쪽 가장자리를 오른쪽->왼쪽으로 훑고, 꼬리 끝을 돌아, 아래쪽을 왼쪽->오른쪽으로 되돌아온다.
-    # 오른쪽 끝은 x=400 에서 끊는다 — 그 너머는 왼쪽 다리와 겹쳐서 가져가면 다리가 찢어진다
-    ("tail", [(400, 866), (340, 920), (285, 958), (232, 985), (186, 982),
-              (150, 950), (140, 915), (118, 950), (128, 1010), (175, 1062),
-              (240, 1062), (300, 1030), (355, 985), (398, 940)], J["tail0"]),
+    # 오른쪽 끝은 x≈400 에서 끊는다 — 그 너머는 왼쪽 다리와 겹쳐서 가져가면 다리가 찢어진다.
+    #
+    # 2차 수정: 왼쪽 끝(갈고리)이 폴리곤 위로 삐져나가 body 에 조각으로 남았다.
+    # 갈고리는 위로 휘어 올라가므로 그 부분만 띠를 크게 부풀린다.
+    ("tail", [(405, 852), (350, 895), (300, 938), (250, 940), (200, 928),
+              (158, 922), (126, 946), (122, 1002), (158, 1058), (226, 1088),
+              (292, 1052), (344, 992), (392, 940), (408, 900)], J["tail0"]),
 
     # 남은 전부 — 몸통, 골반, 치마, 목걸이, **그리고 두 다리**
     ("body", None, J["pelvis"]),
@@ -111,12 +123,35 @@ COLORS = [(255, 90, 90), (90, 200, 255), (255, 200, 80), (150, 255, 120),
           (140, 190, 255)]
 
 
-def alpha_from_black(im, lo=10, hi=32):
+def luminance(im):
+    return np.asarray(im.convert("RGB")).astype(np.float32).max(axis=2)
+
+
+def alpha_from_black(lum, lo=10, hi=32):
     """배경이 순수 검정이라 밝기로 알파를 만든다.
     경계를 딱 자르면 계단이 생기므로 lo~hi 사이를 부드럽게 넘긴다."""
-    a = np.asarray(im.convert("RGB")).astype(np.float32)
-    lum = a.max(axis=2)
     return np.clip((lum - lo) / (hi - lo), 0, 1)
+
+
+def alpha_glow(lum, y0=560):
+    """불꽃처럼 **스스로 빛나는** 부위의 알파.
+
+    불꽃은 바깥으로 갈수록 어두운 주황 -> 검정으로 페이드된다.
+    기본 규칙(10~32)은 그 어두운 후광까지 전부 불투명으로 만들어버려서,
+    잘라내면 불꽃 주위에 **검은 덩어리**가 따라붙는다. 실제로 그렇게 보였다.
+    밝기에 따라 서서히 투명해지게 하면 후광이 자연스럽게 사라진다.
+
+    단, 팔뚝은 원래 어두운 살색이라 같은 규칙을 쓰면 같이 지워진다.
+    그래서 손목 위(y < y0)에만 적용한다.
+    """
+    a = alpha_from_black(lum)
+    soft = np.clip((lum - 38) / 70.0, 0, 1)
+    out = a.copy()
+    out[:y0, :] = np.minimum(a[:y0, :], soft[:y0, :])
+    return out
+
+
+ALPHA_RULES = {"glow": alpha_glow}
 
 
 def poly_mask(size, poly):
@@ -125,16 +160,17 @@ def poly_mask(size, poly):
     return np.asarray(m).astype(np.float32) / 255.0
 
 
-def preview(im, alpha):
+def preview(im):
     ov = im.convert("RGB").copy()
     lay = Image.new("RGB", im.size, (0, 0, 0))
     dr = ImageDraw.Draw(lay)
-    for i, (name, poly, _j) in enumerate(PARTS):
-        if poly:
-            dr.polygon(poly, fill=COLORS[i % len(COLORS)])
+    for i, p in enumerate(PARTS):
+        if p[1]:
+            dr.polygon(p[1], fill=COLORS[i % len(COLORS)])
     ov = Image.blend(ov, lay, 0.42)
     dr = ImageDraw.Draw(ov)
-    for i, (name, poly, j) in enumerate(PARTS):
+    for i, p in enumerate(PARTS):
+        name, poly, j = p[0], p[1], p[2]
         if poly:
             dr.line(poly + [poly[0]], fill=(255, 255, 255), width=2)
         dr.ellipse([j[0] - 9, j[1] - 9, j[0] + 9, j[1] + 9],
@@ -145,17 +181,74 @@ def preview(im, alpha):
     print(f"  -> {out}")
 
 
+def check(im, masks, min_island=40):
+    """각 파츠에서 **떨어져 나온 섬 조각**을 찾는다.
+
+    이 진단이 필요했던 이유:
+      · 폴리곤이 팔다리를 다 못 담으면 남은 부스러기가 body 로 흘러들고,
+        그 부스러기는 팔이 움직여도 제자리에 남아 '뒤에 이미지가 겹치는' 것처럼 보인다
+      · 반대로 폴리곤을 너무 넓게 그리면 **남의 것을 물어온다**.
+        실제로 머리 폴리곤이 불꽃의 어두운 후광을 1038px 물고 왔었다
+    둘 다 육안으로는 놓치기 쉬운데, 이 검사로는 한 번에 걸린다.
+
+    파츠는 원래 하나로 이어진 덩어리다. 가장 큰 덩어리 말고는 전부 의심 대상이다.
+    경계선 노이즈를 세지 않아서 판정이 깔끔하다.
+
+    ⚠️ 다만 **원본부터 떨어져 있는 그림**은 오탐이다. 이 크리처의 불꽃은
+    튀어나온 불티가 4개 있어서 armR_lo 에서 항상 걸린다 — 그건 정상이다.
+    '의심 목록'이지 '오류 목록'이 아니니 좌표를 보고 사람이 판단해야 한다.
+    """
+    a = np.asarray(im.convert("RGB")).copy()
+    a = (a * 0.3).astype(np.uint8)
+    total, report = 0, []
+    for name, m in masks.items():
+        n, lab, st, _c = cv2.connectedComponentsWithStats(m.astype(np.uint8), 8)
+        if n <= 1:
+            continue
+        order = sorted(range(1, n), key=lambda i: -st[i, cv2.CC_STAT_AREA])
+        a[lab == order[0]] = np.asarray(im.convert("RGB"))[lab == order[0]]
+        for i in order[1:]:
+            if st[i, cv2.CC_STAT_AREA] < min_island:
+                continue
+            total += 1
+            x, y, w, h = st[i, :4]
+            report.append((name, int(st[i, cv2.CC_STAT_AREA]), x, y, w, h))
+            a[lab == i] = [255, 0, 220]               # 부스러기 = 자홍색
+
+    ov = Image.fromarray(a)
+    dr = ImageDraw.Draw(ov)
+    for name, area, x, y, w, h in report:
+        dr.rectangle([x - 8, y - 8, x + w + 8, y + h + 8], outline=(255, 80, 220), width=3)
+        dr.text((x - 6, y - 24), f"{name} {area}px", fill=(255, 120, 230))
+    for p in PARTS:
+        if p[1]:
+            dr.line(p[1] + [p[1][0]], fill=(0, 255, 120), width=2)
+    out = os.path.join(HERE, "_m3_leak.png")
+    ov.save(out)
+
+    if report:
+        print(f"  ! 떨어져 나온 조각 {total}개 — 폴리곤을 고쳐야 한다")
+        for name, area, x, y, w, h in report:
+            print(f"      {name:9s} {area:6d}px  bbox({x},{y})-({x+w},{y+h})")
+    else:
+        print("  모든 파츠가 하나로 이어져 있다 — 새어나가거나 물어온 조각 없음")
+    print(f"  -> {out}")
+    return total
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
 
     im = Image.open(SRC).convert("RGB")
-    alpha = alpha_from_black(im)
+    lum = luminance(im)
+    alpha = alpha_from_black(lum)
     print(f"  {SRC}  {im.size[0]}x{im.size[1]}  피사체 {100*(alpha>0.5).mean():.1f}%")
 
     if args.preview:
-        preview(im, alpha)
+        preview(im)
         return
 
     os.makedirs(OUT, exist_ok=True)
@@ -166,10 +259,10 @@ def main():
     # 한쪽만 가져가면 반대쪽에 홈이 남고, 팔을 조금만 돌려도 그 홈이 드러난다.
     # 컷아웃의 정석은 겹침을 양쪽에 복제하는 것이다. 앞에 그려지는 파츠가 뒤를 덮으니
     # 쉬는 자세에서는 티가 안 나고, 돌리면 뒤쪽 여분이 틈을 메운다.
-    limbs = [p for p in PARTS if p[1] is not None]
     union = np.zeros(alpha.shape, dtype=bool)
-    for _n, poly, _j in limbs:
-        union |= poly_mask(im.size, poly) > 0.5
+    for p in PARTS:
+        if p[1] is not None:
+            union |= poly_mask(im.size, p[1]) > 0.5
 
     # 몸통도 팔·머리 밑으로 OVERLAP 만큼 더 가져간다. 같은 이유다
     OVERLAP = 30
@@ -177,18 +270,33 @@ def main():
     k = np.ones((OVERLAP * 2 + 1, OVERLAP * 2 + 1), np.uint8)
     body = (cv2.dilate(body_core.astype(np.uint8), k) > 0) & (alpha > 0.02)
 
-    for name, poly, joint in PARTS:
+    masks = {}
+    for p in PARTS:
+        name, poly = p[0], p[1]
+        rule = p[3] if len(p) > 3 else None
+        pa = ALPHA_RULES[rule](lum) if rule else alpha
+        masks[name] = body if poly is None else \
+            ((poly_mask(im.size, poly) > 0.5) & (pa > 0.4))
+
+    if args.check:
+        check(im, masks)
+        return
+
+    for p in PARTS:
+        name, poly, joint = p[0], p[1], p[2]
+        rule = p[3] if len(p) > 3 else None
+        pa = ALPHA_RULES[rule](lum) if rule else alpha
         if poly is None:
             take = body
         else:
-            take = (poly_mask(im.size, poly) > 0.5) & (alpha > 0.02)
+            take = (poly_mask(im.size, poly) > 0.5) & (pa > 0.02)
         if not take.any():
             print(f"  ! {name}: 빈 영역 — 폴리곤을 다시 봐야 한다")
             continue
 
         ys, xs = np.where(take)
         x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
-        a = (alpha * take)[y0:y1, x0:x1]
+        a = (pa * take)[y0:y1, x0:x1]
         out = np.dstack([rgb[y0:y1, x0:x1], (a * 255).astype(np.uint8)])
         Image.fromarray(out, "RGBA").save(os.path.join(OUT, f"{name}.png"))
 

@@ -80,7 +80,7 @@ export const CREATURE = {
     {
       "name": "head",
       "pivot": [
-        0.5741,
+        0.7025,
         0.8724
       ],
       "file": "head.png"
@@ -88,8 +88,8 @@ export const CREATURE = {
     {
       "name": "armR_lo",
       "pivot": [
-        0.1272,
-        0.9183
+        0.1314,
+        0.9181
       ],
       "file": "armR_lo.png"
     },
@@ -105,7 +105,7 @@ export const CREATURE = {
       "name": "armL_lo",
       "pivot": [
         0.8203,
-        0.0829
+        0.0818
       ],
       "file": "armL_lo.png"
     },
@@ -120,16 +120,16 @@ export const CREATURE = {
     {
       "name": "tail",
       "pivot": [
-        0.9874,
-        0.2102
+        0.9555,
+        0.2684
       ],
       "file": "tail.png"
     },
     {
       "name": "body",
       "pivot": [
-        0.5437,
-        0.5539
+        0.4722,
+        0.4535
       ],
       "file": "body.png"
     }
