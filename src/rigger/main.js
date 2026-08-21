@@ -86,6 +86,16 @@ function recut() {
   const t0 = performance.now()
   const res = cut(app.image, usable, { keepIslands: new Set(keepIslandNames()) })
   app.cuts = res.parts
+
+  // body 는 뿌리 뼈라 관절이 있어야 다른 파츠가 매달린다.
+  // 없으면 미리보기에 아무것도 안 나오는데 이유를 알기 어려우므로 일단 가운데에 놓아둔다.
+  // 골반 같은 제대로 된 위치는 사용자가 [관절 놓기] 로 옮기면 된다
+  const bp = app.parts.find((p) => p.isBody)
+  const bc = res.parts.find((c) => c.name === bp?.name && !c.empty)
+  if (bp && !bp.joint && bc) {
+    bp.joint = [Math.round(bc.offset[0] + bc.size[0] / 2),
+                Math.round(bc.offset[1] + bc.size[1] / 2)]
+  }
   const diag = diagnose(res.masks, app.image.width, app.image.height)
   renderDiag(diag, res.dropped, performance.now() - t0)
   buildRigFromParts()
@@ -200,10 +210,14 @@ function renderList() {
   const byName = new Map(app.cuts.map((c) => [c.name, c]))
   ul.innerHTML = app.parts.map((p, i) => {
     const c = byName.get(p.name)
+    // 뭐가 빠졌는지 목록에서 바로 보이게 한다. 크기만 보여주면 관절을 빼먹은 걸 못 챈다
     const info = p.isBody ? '나머지 전부'
+      : p.poly.length < 3 ? `점 ${p.poly.length}개`
+      : !p.joint ? '관절 없음'
+      : !p.parent ? '부모 없음'
       : c && !c.empty ? `${c.size[0]}×${c.size[1]}`
-      : p.poly.length < 3 ? `점 ${p.poly.length}` : '빈 영역'
-    const bad = !p.isBody && (!p.joint || (c && c.empty))
+      : '빈 영역'
+    const bad = !p.isBody && (!p.joint || !p.parent || p.poly.length < 3 || (c && c.empty))
     return `<li data-i="${i}" class="${i === app.activeIdx ? 'on' : ''} ${p.isBody ? 'body' : ''}">
       <span class="nm">${p.name}</span>
       <span class="cnt ${bad ? 'bad' : ''}">${info}</span>
@@ -220,6 +234,7 @@ function renderList() {
     }
   })
   renderProps()
+  renderGuide()
 }
 
 function move(i, d) {
@@ -230,6 +245,54 @@ function move(i, d) {
   app.activeIdx = j
   touch()
   renderPreview()
+}
+
+/**
+ * "지금 뭘 해야 하는가"를 한 줄로 띄우고, 눌러야 할 버튼을 깜빡인다.
+ * 버튼만 늘어놓으니 관절을 안 놓고 넘어가는 일이 생겼다 — 순서를 화면이 알려줘야 한다.
+ */
+function renderGuide() {
+  const g = $('guide'), t = $('guideText')
+  for (const id of ['btnAdd', 'mDraw', 'mJoint']) $(id).classList.remove('need')
+  g.classList.remove('done')
+
+  const say = (step, html, needId) => {
+    g.querySelector('b').textContent = step
+    t.innerHTML = html
+    if (needId) $(needId).classList.add('need')
+  }
+
+  if (!app.image) return say('①', '이미지를 아래 영역에 <b>끌어다 놓으세요</b>')
+
+  const real = app.parts.filter((p) => !p.isBody)
+  if (!real.length) return say('②', '<kbd>+ 추가</kbd> 를 눌러 첫 파츠를 만드세요 (머리·팔 등)', 'btnAdd')
+
+  const p = app.activePart()
+  if (!p) return say('②', '왼쪽에서 파츠를 고르세요')
+  if (p.isBody) {
+    return say('·', '<b>body</b> 는 폴리곤에 안 들어간 나머지를 전부 받습니다. 외곽을 그릴 필요는 없지만, '
+      + '<b>뿌리 관절</b>은 있어야 합니다 — 지금은 자동으로 가운데에 놓여 있고, '
+      + '<kbd>관절 놓기</kbd> 로 골반 위치로 옮기면 됩니다.')
+  }
+  if (p.poly.length < 3) {
+    return say('③', `<kbd>점 찍기</kbd> 로 <b>${p.name}</b> 의 외곽을 클릭하세요 `
+      + `(지금 ${p.poly.length}점 — 3점 이상 필요). 대충 넉넉하게 감싸도 됩니다.`, 'mDraw')
+  }
+  if (!p.joint) {
+    return say('④', `<kbd>관절 놓기</kbd> 를 누르고 <b>${p.name}</b> 이 <b>회전할 중심</b>을 클릭하세요. `
+      + '팔이면 어깨, 정강이면 무릎입니다.', 'mJoint')
+  }
+  if (!p.parent) {
+    return say('⑤', `왼쪽 아래 <b>부모</b> 에서 <b>${p.name}</b> 이 매달릴 뼈를 고르세요 `
+      + '(팔·다리·머리는 보통 body).')
+  }
+  const left = real.filter((q) => q.poly.length < 3 || !q.joint || !q.parent)
+  if (left.length) {
+    return say('✔', `<b>${p.name}</b> 준비됨. 남은 파츠: ${left.map((q) => q.name).join(', ')}`)
+  }
+  g.classList.add('done')
+  say('✔', `파츠 ${real.length}개 모두 준비됐습니다. 오른쪽 <b>미리보기</b>가 원본과 같으면 `
+    + '<kbd>내보내기</kbd> 하세요.')
 }
 
 function renderProps() {
@@ -294,6 +357,7 @@ function touch() {
 
 app.touch = touch
 app.recut = recut
+app.setMode = setMode
 app.showCoord = (p) => {
   $('coord').textContent = `${Math.round(p[0])}, ${Math.round(p[1])}`
 }
@@ -423,6 +487,7 @@ tick()
 
 ensureBody()
 renderList()
+renderGuide()
 editor.render()
 // 자동 검증·디버그용 훅
 window.__rigger = Object.assign(app, { exportAll, buildRigFromParts, setMode })

@@ -66,6 +66,27 @@ aside { background: #12161c; }
 #partList .cnt { color: var(--dim); font-size: 11px; }
 #partList .bad { color: var(--bad); }
 
+/* 지금 뭘 해야 하는지 항상 한 줄로 알려준다.
+   버튼만 늘어놓으면 "관절을 놓아야 한다"는 걸 모르고 넘어가게 된다 */
+#guide {
+  display: flex; align-items: center; gap: 9px;
+  background: #17303d; border: 1px solid #2a5871; border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 8px 12px; margin-bottom: 9px;
+  font-size: 13px; color: #d5ecfa;
+}
+#guide b { color: var(--accent); font-size: 15px; }
+#guide.done { background: #16301f; border-color: #2c6b45; border-left-color: var(--ok); }
+#guide.done b { color: var(--ok); }
+#guide kbd {
+  background: #1d4a63; border: 1px solid var(--accent); color: #cdeeff;
+  border-radius: 4px; padding: 1px 7px; font: inherit; font-size: 12px;
+}
+
+/* 지금 눌러야 할 버튼을 깜빡인다 */
+@keyframes need { 0%, 100% { box-shadow: 0 0 0 0 rgba(90,200,255,0.55); }
+                  50% { box-shadow: 0 0 0 5px rgba(90,200,255,0); } }
+button.need { border-color: var(--accent); color: #cdeeff; animation: need 1.5s infinite; }
+
 .toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .sep { width: 1px; height: 18px; background: var(--line); }
 .coord { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; }

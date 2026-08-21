@@ -71,6 +71,8 @@ export class Editor {
 
       if (this.mode === 'joint') {
         part.joint = [Math.round(p[0]), Math.round(p[1])]
+        // 한 번 놓으면 편집으로 돌아간다. 안 그러면 다음 클릭에 관절이 딸려 움직인다
+        this.app.setMode?.('edit')
         this.app.touch()
         return
       }
@@ -80,6 +82,7 @@ export class Editor {
         // 자식이 있으면 자동으로 그 관절을 쓰지만, 머리·손·꼬리처럼 **끝 뼈**는
         // 자식이 없어서 직접 찍어줘야 한다. 안 찍으면 rest 가 0도로 남는다
         part.tip = [Math.round(p[0]), Math.round(p[1])]
+        this.app.setMode?.('edit')
         this.app.touch()
         return
       }
