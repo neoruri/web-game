@@ -195,8 +195,8 @@ export const CREATURE = {
     {
       "name": "legR_shin",
       "pivot": [
-        0.85,
-        0.1862
+        0.8511,
+        0.1027
       ],
       "file": "legR_shin.png"
     },
@@ -211,8 +211,8 @@ export const CREATURE = {
     {
       "name": "legL_shin",
       "pivot": [
-        0.6122,
-        0.2366
+        0.6357,
+        0.1013
       ],
       "file": "legL_shin.png"
     },
