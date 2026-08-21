@@ -123,11 +123,12 @@ export const CREATURE = {
   ],
   "drawOrder": [
     "tail",
-    "legL_shin",
     "legL_foot",
-    "legR_thigh",
-    "legR_shin",
+    "legL_shin",
+    "legL_thigh",
     "legR_foot",
+    "legR_shin",
+    "legR_thigh",
     "armR_up",
     "armR_lo",
     "body",
@@ -207,6 +208,14 @@ export const CREATURE = {
         0.2115
       ],
       "file": "legR_foot.png"
+    },
+    {
+      "name": "legL_thigh",
+      "pivot": [
+        0.8136,
+        0.0228
+      ],
+      "file": "legL_thigh.png"
     },
     {
       "name": "legL_shin",
