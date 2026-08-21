@@ -91,11 +91,25 @@ CAST_FRAMES, CAST_FPS = 16, 20      # 0.8초
 # 3/4 뷰라 IK 가 안 된다고 판단했었는데 그건 과한 결론이었다.
 # 지면을 **화면상의 (거의) 수평선**으로 근사하면 그만이고, 2D 컷아웃 리그는 다 그렇게 한다.
 # 다리마다 자기 발의 쉬는 위치에서 출발하므로 원근으로 높이가 달라도 상관없다.
-STRIDE = 230.0       # 보폭(원본 px). 키 1090 의 21%
-SWING_H = 75.0       # 스윙발 최고 높이
+#
+# ── 쉬는 자세를 그대로 쓰면 안 된다 (실측으로 확인) ──
+#   왼쪽 다리 : 엉덩이~발끝 직선 423 / 뼈 합 436 = **97% 뻗어 있다**. 여유가 3% 뿐이라
+#               조금만 뒤로 뻗어도 IK 가 한계에 걸려 다리가 막대기처럼 펴진다
+#   두 발 간격: 415px (키의 38%). 엉덩이 간격은 160px 뿐이다
+#   즉 이 그림은 **버티고 선 런지**지 걷는 자세가 아니다.
+# 그래서 걷기는 자기 나름의 자세를 쓴다 — 발을 엉덩이 밑으로 모으고 골반을 살짝 낮춘다.
+# 골반을 낮추면 다리에 여유가 생겨 무릎이 자연스러운 범위에서만 움직인다.
+WALK_CROUCH = 45.0   # 걷는 동안 골반을 이만큼 낮춘다 (여유 확보 + 걷는 자세)
+WALK_TOE = {         # 걷기 전용 발 기준 위치. 런지(805/390)보다 훨씬 좁다
+    "legR": (700.0, 1085.0),
+    "legL": (470.0, 1108.0),
+}
+STRIDE = 160.0       # 보폭(원본 px). 키 1090 의 15%
+SWING_H = 62.0       # 스윙발 최고 높이
 DUTY = 0.6           # 접지 비율. 걷기는 달리기보다 길다(양발 접지 구간이 있다)
 STEP_DIR = (1.0, 0.10)   # 진행 방향. 3/4 뷰라 화면 아래로 살짝 기운다
 FOOT_LIFT = -14.0    # 스윙 중 발끝 들기(도)
+REACH_WARN = 0.94    # 이 비율을 넘으면 IK 가 클램프될 위험 — 경고를 띄운다
 
 WALK_UPPER = {                    # 상체는 다리와 반대로, 작게
     "head":    (2.2, 0.4),
@@ -194,41 +208,48 @@ def main():
     for name, parent, j0, j1 in BONES:
         seg_len[name] = math.dist(J[j0], J[j1])
 
-    walk = []
+    walk, walk_dbg = [], []
     for i in range(WALK_FRAMES):
         u = i / WALK_FRAMES
         angles = {n: rest[n] for n in rest}
         for n, (amp, ph) in WALK_UPPER.items():
             angles[n] = rest[n] + amp * math.cos(2 * math.pi * u + ph)
 
-        # 몸통은 걸음마다 한 번씩 내려앉는다 -> 한 사이클에 두 번
-        dy = -WALK_BOB * math.cos(4 * math.pi * u)
+        # 골반을 낮춘 채로, 걸음마다 한 번씩 더 내려앉는다 -> 한 사이클에 두 번
+        dy = WALK_CROUCH - WALK_BOB * math.cos(4 * math.pi * u)
         pelvis = (J["pelvis"][0], J["pelvis"][1] + dy)
         body_off = angles["body"] - rest["body"]
+        row = {"f": i + 1}
 
-        for side, hip_j, toe_j, ph in (("legR", "hipR", "toeR", 0.0),
-                                       ("legL", "hipL", "toeL", 0.5)):
+        for side, hip_j, ph in (("legR", "hipR", 0.0), ("legL", "hipL", 0.5)):
             # 엉덩이는 몸통에 붙어 있으므로 몸통의 회전·상하를 그대로 따라간다
             d = (J[hip_j][0] - J["pelvis"][0], J[hip_j][1] - J["pelvis"][1])
             d = rot(d, body_off)
             hip = (pelvis[0] + d[0], pelvis[1] + d[1])
 
-            toe, lift = toe_at((u + ph) % 1.0, J[toe_j])
+            toe, lift = toe_at((u + ph) % 1.0, WALK_TOE[side])
             fa = rest[side + "_foot"] + lift
+            l1, l2 = seg_len[side + "_thigh"], seg_len[side + "_shin"]
             fl = seg_len[side + "_foot"]
             hock = (toe[0] - math.cos(math.radians(fa)) * fl,
                     toe[1] - math.sin(math.radians(fa)) * fl)
-            knee = ik2(hip, hock, seg_len[side + "_thigh"], seg_len[side + "_shin"])
+            knee = ik2(hip, hock, l1, l2)
 
             angles[side + "_thigh"] = ang(hip, knee)
             angles[side + "_shin"] = ang(knee, hock)
             angles[side + "_foot"] = fa
 
+            # 뻗은 정도. 1.0 에 가까우면 IK 가 클램프돼 다리가 막대기가 된다.
+            # 굽힘은 -180~180 으로 정규화한다 — 안 하면 각도가 ±180 을 넘는 프레임에서
+            # -257° 같은 값이 나와 진단을 잘못 읽게 된다 (런타임은 최단경로 보간이라 무관)
+            flex = (angles[side + "_shin"] - angles[side + "_thigh"] + 180) % 360 - 180
+            row[side] = (math.dist(hip, hock) / (l1 + l2), flex)
+
         walk.append({
             "root": [round(pelvis[0] - GROUND[0], 2), round(pelvis[1] - GROUND[1], 2)],
             "angles": {n: round(v, 2) for n, v in angles.items()},
-            "_dbg": {"toeR_y": round(toe_at(u, J["toeR"])[0][1], 1)},
         })
+        walk_dbg.append(row)
 
     data = {
         "unit": UNIT,
@@ -257,6 +278,28 @@ def main():
              if not any(p["name"] == b["name"] for p in meta["parts"])]
     if noart:
         print(f"  그림 없는 변환 전용 뼈: {', '.join(noart)}")
+
+    # walk 진단 — 눈으로 보기 전에 숫자로 먼저 거른다
+    print("\n  walk 진단  (뻗은정도 = 엉덩이~발목 / 뼈길이합. 1.0 이면 IK 클램프)")
+    print("     프레임   오른다리 뻗은정도 무릎굽힘   왼다리 뻗은정도 무릎굽힘")
+    warn = 0
+    for row in walk_dbg:
+        rr, rk = row["legR"]
+        lr, lk = row["legL"]
+        mark = ""
+        if max(rr, lr) > REACH_WARN:
+            mark = "  <-- 한계 근접"
+            warn += 1
+        print(f"      f{row['f']:2d}        {rr:5.2f}      {rk:6.1f}°     "
+              f"{lr:5.2f}      {lk:6.1f}°{mark}")
+    kr = [row["legR"][1] for row in walk_dbg]
+    kl = [row["legL"][1] for row in walk_dbg]
+    print(f"    무릎굽힘 범위  오른 {min(kr):.0f}~{max(kr):.0f}° ({max(kr)-min(kr):.0f}°)"
+          f"   왼 {min(kl):.0f}~{max(kl):.0f}° ({max(kl)-min(kl):.0f}°)")
+    print("    * 굽힘 변동이 60° 를 넘으면 다리가 고무처럼 보인다")
+    if warn:
+        print(f"    ! {warn}개 프레임이 뻗기 한계에 닿았다 — STRIDE 를 줄이거나 "
+              f"WALK_CROUCH 를 키워야 한다")
     print("  * 모든 오프셋이 0이면 원본 그림과 픽셀 단위로 같아진다")
 
 

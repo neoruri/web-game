@@ -174,8 +174,13 @@ export class Rig {
       return start[b.name]
     }
 
+    // 관절 위치를 밖에서도 쓸 수 있게 남긴다.
+    // 그림 없는 뼈(치마에 가려 자를 그림이 없는 허벅지 등)도 여기엔 들어 있으므로
+    // 디버그 표시는 parts 가 아니라 이걸 봐야 한다
+    this.jointPos = new Map()
     for (const b of this.def.bones) {
       const s = resolve(b)
+      this.jointPos.set(b.name, s)
       const part = this.parts.get(b.name)
       if (!part) continue
       part.x = s.x

@@ -187,8 +187,8 @@ export const CREATURE = {
     {
       "name": "legR_thigh",
       "pivot": [
-        0.2597,
-        0.2958
+        0.0884,
+        -0.0242
       ],
       "file": "legR_thigh.png"
     },
@@ -219,16 +219,16 @@ export const CREATURE = {
     {
       "name": "legL_foot",
       "pivot": [
-        0.5304,
-        0.1149
+        0.5046,
+        0.0723
       ],
       "file": "legL_foot.png"
     },
     {
       "name": "body",
       "pivot": [
-        0.6018,
-        0.4459
+        0.6085,
+        0.5334
       ],
       "file": "body.png"
     }
@@ -607,7 +607,7 @@ export const CREATURE = {
         {
           "root": [
             -10,
-            -490.0
+            -445.0
           ],
           "angles": {
             "body": -65.7,
@@ -617,21 +617,18 @@ export const CREATURE = {
             "armL_up": 118.16,
             "armL_lo": 109.55,
             "tail": 163.39,
-            "legR_thigh": 54.67,
-            "legR_shin": 68.9,
+            "legR_thigh": 40.52,
+            "legR_shin": 125.46,
             "legR_foot": 40.6,
-            "legL_thigh": 122.79,
-            "legL_shin": 122.87,
+            "legL_thigh": 82.97,
+            "legL_shin": 155.56,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1096.4
           }
         },
         {
           "root": [
             -10,
-            -488.54
+            -443.54
           ],
           "angles": {
             "body": -66.15,
@@ -641,21 +638,18 @@ export const CREATURE = {
             "armL_up": 118.62,
             "armL_lo": 111.55,
             "tail": 161.09,
-            "legR_thigh": 47.13,
-            "legR_shin": 82.27,
+            "legR_thigh": 43.46,
+            "legR_shin": 129.93,
             "legR_foot": 40.6,
-            "legL_thigh": 126.25,
-            "legL_shin": 126.33,
+            "legL_thigh": 87.11,
+            "legL_shin": 157.93,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1094.1
           }
         },
         {
           "root": [
             -10,
-            -485.0
+            -440.0
           ],
           "angles": {
             "body": -66.53,
@@ -665,21 +659,18 @@ export const CREATURE = {
             "armL_up": 119.92,
             "armL_lo": 114.32,
             "tail": 158.41,
-            "legR_thigh": 43.73,
-            "legR_shin": 92.1,
+            "legR_thigh": 46.23,
+            "legR_shin": 134.72,
             "legR_foot": 40.6,
-            "legL_thigh": 130.15,
-            "legL_shin": 130.23,
+            "legL_thigh": 89.38,
+            "legL_shin": 165.54,
             "legL_foot": 78.98
-          },
-          "_dbg": {
-            "toeR_y": 1091.7
           }
         },
         {
           "root": [
             -10,
-            -481.46
+            -436.46
           ],
           "angles": {
             "body": -66.78,
@@ -689,21 +680,18 @@ export const CREATURE = {
             "armL_up": 121.86,
             "armL_lo": 117.43,
             "tail": 155.74,
-            "legR_thigh": 42.48,
-            "legR_shin": 100.53,
+            "legR_thigh": 49.37,
+            "legR_shin": 139.41,
             "legR_foot": 40.6,
-            "legL_thigh": 131.96,
-            "legL_shin": 132.05,
+            "legL_thigh": 86.67,
+            "legL_shin": 177.35,
             "legL_foot": 72.83
-          },
-          "_dbg": {
-            "toeR_y": 1089.3
           }
         },
         {
           "root": [
             -10,
-            -480.0
+            -435.0
           ],
           "angles": {
             "body": -66.86,
@@ -713,21 +701,18 @@ export const CREATURE = {
             "armL_up": 124.16,
             "armL_lo": 120.41,
             "tail": 153.49,
-            "legR_thigh": 43.38,
-            "legR_shin": 107.79,
+            "legR_thigh": 53.27,
+            "legR_shin": 143.45,
             "legR_foot": 40.6,
-            "legL_thigh": 108.37,
-            "legL_shin": 161.7,
+            "legL_thigh": 79.79,
+            "legL_shin": -177.74,
             "legL_foot": 68.78
-          },
-          "_dbg": {
-            "toeR_y": 1086.9
           }
         },
         {
           "root": [
             -10,
-            -481.46
+            -436.46
           ],
           "angles": {
             "body": -66.75,
@@ -737,21 +722,18 @@ export const CREATURE = {
             "armL_up": 126.46,
             "armL_lo": 122.8,
             "tail": 152.0,
-            "legR_thigh": 46.24,
-            "legR_shin": 113.93,
+            "legR_thigh": 57.95,
+            "legR_shin": 146.52,
             "legR_foot": 40.6,
-            "legL_thigh": 92.32,
-            "legL_shin": 165.28,
+            "legL_thigh": 69.05,
+            "legL_shin": 177.02,
             "legL_foot": 67.78
-          },
-          "_dbg": {
-            "toeR_y": 1084.5
           }
         },
         {
           "root": [
             -10,
-            -485.0
+            -440.0
           ],
           "angles": {
             "body": -66.48,
@@ -761,21 +743,18 @@ export const CREATURE = {
             "armL_up": 128.4,
             "armL_lo": 124.25,
             "tail": 151.51,
-            "legR_thigh": 50.48,
-            "legR_shin": 119.15,
+            "legR_thigh": 63.11,
+            "legR_shin": 148.7,
             "legR_foot": 40.6,
-            "legL_thigh": 78.79,
-            "legL_shin": 154.14,
+            "legL_thigh": 58.21,
+            "legL_shin": 162.07,
             "legL_foot": 70.07
-          },
-          "_dbg": {
-            "toeR_y": 1082.1
           }
         },
         {
           "root": [
             -10,
-            -488.54
+            -443.54
           ],
           "angles": {
             "body": -66.09,
@@ -785,21 +764,18 @@ export const CREATURE = {
             "armL_up": 129.7,
             "armL_lo": 124.52,
             "tail": 152.08,
-            "legR_thigh": 55.31,
-            "legR_shin": 123.9,
+            "legR_thigh": 68.33,
+            "legR_shin": 150.51,
             "legR_foot": 40.6,
-            "legL_thigh": 73.12,
-            "legL_shin": 133.89,
+            "legL_thigh": 52.79,
+            "legL_shin": 143.57,
             "legL_foot": 75.11
-          },
-          "_dbg": {
-            "toeR_y": 1079.8
           }
         },
         {
           "root": [
             -10,
-            -490.0
+            -445.0
           ],
           "angles": {
             "body": -65.62,
@@ -809,21 +785,18 @@ export const CREATURE = {
             "armL_up": 130.16,
             "armL_lo": 123.59,
             "tail": 153.63,
-            "legR_thigh": 60.08,
-            "legR_shin": 128.71,
+            "legR_thigh": 73.3,
+            "legR_shin": 152.54,
             "legR_foot": 40.6,
-            "legL_thigh": 80.6,
-            "legL_shin": 107.36,
+            "legL_thigh": 54.43,
+            "legL_shin": 127.17,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1077.4
           }
         },
         {
           "root": [
             -10,
-            -488.54
+            -443.54
           ],
           "angles": {
             "body": -65.17,
@@ -833,21 +806,18 @@ export const CREATURE = {
             "armL_up": 129.7,
             "armL_lo": 121.59,
             "tail": 155.93,
-            "legR_thigh": 64.65,
-            "legR_shin": 133.84,
+            "legR_thigh": 77.97,
+            "legR_shin": 155.08,
             "legR_foot": 40.6,
-            "legL_thigh": 83.68,
-            "legL_shin": 113.48,
+            "legL_thigh": 56.95,
+            "legL_shin": 132.43,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1075.0
           }
         },
         {
           "root": [
             -10,
-            -485.0
+            -440.0
           ],
           "angles": {
             "body": -64.79,
@@ -857,21 +827,18 @@ export const CREATURE = {
             "armL_up": 128.4,
             "armL_lo": 118.82,
             "tail": 158.61,
-            "legR_thigh": 65.29,
-            "legR_shin": 140.63,
+            "legR_thigh": 80.43,
+            "legR_shin": 159.67,
             "legR_foot": 37.87,
-            "legL_thigh": 86.8,
-            "legL_shin": 119.8,
+            "legL_thigh": 59.38,
+            "legL_shin": 138.22,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1059.1
           }
         },
         {
           "root": [
             -10,
-            -481.46
+            -436.46
           ],
           "angles": {
             "body": -64.54,
@@ -881,21 +848,18 @@ export const CREATURE = {
             "armL_up": 126.46,
             "armL_lo": 115.71,
             "tail": 161.28,
-            "legR_thigh": 56.14,
-            "legR_shin": 144.46,
+            "legR_thigh": 75.81,
+            "legR_shin": 164.56,
             "legR_foot": 31.72,
-            "legL_thigh": 90.87,
-            "legL_shin": 124.71,
+            "legL_thigh": 62.17,
+            "legL_shin": 143.76,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1028.6
           }
         },
         {
           "root": [
             -10,
-            -480.0
+            -435.0
           ],
           "angles": {
             "body": -64.46,
@@ -905,21 +869,18 @@ export const CREATURE = {
             "armL_up": 124.16,
             "armL_lo": 112.73,
             "tail": 163.53,
-            "legR_thigh": 42.89,
-            "legR_shin": 138.73,
+            "legR_thigh": 66.17,
+            "legR_shin": 164.22,
             "legR_foot": 27.67,
-            "legL_thigh": 96.67,
-            "legL_shin": 126.55,
+            "legL_thigh": 65.61,
+            "legL_shin": 148.24,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1011.3
           }
         },
         {
           "root": [
             -10,
-            -481.46
+            -436.46
           ],
           "angles": {
             "body": -64.57,
@@ -929,21 +890,18 @@ export const CREATURE = {
             "armL_up": 121.86,
             "armL_lo": 110.34,
             "tail": 165.02,
-            "legR_thigh": 31.36,
-            "legR_shin": 124.25,
+            "legR_thigh": 54.01,
+            "legR_shin": 157.34,
             "legR_foot": 26.67,
-            "legL_thigh": 105.73,
-            "legL_shin": 122.51,
+            "legL_thigh": 69.66,
+            "legL_shin": 151.19,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1011.5
           }
         },
         {
           "root": [
             -10,
-            -485.0
+            -440.0
           ],
           "angles": {
             "body": -64.84,
@@ -953,21 +911,18 @@ export const CREATURE = {
             "armL_up": 119.92,
             "armL_lo": 108.89,
             "tail": 165.51,
-            "legR_thigh": 28.39,
-            "legR_shin": 106.38,
+            "legR_thigh": 43.9,
+            "legR_shin": 145.84,
             "legR_foot": 28.96,
-            "legL_thigh": 115.91,
-            "legL_shin": 115.99,
+            "legL_thigh": 74.09,
+            "legL_shin": 152.85,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1029.0
           }
         },
         {
           "root": [
             -10,
-            -488.54
+            -443.54
           ],
           "angles": {
             "body": -65.23,
@@ -977,15 +932,12 @@ export const CREATURE = {
             "armL_up": 118.62,
             "armL_lo": 108.62,
             "tail": 164.94,
-            "legR_thigh": 35.53,
-            "legR_shin": 88.9,
+            "legR_thigh": 39.44,
+            "legR_shin": 134.1,
             "legR_foot": 34.0,
-            "legL_thigh": 119.37,
-            "legL_shin": 119.46,
+            "legL_thigh": 78.61,
+            "legL_shin": 154.01,
             "legL_foot": 81.71
-          },
-          "_dbg": {
-            "toeR_y": 1059.7
           }
         }
       ]

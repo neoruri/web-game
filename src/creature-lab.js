@@ -64,14 +64,16 @@ class CreatureLab extends Phaser.Scene {
     this.gfx.clear()
     if (!this.showBones) return
     const R = this.rig
+    // 그림 없는 뼈(legL_thigh 처럼 변환만 담당)도 있으므로 파츠가 아니라
+    // Rig 가 계산한 관절 위치를 쓴다. parts 로 찾으면 undefined 를 만나 터진다
+    const at = R.jointPos || new Map()
     for (const b of CREATURE.bones) {
-      const p = R.parts.get(b.name)
+      const p = at.get(b.name)
       if (!p) continue
       this.gfx.fillStyle(0xffee66, 1)
       this.gfx.fillCircle(R.root.x + p.x, R.root.y + p.y, 5)
-      const parent = CREATURE.bones.find((q) => q.name === b.parent)
-      if (parent) {
-        const pp = R.parts.get(parent.name)
+      const pp = at.get(b.parent)
+      if (pp) {
         this.gfx.lineStyle(2, 0x66ddff, 0.8)
         this.gfx.lineBetween(R.root.x + pp.x, R.root.y + pp.y,
                              R.root.x + p.x, R.root.y + p.y)

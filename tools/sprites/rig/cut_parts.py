@@ -92,8 +92,12 @@ PARTS = [
     # 치마가 허벅지 위쪽을 덮고 있다. 그래서 다리를 **body 보다 뒤에** 그린다 —
     # 그러면 엉덩이 근처의 자른 자국은 치마가 가려주고, 치마 밑으로 나온 부분만 움직인다.
     # 옷 입은 캐릭터가 걷는 것과 같은 원리다. 치마 밑에서 잘라내려 하면 그림 자체가 없다.
-    ("legR_thigh", [(608, 640), (706, 632), (794, 726), (826, 812), (804, 874),
-                    (738, 878), (682, 800), (626, 722)], J["hipR"]),
+    # 좌측 상단을 (608,640)-(706,632) 로 뒀더니 **치마의 금색 자락**을 통째로 물었다.
+    # 허벅지가 돌면 그 자락만 치마에서 떨어져 나와 허공에 떠다녔다.
+    # 자락의 아래 경계(605,672)-(720,732) 밑으로 내리고, 왼쪽은 세로 금색 띠(x≈615~635)를 피한다.
+    # 엉덩이 관절(655,710)이 그림 바깥에 놓이지만 상관없다 — 그 부근은 치마가 가린다
+    ("legR_thigh", [(642, 714), (714, 724), (794, 726), (826, 812), (804, 874),
+                    (738, 878), (690, 806), (648, 750)], J["hipR"]),
     ("legR_shin", [(706, 782), (838, 830), (776, 1034), (640, 1002)], J["kneeR"]),
     ("legR_foot", [(642, 962), (746, 986), (876, 1054), (882, 1136),
                    (758, 1146), (656, 1062)], J["hockR"]),
@@ -116,12 +120,20 @@ PARTS = [
 #   팔(시전 26°)  : 110px -> 최대 48px 어긋남. 팔 폭 안이라 가려진다
 #   꼬리(9°)      :  45px -> 최대  7px. 110 을 줬더니 꼬리 밑동을 따라 복사본이
 #                   길게 드러나 **꼬리가 두 개**로 보였다
-#   다리(걷기 15~20°): 55px -> 최대 19px. 110 을 주면 무릎 아래까지 복사본이
-#                       깔려서 다리를 흔들 때 잔상이 보인다
+#
+# ── 0 을 주는 경우 ──
+# **body 보다 뒤에 그려지는 파츠는 body 가 겹쳐줄 필요가 없다.**
+# 겹침은 파츠가 움직여 생긴 틈을 뒤에서 메우려는 것인데, 뒤에 그려지는 파츠는
+# 애초에 body 가 앞에서 다 덮고 있어 틈이 안 보인다. 오히려 body 에 남은 복사본이
+# 파츠가 스윙할 때 **제자리에 남아 조각처럼 떠 보인다** — 실제로 그렇게 보였다.
+# 다리는 치마가, 오른팔은 가슴이 뿌리를 가려준다.
 JOINT_R_DEFAULT = 110
-JOINT_R = {"tail": 45,
-           "legR_thigh": 55, "legR_shin": 55, "legR_foot": 55,
-           "legL_shin": 55, "legL_foot": 55}
+JOINT_R = {
+    "tail": 45,          # 꼬리는 예외. 몸통이 쥔 꼬리 밑동이 회전 틈을 메워야 한다
+    "legR_thigh": 0, "legR_shin": 0, "legR_foot": 0,
+    "legL_shin": 0, "legL_foot": 0,
+    "armR_up": 0, "armR_lo": 0,
+}
 
 # 뒤 -> 앞. 이 순서로 화면에 쌓는다.
 # 다리는 body 보다 **뒤**다. 앞에 두면 치마를 덮어버린다
@@ -176,6 +188,34 @@ def alpha_glow(lum, y0=560):
 
 
 ALPHA_RULES = {"glow": alpha_glow}
+
+
+# ── 부스러기 정리 ──────────────────────────────────────────────────────
+# 폴리곤 경계가 그림을 스치면 몇백 px 짜리 조각이 떨어져 나온다.
+# 그 조각은 파츠와 함께 움직이므로 **허공에 뜬 점**처럼 보인다. 실제로 그렇게 보였다.
+# 폴리곤을 하나하나 손보는 것보다 잘라낸 뒤 걷어내는 게 일반적이고 확실하다.
+#
+# ⚠️ 원본부터 떨어져 있는 그림은 예외로 둬야 한다. 이 크리처의 불꽃은
+#    튀어나온 불티가 4개(48~486px) 있고 그건 지워지면 안 된다.
+MIN_ISLAND = 600
+KEEP_ISLANDS = {"armR_lo"}      # 불티가 있는 파츠
+_dropped = []
+
+
+def drop_crumbs(name, mask):
+    if name in KEEP_ISLANDS:
+        return mask
+    n, lab, st, _c = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+    if n <= 2:
+        return mask
+    keep = max(range(1, n), key=lambda i: st[i, cv2.CC_STAT_AREA])
+    out = mask.copy()
+    for i in range(1, n):
+        if i == keep or st[i, cv2.CC_STAT_AREA] >= MIN_ISLAND:
+            continue
+        out[lab == i] = False
+        _dropped.append((name, int(st[i, cv2.CC_STAT_AREA])))
+    return out
 
 
 def poly_mask(size, poly):
@@ -352,6 +392,7 @@ def main():
             take = body
         else:
             take = (poly_mask(im.size, poly) > 0.5) & (pa > 0.02)
+        take = drop_crumbs(name, take)
         if not take.any():
             print(f"  ! {name}: 빈 영역 — 폴리곤을 다시 봐야 한다")
             continue
@@ -390,6 +431,14 @@ def main():
     # 원본도 같이 둔다 — 랩에서 rest 자세를 원본과 겹쳐 대조하는 데 쓴다
     im.save(os.path.join(pub, "_original.png"))
     print(f"  -> {OUT}\n  -> {pub} (게임용 사본)")
+
+    if _dropped:
+        tot = sum(a for _n, a in _dropped)
+        # 조용히 지우면 안 된다. 뭘 버렸는지 항상 보여준다
+        print(f"  걷어낸 부스러기 {len(_dropped)}개 / {tot}px "
+              f"(전체 불투명의 {100*tot/(alpha > 0.02).sum():.2f}%)")
+        for n, a in sorted(_dropped, key=lambda x: -x[1]):
+            print(f"      {n:11s} {a:5d}px")
 
     left = (alpha > 0.5) & (~union) & (~body)
     if left.any():
