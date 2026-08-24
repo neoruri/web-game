@@ -11,6 +11,7 @@
  * 자르기·진단 로직은 cut_parts.py 와 같은 규칙이고, 뼈 계산은 게임과 같은
  * rig-core.js 를 쓴다. 도구와 게임이 갈라지지 않게 하려는 것이다.
  */
+import { Anim } from './anim.js'
 import { ALPHA_RULES, cut, diagnose } from './cutter.js'
 import { Editor } from './editor.js'
 import { Poser } from './poser.js'
@@ -33,9 +34,24 @@ const app = {
 
 const editor = new Editor($('edit'), app)
 const poser = new Poser($('preview'))
+const stage = new Poser($('stage'))
+const anim = new Anim(app, stage)
 let recutTimer = null
 let idleClip = null
 let animT = 0
+let tab = 'cut'
+
+function setTab(t) {
+  tab = t
+  $('tabCut').classList.toggle('on', t === 'cut')
+  $('tabAnim').classList.toggle('on', t === 'anim')
+  $('center').hidden = t !== 'cut'
+  $('animPane').hidden = t !== 'anim'
+  $('pvPanel').hidden = t !== 'cut'
+  $('cutDiagPanel').hidden = t !== 'cut'
+  $('motionPanel').hidden = t !== 'anim'
+  if (t === 'anim') { anim.sync(); anim.render(); anim.diagnose() }
+}
 
 // ── 파츠 ──────────────────────────────────────────────────────────────
 function newPart(name, isBody = false) {
@@ -132,6 +148,7 @@ function buildRigFromParts() {
   idleClip = makeIdle(app.rig)
   if ($('poseMode').value === 'rest') app.poseAngles = restAngles(app.rig)
   renderBoneSliders()
+  anim.sync()
 }
 
 function renderDiag(diag, dropped, ms) {
@@ -380,7 +397,8 @@ async function exportAll() {
       size: c.size, offset: c.offset,
       pivot: c.pivot.map((v) => +v.toFixed(4)),
     })),
-    clips: { idle: idleClip },
+    // 손으로 만든 클립이 있으면 그걸 쓰고, 없으면 확인용 자동 idle 만 넣는다
+    clips: Object.keys(anim.baked()).length ? anim.baked() : { idle: idleClip },
   }
 
   // 폴더에 바로 쓰기(크롬). 안 되면 낱개 다운로드로 떨어진다
@@ -415,8 +433,9 @@ async function exportAll() {
 
 function saveProject() {
   const proj = {
-    v: 1, srcName: app.srcName,
+    v: 2, srcName: app.srcName,
     parts: app.parts.map((p) => ({ ...p })),
+    clips: anim.clips, groundBones: anim.groundBones,
   }
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob([JSON.stringify(proj, null, 2)],
@@ -426,6 +445,8 @@ function saveProject() {
 }
 
 // ── 배선 ──────────────────────────────────────────────────────────────
+$('tabCut').onclick = () => setTab('cut')
+$('tabAnim').onclick = () => setTab('anim')
 $('btnAdd').onclick = addPart
 $('mEdit').onclick = () => setMode('edit')
 $('mDraw').onclick = () => setMode('draw')
@@ -450,6 +471,11 @@ $('projPick').onchange = async (e) => {
   const proj = JSON.parse(await f.text())
   app.parts = proj.parts.map((p) => ({ ...newPart(p.name, p.isBody), ...p }))
   app.activeIdx = 0
+  if (proj.clips && Object.keys(proj.clips).length) {
+    anim.clips = proj.clips
+    anim.clipName = Object.keys(proj.clips)[0]
+    anim.groundBones = proj.groundBones || []
+  }
   ensureBody()
   touch(); recut()
 }
@@ -476,18 +502,23 @@ window.addEventListener('keydown', (e) => {
 })
 window.addEventListener('keyup', (e) => { if (e.code === 'Space') app.space = false })
 
-function tick() {
-  if ($('poseMode').value === 'idle' && idleClip) {
+let last = performance.now()
+function tick(now) {
+  const dt = Math.min(64, now - last)
+  last = now
+  if (tab === 'anim') {
+    anim.tick(dt)
+  } else if ($('poseMode').value === 'idle' && idleClip) {
     animT = (animT + idleClip.fps / 60) % idleClip.frames.length
     renderPreview()
   }
   requestAnimationFrame(tick)
 }
-tick()
+requestAnimationFrame(tick)
 
 ensureBody()
 renderList()
 renderGuide()
 editor.render()
 // 자동 검증·디버그용 훅
-window.__rigger = Object.assign(app, { exportAll, buildRigFromParts, setMode })
+window.__rigger = Object.assign(app, { exportAll, buildRigFromParts, setMode, setTab, anim })

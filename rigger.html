@@ -11,6 +11,9 @@
       <header>
         <h1>스프라이트 리거</h1>
         <span class="sub" id="srcName">이미지 없음</span>
+        <span class="sep"></span>
+        <button id="tabCut" class="tool on">자르기</button>
+        <button id="tabAnim" class="tool">동작</button>
         <span class="spacer"></span>
         <button id="btnNew">새로 시작</button>
         <button id="btnLoad">작업 불러오기</button>
@@ -59,9 +62,52 @@
           </p>
         </section>
 
+        <!-- 동작 모드 -->
+        <section id="animPane" hidden>
+          <div class="toolbar">
+            <label class="inline">클립
+              <select id="clipSel"></select>
+            </label>
+            <button id="clipNew" class="mini">+ 새 클립</button>
+            <button id="clipDel" class="mini">삭제</button>
+            <span class="sep"></span>
+            <label class="inline">길이
+              <input type="number" id="clipLen" min="2" max="120" step="1" value="12" />
+            </label>
+            <label class="inline">fps
+              <input type="number" id="clipFps" min="1" max="60" step="1" value="12" />
+            </label>
+            <label class="inline"><input type="checkbox" id="clipLoop" checked /> 루프</label>
+            <span class="sep"></span>
+            <label class="inline"><input type="checkbox" id="onion" /> 어니언 스킨</label>
+            <label class="inline"><input type="checkbox" id="animBones" checked /> 뼈</label>
+          </div>
+
+          <canvas id="stage" width="980" height="560"></canvas>
+
+          <div class="timeline">
+            <div class="tl-ctrl">
+              <button id="playBtn">▶ 재생</button>
+              <button id="keyBtn" class="primary">◆ 키 찍기</button>
+              <button id="keyDel" class="mini">키 삭제</button>
+              <span class="sep"></span>
+              <button id="mirrorBtn" class="mini" title="좌우를 바꿔 넣습니다 — 걷기는 절반만 만들면 됩니다">좌우 반전</button>
+              <button id="resetBtn" class="mini">rest 로</button>
+              <span class="spacer"></span>
+              <span class="coord" id="tPos">0 / 12</span>
+            </div>
+            <canvas id="track" width="980" height="46"></canvas>
+          </div>
+
+          <p class="hint">
+            <b>뼈를 잡아 드래그</b>하면 돌아갑니다 (자식도 같이 — FK). 몸통 관절을 끌면 <b>위치</b>가 움직입니다.<br />
+            원하는 포즈를 만들고 <b>◆ 키 찍기</b>. 트랙을 클릭하면 그 시점으로 이동합니다.
+          </p>
+        </section>
+
         <!-- 오른쪽: 결과 · 진단 -->
         <aside id="right">
-          <div class="panel">
+          <div class="panel" id="pvPanel">
             <div class="ph">
               <span>미리보기</span>
               <label class="mini"><input type="checkbox" id="pvBones" /> 뼈</label>
@@ -79,7 +125,22 @@
             </div>
           </div>
 
-          <div class="panel">
+          <!-- 동작 진단 -->
+          <div class="panel" id="motionPanel" hidden>
+            <div class="ph"><span>동작 진단</span><span class="mini" id="motionSum"></span></div>
+            <div id="motion" class="diag"></div>
+            <canvas id="trail" width="330" height="190"></canvas>
+            <div class="rows">
+              <label>접지 뼈 (발)
+                <select id="groundSel" multiple size="4"></select></label>
+              <p class="hint" style="margin:0">
+                땅에 닿는 뼈를 고르면 <b>미끄러짐·뜸</b>을 잽니다.
+                Ctrl 클릭으로 여러 개 선택.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel" id="cutDiagPanel">
             <div class="ph"><span>진단</span><span id="diagSum" class="mini"></span></div>
             <div id="diag" class="diag"></div>
             <p class="hint">
